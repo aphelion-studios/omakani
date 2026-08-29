@@ -32,6 +32,9 @@ Panel {
   readonly property color kanjiColor: "#e42e9c"
   readonly property color vocabColor: "#9457e8"
 
+  // WaniKani's review-forecast green, for the Upcoming Reviews bars and deltas.
+  readonly property color forecastColor: "#93c01f"
+
   function typeColor(type) {
     if (type === "radical" || type === "radicals") return radicalColor
     if (type === "kanji") return kanjiColor
@@ -698,7 +701,7 @@ Panel {
                   var added = d ? d.count : wk.upcomingTotal
                   return added > 0 ? "+" + added : "—"
                 }
-                color: root.accent
+                color: root.forecastColor
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
@@ -1241,15 +1244,14 @@ Panel {
         implicitWidth: Math.max(Style.space(18), esrCount.implicitWidth + Style.space(8))
         implicitHeight: Style.space(15)
         radius: height / 2
-        color: esr.available
-          ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
-          : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b,
+                       esr.available ? 0.12 : 0.07)
         Layout.alignment: Qt.AlignVCenter
         Text {
           id: esrCount
           anchors.centerIn: parent
           text: String(esr.count)
-          color: esr.available ? root.accent : root.dim
+          color: esr.available ? root.foreground : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -1555,14 +1557,14 @@ Panel {
               width: rowItem.count > 0
                 ? Math.max(3, parent.width * (rowItem.count / rows.peak))
                 : 0
-              color: root.accent
-              opacity: 0.9
+              color: root.forecastColor
+              opacity: 0.95
             }
           }
 
           Text {
             text: rowItem.count > 0 ? "+" + rowItem.count : ""
-            color: root.accent
+            color: root.forecastColor
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: true
