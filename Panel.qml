@@ -419,7 +419,7 @@ Panel {
             }
 
             PanelActionButton {
-              iconText: "󰗧"
+              iconText: "󰏌"
               tooltipText: "Open wanikani.com"
               foreground: root.foreground
               fontFamily: root.fontFamily
