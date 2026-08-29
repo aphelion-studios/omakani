@@ -535,20 +535,54 @@ def critical_condition(review_stats, assignment_by_subject, subjects_by_id):
     return rows[:CRITICAL_LIST_CAP]
 
 
-def extra_study(assignments):
+def recent_mistakes(review_stats, assignment_by_subject, subjects_by_id):
+    """The website's Recent Mistakes: items answered wrong in a review in the
+    last 24 h and not yet recovered. Reconstructed without a review log --
+    a wrong answer bumps the statistic's updated_at and resets that component's
+    current streak to zero, so a fresh updated_at plus a zero streak is a miss
+    still inside the window. Radicals have no reading, so only their meaning
+    streak counts."""
+    cutoff = now_utc() - timedelta(hours=24)
+    rows = []
+    for stat in review_stats:
+        data = data_of(stat)
+        if data.get("hidden"):
+            continue
+        updated = parse_stamp(data.get("updated_at"))
+        if not updated or updated < cutoff:
+            continue
+        reviewed = (data.get("meaning_correct") or 0) + (data.get("meaning_incorrect") or 0)
+        if reviewed <= 0:
+            continue
+        subject_id = data.get("subject_id")
+        is_radical = (subjects_by_id.get(subject_id) or {}).get("object") == "radical"
+        missed = (data.get("meaning_current_streak") == 0) or (
+            not is_radical and data.get("reading_current_streak") == 0)
+        if not missed:
+            continue
+        if (data_of(assignment_by_subject.get(subject_id)).get("srs_stage") or 0) < 1:
+            continue
+        rows.append(subject_row(subjects_by_id.get(subject_id), subject_id, iso(updated)))
+    rows.sort(key=lambda row: row["at"], reverse=True)
+    return rows
+
+
+def extra_study(assignments, review_stats, assignment_by_subject, subjects_by_id):
     recent_lessons = []
-    burned = 0
+    burned = []
     for assignment in assignments:
         data = data_of(assignment)
         if data.get("burned_at"):
-            burned += 1
+            burned.append(data.get("subject_id"))
         if data.get("started_at") and not data.get("passed_at"):
             recent_lessons.append(data.get("subject_id"))
+    mistakes = recent_mistakes(review_stats, assignment_by_subject, subjects_by_id)
     return {
         "recentLessons": len(recent_lessons),
         "recentLessonIds": recent_lessons,
-        "burnedItems": burned,
-        "recentMistakes": None,          # phase 2e
+        "recentMistakes": len(mistakes),
+        "recentMistakeItems": mistakes[:RECENT_LIST_CAP],
+        "burnedItems": len(burned),
     }
 
 
@@ -649,7 +683,7 @@ def build_dashboard(config, api):
         "recentlyUnlocked": recent_items(assignments, subjects, "unlocked_at"),
         "recentlyBurned": recent_items(assignments, subjects, "burned_at"),
         "criticalCondition": critical_condition(review_stats, assignment_by_subject, subjects),
-        "extraStudy": extra_study(assignments),
+        "extraStudy": extra_study(assignments, review_stats, assignment_by_subject, subjects),
         "counts": {"subjects": len(subjects), "assignments": len(assignments)},
         "requests": api.requests,
         "fetchedAt": iso(now_utc()),

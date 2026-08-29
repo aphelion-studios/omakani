@@ -143,6 +143,11 @@ Panel {
       if (!wk.configured) return "not connected"
       return wk.lessonsNow + " lessons, " + wk.reviewsNow + " reviews"
     }
+    function debug(): string {
+      return JSON.stringify({ configured: wk.configured, dashboardLoaded: wk.dashboardLoaded,
+        dashboardBusy: wk.dashboardBusy, lastError: wk.lastError,
+        dashKeys: Object.keys(wk.dash), lastDashboardAt: wk.lastDashboardAt })
+    }
   }
 
   // ---- the recolourable mark -------------------------------------------------
@@ -455,6 +460,46 @@ Panel {
             foreground: root.foreground
           }
 
+          // ------------------------------------------- extra study
+
+          Column {
+            visible: wk.configured && wk.dashboardLoaded
+            width: parent.width
+            spacing: Style.space(5)
+
+            readonly property var es: wk.extraStudy
+
+            PanelSectionHeader {
+              text: "EXTRA STUDY"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            ExtraStudyRow {
+              width: parent.width
+              label: "Recent Lessons"
+              count: Number(parent.es.recentLessons)
+              queue: "recent_lessons"
+            }
+            ExtraStudyRow {
+              width: parent.width
+              label: "Recent Mistakes"
+              count: Number(parent.es.recentMistakes)
+              queue: "recent_mistakes"
+            }
+            ExtraStudyRow {
+              width: parent.width
+              label: "Burned Items"
+              count: Number(parent.es.burnedItems)
+              queue: "burned"
+            }
+          }
+
+          PanelSeparator {
+            visible: wk.configured && wk.dashboardLoaded
+            foreground: root.foreground
+          }
+
           // ----------------------------------------- level progress
 
           Column {
@@ -681,6 +726,67 @@ Panel {
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.displayLarge
+    }
+  }
+
+  // One Extra Study mode: name, a count badge, a chevron. Opens WaniKani's
+  // extra-study session for that queue; a phase-5 change points it in-shell.
+  component ExtraStudyRow: Item {
+    id: esr
+    property string label: ""
+    property int count: 0
+    property string queue: ""
+    readonly property bool available: count > 0
+    implicitHeight: Style.space(20)
+    opacity: available ? 1 : 0.45
+
+    RowLayout {
+      anchors.fill: parent
+      spacing: Style.space(8)
+
+      Text {
+        text: esr.label
+        color: root.foreground
+        opacity: 0.9
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        Layout.fillWidth: true
+      }
+
+      Rectangle {
+        implicitWidth: Math.max(Style.space(18), esrCount.implicitWidth + Style.space(8))
+        implicitHeight: Style.space(15)
+        radius: height / 2
+        color: esr.available
+          ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.16)
+          : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        Layout.alignment: Qt.AlignVCenter
+        Text {
+          id: esrCount
+          anchors.centerIn: parent
+          text: String(esr.count)
+          color: esr.available ? root.accent : root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+      }
+
+      Text {
+        text: "󰅂"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        Layout.alignment: Qt.AlignVCenter
+      }
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      enabled: esr.available && esr.queue !== ""
+      cursorShape: Qt.PointingHandCursor
+      onClicked: Quickshell.execDetached(["xdg-open",
+        "https://www.wanikani.com/subjects/extra_study?queue_type=" + esr.queue])
     }
   }
 
