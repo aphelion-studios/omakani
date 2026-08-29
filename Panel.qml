@@ -43,6 +43,11 @@ Panel {
     return vocabColor
   }
 
+  // Japanese characters (item chips) need CJK coverage the bar's monospace
+  // font lacks. Nearly every WaniKani learner already has this installed; a
+  // machine without it falls back to whatever the OS offers.
+  readonly property string jpFamily: "Noto Sans CJK JP"
+
   readonly property bool showLessons: setting("showLessons", true) === true
   readonly property bool hideWhenZero: setting("hideWhenZero", false) === true
 
@@ -212,7 +217,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(360))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(560))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(720))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -558,6 +563,47 @@ Panel {
             foreground: root.foreground
           }
 
+          // -------------------------------------------- item lists
+
+          ItemList {
+            width: parent.width
+            title: "RECENTLY UNLOCKED"
+            note: "30 days"
+            items: wk.recentlyUnlocked
+            emptyText: "Nothing unlocked in the last 30 days."
+          }
+
+          PanelSeparator {
+            visible: wk.configured && wk.dashboardLoaded
+            foreground: root.foreground
+          }
+
+          ItemList {
+            width: parent.width
+            title: "CRITICAL CONDITION"
+            note: "< 75%"
+            items: wk.criticalCondition
+            emptyText: "Your items are in good health."
+          }
+
+          PanelSeparator {
+            visible: wk.configured && wk.dashboardLoaded
+            foreground: root.foreground
+          }
+
+          ItemList {
+            width: parent.width
+            title: "RECENTLY BURNED"
+            note: "30 days"
+            items: wk.recentlyBurned
+            emptyText: "Nothing burned in the last 30 days."
+          }
+
+          PanelSeparator {
+            visible: wk.configured && wk.dashboardLoaded
+            foreground: root.foreground
+          }
+
           // ---------------------------------------------------- footer
 
           RowLayout {
@@ -734,6 +780,113 @@ Panel {
       font.bold: true
       horizontalAlignment: Text.AlignRight
       Layout.preferredWidth: Style.space(28)
+    }
+  }
+
+  // A subject as a coloured chip: its characters (or, for character-less
+  // radicals, its meaning). Click opens the item's page on wanikani.com.
+  component ItemChip: Rectangle {
+    property var item: ({})
+    readonly property string glyph: (item && item.characters && String(item.characters).length)
+      ? String(item.characters)
+      : String((item && item.meaning) || "•")
+    implicitHeight: Style.space(19)
+    implicitWidth: chipLabel.implicitWidth + Style.space(12)
+    radius: Style.space(4)
+    color: root.typeColor(item ? item.type : "")
+    opacity: chipMouse.containsMouse ? 0.82 : 1
+
+    Text {
+      id: chipLabel
+      anchors.centerIn: parent
+      text: parent.glyph
+      color: "#ffffff"
+      font.family: root.jpFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+    }
+    MouseArea {
+      id: chipMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: if (parent.item && parent.item.url)
+        Quickshell.execDetached(["xdg-open", String(parent.item.url)])
+    }
+  }
+
+  // A titled section that flows a list of subjects as chips, with an empty
+  // state and a "+N more" chip that opens the dashboard.
+  component ItemList: Column {
+    id: il
+    property string title: ""
+    property string note: ""
+    property var items: []
+    property string emptyText: ""
+    property int cap: 15
+    spacing: Style.space(6)
+    visible: wk.configured && wk.dashboardLoaded
+
+    RowLayout {
+      width: parent.width
+      PanelSectionHeader {
+        text: il.title
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        Layout.fillWidth: true
+      }
+      Text {
+        text: {
+          var count = il.items ? il.items.length : 0
+          if (count === 0) return il.note
+          return il.note === "" ? String(count) : il.note + "  ·  " + count
+        }
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
+
+    Flow {
+      width: parent.width
+      spacing: Style.space(4)
+      visible: il.items && il.items.length > 0
+
+      Repeater {
+        model: il.items ? il.items.slice(0, il.cap) : []
+        delegate: ItemChip { item: modelData }
+      }
+
+      Rectangle {
+        visible: il.items && il.items.length > il.cap
+        implicitHeight: Style.space(19)
+        implicitWidth: moreLabel.implicitWidth + Style.space(12)
+        radius: Style.space(4)
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        Text {
+          id: moreLabel
+          anchors.centerIn: parent
+          text: "+" + ((il.items ? il.items.length : 0) - il.cap) + " more"
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: Quickshell.execDetached(["xdg-open", "https://www.wanikani.com/dashboard"])
+        }
+      }
+    }
+
+    Text {
+      visible: !il.items || il.items.length === 0
+      width: parent.width
+      text: il.emptyText
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      wrapMode: Text.WordWrap
     }
   }
 
