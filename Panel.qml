@@ -21,6 +21,7 @@ Panel {
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
+  readonly property color background: Color.popups.background
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -52,23 +53,23 @@ Panel {
   readonly property bool anythingDue: wk.reviewsNow > 0 || (showLessons && wk.lessonsNow > 0)
   readonly property bool markActive: wk.configured && anythingDue && !wk.vacation
 
-  // "Start Lessons" / "Start Reviews" — shown only for the queue that has
-  // something waiting, in that order. Until the in-shell lesson/review flow
-  // lands (Phase 4g/5) these open the session on wanikani.com.
+  // The two count cards (Lessons / Reviews), mirroring the website. The
+  // Lessons card is dropped when the showLessons setting is off. `active`
+  // means that queue has something waiting now (drives the loud button
+  // style). Until the in-shell flow lands (Phase 4g/5) the buttons open the
+  // session on wanikani.com.
   readonly property var startActions: {
     var out = []
-    if (showLessons && wk.lessonsNow > 0 && !wk.vacation)
-      out.push({ kind: "lessons", text: "Start Lessons",
-                 url: "https://www.wanikani.com/subjects/lesson" })
-    if (wk.reviewsNow > 0 && !wk.vacation)
-      out.push({ kind: "reviews", text: "Start Reviews",
-                 url: "https://www.wanikani.com/subjects/review" })
+    if (showLessons)
+      out.push({ kind: "lessons", label: "Lessons", text: "Start Lessons",
+                 url: "https://www.wanikani.com/subjects/lesson",
+                 count: wk.lessonsNow,
+                 active: wk.lessonsNow > 0 && !wk.vacation })
+    out.push({ kind: "reviews", label: "Reviews", text: "Start Reviews",
+               url: "https://www.wanikani.com/subjects/review",
+               count: wk.reviewsNow,
+               active: wk.reviewsNow > 0 && !wk.vacation })
     return out
-  }
-  function startIndexFor(kind) {
-    for (var i = 0; i < startActions.length; i++)
-      if (startActions[i].kind === kind) return i
-    return -1
   }
   function openStart(index) {
     var a = startActions[index]
@@ -660,39 +661,23 @@ Panel {
 
           // ---------------------------------------------------- counts
 
-          Column {
+          RowLayout {
             visible: wk.configured
             width: parent.width
-            spacing: Style.space(10)
+            spacing: Style.space(12)
 
-            RowLayout {
-              width: parent.width
-              spacing: Style.space(12)
-
-              Total {
-                label: "LESSONS"
-                value: String(wk.lessonsNow)
+            Repeater {
+              model: root.startActions
+              delegate: CountCard {
                 Layout.fillWidth: true
-              }
-              Total {
-                label: "REVIEWS"
-                value: String(wk.reviewsNow)
-                Layout.fillWidth: true
-              }
-            }
-
-            RowLayout {
-              width: parent.width
-              spacing: Style.space(10)
-              visible: root.startActions.length > 0
-
-              Repeater {
-                model: root.startActions
-                delegate: StartButton {
-                  Layout.fillWidth: true
-                  index: model.index
-                  text: modelData.text
-                }
+                Layout.preferredWidth: 1
+                Layout.alignment: Qt.AlignTop
+                index: model.index
+                kind: modelData.kind
+                label: modelData.label
+                count: modelData.count
+                active: modelData.active
+                startText: modelData.text
               }
             }
           }
@@ -1142,76 +1127,128 @@ Panel {
 
   // ---- small components ------------------------------------------------
 
-  component Total: Column {
-    id: total
-    property string label: ""
-    property string value: ""
-    spacing: Style.space(2)
-
-    Text {
-      text: total.label
-      color: root.foreground
-      opacity: 0.6
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      font.letterSpacing: 1
-    }
-    Text {
-      text: total.value
-      color: root.foreground
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.displayLarge
-    }
-  }
-
-  // "Start Lessons" / "Start Reviews" pill under the counts. `index` is the
-  // slot in root.startActions (0 or 1).
-  component StartButton: Rectangle {
-    id: sb
+  // One of the two dashboard count cards, mirroring the website: the queue
+  // name with its count (or "Done!" for a cleared lesson queue) to the
+  // right, and that queue's Start button below. When the queue has items
+  // (`active`) the button switches to a loud accent style with a soft
+  // pulse; otherwise it's the quiet outline style. `index` is the slot in
+  // root.startActions.
+  component CountCard: Column {
+    id: cc
     property int index: 0
-    property alias text: sbLabel.text
+    property string kind: ""
+    property string label: ""
+    property int count: 0
+    property bool active: false
+    property string startText: ""
+
+    readonly property bool showDone: kind === "lessons" && count === 0
     readonly property bool cursored: root.hasCursor("start", index)
-    readonly property bool lit: cursored || sbHover.containsMouse
 
-    implicitHeight: Style.space(32)
-    radius: Style.space(5)
-    color: lit
-      ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
-      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
-    border.width: cursored ? 2 : 1
-    border.color: cursored
-      ? root.accent
-      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22)
+    spacing: Style.space(8)
+    onCursoredChanged: if (cursored) root.setCursorItem(cc)
 
-    onCursoredChanged: if (cursored) root.setCursorItem(sb)
+    // ---- queue name + count badge
+    Row {
+      spacing: Style.space(8)
 
-    Text {
-      id: sbLabel
-      anchors.centerIn: parent
-      color: root.foreground
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      font.bold: true
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        text: cc.label
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.subtitle
+        font.bold: true
+      }
+
+      Rectangle {
+        anchors.verticalCenter: parent.verticalCenter
+        implicitWidth: badgeText.implicitWidth + Style.space(14)
+        implicitHeight: Style.space(19)
+        radius: height / 2
+        color: cc.active
+          ? root.accent
+          : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+
+        Text {
+          id: badgeText
+          anchors.centerIn: parent
+          text: cc.showDone ? "Done!" : String(cc.count)
+          color: cc.active ? root.background : root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+      }
     }
 
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.right: parent.right
-      anchors.rightMargin: Style.space(10)
-      text: "›"
-      color: root.foreground
-      opacity: 0.7
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.body
-    }
+    // ---- start button
+    Rectangle {
+      id: startBtn
+      width: parent.width
+      implicitHeight: Style.space(34)
+      radius: Style.space(5)
+      clip: true
 
-    MouseArea {
-      id: sbHover
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onContainsMouseChanged: if (containsMouse) root.setCursor("start", sb.index)
-      onClicked: root.openStart(sb.index)
+      readonly property bool lit: cc.cursored || startHover.containsMouse
+
+      color: cc.active
+        ? (lit ? Qt.lighter(root.accent, 1.12) : root.accent)
+        : (lit
+            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
+            : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08))
+      border.width: cc.cursored ? 2 : 1
+      border.color: cc.cursored
+        ? root.foreground
+        : (cc.active
+            ? "transparent"
+            : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22))
+
+      // "hey, look here!" breathing highlight while the queue is available
+      Rectangle {
+        anchors.fill: parent
+        radius: parent.radius
+        color: Qt.lighter(root.accent, 1.35)
+        visible: cc.active
+        opacity: 0
+        SequentialAnimation on opacity {
+          running: cc.active && startBtn.visible
+          loops: Animation.Infinite
+          NumberAnimation { from: 0.0; to: 0.4; duration: 950; easing.type: Easing.InOutSine }
+          NumberAnimation { from: 0.4; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
+        }
+      }
+
+      Row {
+        anchors.centerIn: parent
+        spacing: Style.space(5)
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: cc.startText
+          color: cc.active ? root.background : root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          text: "›"
+          color: cc.active ? root.background : root.foreground
+          opacity: cc.active ? 0.9 : 0.7
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+        }
+      }
+
+      MouseArea {
+        id: startHover
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onContainsMouseChanged: if (containsMouse) root.setCursor("start", cc.index)
+        onClicked: root.openStart(cc.index)
+      }
     }
   }
 
