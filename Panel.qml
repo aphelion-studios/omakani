@@ -119,7 +119,7 @@ Panel {
     function refresh(): string { wk.refresh(); return "ok" }
     function status(): string {
       if (!wk.configured) return "not connected"
-      return wk.reviewsNow + " reviews, " + wk.lessonsNow + " lessons"
+      return wk.lessonsNow + " lessons, " + wk.reviewsNow + " reviews"
     }
   }
 
@@ -322,13 +322,13 @@ Panel {
             spacing: Style.space(12)
 
             Total {
-              label: "REVIEWS NOW"
-              value: String(wk.reviewsNow)
+              label: "LESSONS NOW"
+              value: String(wk.lessonsNow)
               Layout.fillWidth: true
             }
             Total {
-              label: "LESSONS NOW"
-              value: String(wk.lessonsNow)
+              label: "REVIEWS NOW"
+              value: String(wk.reviewsNow)
               Layout.fillWidth: true
             }
           }

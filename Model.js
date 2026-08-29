@@ -52,8 +52,8 @@ function barTooltip(view, now) {
     return "WaniKani\n\nClick to connect your API token"
 
   var lines = []
-  lines.push(plural(view.reviewsNow, "review", "reviews")
-             + "  ·  " + plural(view.lessonsNow, "lesson", "lessons"))
+  lines.push(plural(view.lessonsNow, "lesson", "lessons")
+             + "  ·  " + plural(view.reviewsNow, "review", "reviews"))
 
   if ((Number(view.reviewsNow) || 0) === 0) {
     var rel = relativeTime(view.nextReviewsAt, now)
