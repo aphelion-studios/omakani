@@ -61,8 +61,19 @@ cursor.
 | `Enter` / `Space` | Open — drill into a day, launch an Extra Study session, open an item's page, hit a footer button |
 | `g` / `G` | Jump to the first / last item |
 | `r` | Refresh |
-| `Esc` | Back out of a day's breakdown, or close the panel |
+| `Esc` | Back out of a day's breakdown or the settings sheet, or close the panel |
 | `Tab` / `Shift+Tab` | Next / previous bar panel |
+
+The gear in the footer opens a settings sheet (the two mark toggles and the four
+notification controls). Everything there is keyboard-driven too. To bind a key
+straight to it, add to `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + CTRL + K", "OmaWaniKani", "omarchy-shell -q io.github.aphelion-studios.omawanikani toggle")
+```
+
+IPC methods on `io.github.aphelion-studios.omawanikani`: `toggle`, `open`,
+`close`, `refresh`, `settings`.
 
 ## Settings
 
