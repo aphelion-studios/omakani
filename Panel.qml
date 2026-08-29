@@ -61,38 +61,172 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  // ---- panel cursor -------------------------------------------------------
-
-  property bool cursorActive: false
-  property int cursorIndex: 0
-  readonly property var sections: wk.configured ? ["refresh", "forget"] : ["token"]
-  readonly property string currentSection: sections.length === 0
-    ? ""
-    : String(sections[Math.max(0, Math.min(sections.length - 1, cursorIndex))])
-
   readonly property string statusText: Model.statusLine(wk.view)
   readonly property bool statusIsError: wk.lastError !== ""
 
-  function sectionHasCursor(name) { return cursorActive && currentSection === name }
+  // ---- keyboard navigation ----------------------------------------------
+  //
+  // One cursor over a flat sequence of sections. j/k step through it (moving
+  // within a vertical section, then crossing to the next); h/l move within a
+  // horizontal section (chip rows, footer), and on a vertical row l acts /
+  // h goes back. Enter or Space acts. g / G jump to the ends. Mouse hover
+  // drives the same cursor, so there is exactly one highlight.
 
-  function focusSection(name) {
-    var index = sections.indexOf(name)
-    if (index === -1) return
-    cursorActive = true
-    cursorIndex = index
+  property bool navActive: false
+  property string navSection: ""
+  property int navIndex: 0
+  property Item cursorItem: null
+
+  readonly property int chipCap: 15
+  function chipCount(list) { return Math.min(list ? list.length : 0, chipCap) }
+
+  // Only the sections that exist right now, in visual order. { n: name,
+  // o: orientation "v"|"h", c: item count }.
+  readonly property var navSections: {
+    if (!wk.configured) return [{ n: "token", o: "v", c: 1 }]
+    if (upcomingDrill >= 0) return [{ n: "drillback", o: "h", c: 1 }]
+    var out = []
+    if (wk.dashboardLoaded && wk.upcoming.length > 0)
+      out.push({ n: "upcoming", o: "v", c: wk.upcoming.length })
+    if (wk.dashboardLoaded)
+      out.push({ n: "extra", o: "v", c: 3 })
+    if (chipCount(wk.recentlyUnlocked) > 0)
+      out.push({ n: "unlocked", o: "h", c: chipCount(wk.recentlyUnlocked) })
+    if (chipCount(wk.criticalCondition) > 0)
+      out.push({ n: "critical", o: "h", c: chipCount(wk.criticalCondition) })
+    if (chipCount(wk.recentlyBurned) > 0)
+      out.push({ n: "burned", o: "h", c: chipCount(wk.recentlyBurned) })
+    out.push({ n: "footer", o: "h", c: 3 })
+    return out
   }
 
-  function moveCursor(dy) {
-    cursorActive = true
-    if (dy === 0 || sections.length === 0) return
-    cursorIndex = Math.max(0, Math.min(sections.length - 1, cursorIndex + dy))
+  function navSecAt(name) {
+    var s = navSections
+    for (var i = 0; i < s.length; i++) if (s[i].n === name) return i
+    return -1
+  }
+  readonly property var navCur: {
+    var i = navSecAt(navSection)
+    return i >= 0 ? navSections[i] : null
   }
 
-  function activateCursor() {
-    var section = currentSection
-    if (section === "token") tokenField.forceActiveFocus()
-    else if (section === "refresh") wk.refresh()
-    else if (section === "forget") wk.clearToken()
+  function hasCursor(section, index) {
+    return navActive && navSection === section && navIndex === index
+  }
+  function setCursor(section, index) {
+    navActive = true
+    navSection = section
+    navIndex = index
+  }
+  function setCursorItem(item) {
+    cursorItem = item
+    scrollTimer.restart()
+  }
+
+  function navReset() {
+    navActive = false
+    navSection = navSections.length > 0 ? navSections[0].n : ""
+    navIndex = 0
+  }
+
+  function navMove(dx, dy) {
+    var secs = navSections
+    if (secs.length === 0) return
+    if (!navActive) {
+      navActive = true
+      if (navSecAt(navSection) < 0) { navSection = secs[0].n; navIndex = 0 }
+      scrollTimer.restart()
+      return
+    }
+    var si = navSecAt(navSection)
+    if (si < 0) { navSection = secs[0].n; navIndex = 0; scrollTimer.restart(); return }
+    var cur = secs[si]
+
+    if (dy !== 0) {
+      var down = dy > 0
+      if (cur.o === "v" && ((down && navIndex < cur.c - 1) || (!down && navIndex > 0))) {
+        navIndex += down ? 1 : -1
+      } else {
+        var ni = si + (down ? 1 : -1)
+        if (ni >= 0 && ni < secs.length) {
+          navSection = secs[ni].n
+          navIndex = down ? 0 : secs[ni].c - 1
+        }
+      }
+    } else if (dx !== 0) {
+      var right = dx > 0
+      if (cur.o === "h") {
+        navIndex = Math.max(0, Math.min(cur.c - 1, navIndex + (right ? 1 : -1)))
+      } else if (right) {
+        navActivate()
+        return
+      } else if (cur.n === "drillback") {
+        upcomingDrill = -1
+      }
+    }
+    scrollTimer.restart()
+  }
+
+  function navEnd(toBottom) {
+    var secs = navSections
+    if (secs.length === 0) return
+    navActive = true
+    var s = toBottom ? secs[secs.length - 1] : secs[0]
+    navSection = s.n
+    navIndex = toBottom ? s.c - 1 : 0
+    scrollTimer.restart()
+  }
+
+  function navActivate() {
+    if (!navActive) { navActive = true; return }
+    var s = navSection, i = navIndex
+    if (s === "token") tokenField.forceActiveFocus()
+    else if (s === "drillback") upcomingDrill = -1
+    else if (s === "upcoming") {
+      if (i < wk.upcoming.length && Number(wk.upcoming[i].count) > 0) upcomingDrill = i
+    }
+    else if (s === "extra") openExtraStudy(i)
+    else if (s === "unlocked") openItem(wk.recentlyUnlocked[i])
+    else if (s === "critical") openItem(wk.criticalCondition[i])
+    else if (s === "burned") openItem(wk.recentlyBurned[i])
+    else if (s === "footer") {
+      if (i === 0) wk.refreshAll()
+      else if (i === 1) openDashboard()
+      else wk.clearToken()
+    }
+  }
+
+  function openItem(item) {
+    if (item && item.url) Quickshell.execDetached(["xdg-open", String(item.url)])
+  }
+  function openDashboard() {
+    Quickshell.execDetached(["xdg-open", "https://www.wanikani.com/dashboard"])
+  }
+  function openExtraStudy(index) {
+    var es = wk.extraStudy
+    var queues = ["recent_lessons", "recent_mistakes", "burned"]
+    var counts = [Number(es.recentLessons), Number(es.recentMistakes), Number(es.burnedItems)]
+    if (index < 0 || index > 2 || !(counts[index] > 0)) return
+    Quickshell.execDetached(["xdg-open",
+      "https://www.wanikani.com/subjects/extra_study?queue_type=" + queues[index]])
+  }
+
+  Timer {
+    id: scrollTimer
+    interval: 1
+    onTriggered: root.scrollToCursor()
+  }
+  function scrollToCursor() {
+    var it = cursorItem
+    if (!it || !it.visible || !panelFlick) return
+    var y = it.mapToItem(panelFlick.contentItem, 0, 0).y
+    var m = Style.space(16)
+    var viewH = panelFlick.height
+    var maxY = Math.max(0, panelFlick.contentHeight - viewH)
+    if (y - m < panelFlick.contentY)
+      panelFlick.contentY = Math.max(0, y - m)
+    else if (y + it.height + m > panelFlick.contentY + viewH)
+      panelFlick.contentY = Math.min(maxY, y + it.height + m - viewH)
   }
 
   function commitToken() {
@@ -104,12 +238,19 @@ Panel {
   }
 
   onOpenedChanged: if (opened) {
-    cursorActive = false
-    cursorIndex = 0
     upcomingDrill = -1
+    navReset()
     if (panelFlick) panelFlick.contentY = 0
     wk.refreshAll()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  // Drilling in / out of a day rebuilds the section list; land the cursor
+  // somewhere valid without dropping an active cursor.
+  onUpcomingDrillChanged: {
+    navSection = navSections.length > 0 ? navSections[0].n : ""
+    navIndex = 0
+    scrollTimer.restart()
   }
 
   // Which day the Upcoming Reviews section is drilled into; -1 is the day list.
@@ -144,9 +285,17 @@ Panel {
       return wk.lessonsNow + " lessons, " + wk.reviewsNow + " reviews"
     }
     function debug(): string {
-      return JSON.stringify({ configured: wk.configured, dashboardLoaded: wk.dashboardLoaded,
-        dashboardBusy: wk.dashboardBusy, lastError: wk.lastError,
-        dashKeys: Object.keys(wk.dash), lastDashboardAt: wk.lastDashboardAt })
+      return JSON.stringify({
+        configured: wk.configured,
+        dashboardLoaded: wk.dashboardLoaded,
+        dashboardBusy: wk.dashboardBusy,
+        lastError: wk.lastError,
+        reviewsNow: wk.reviewsNow,
+        lessonsNow: wk.lessonsNow,
+        counts: wk.dash.counts,
+        nav: root.navActive ? (root.navSection + "[" + root.navIndex + "]") : "off",
+        fetchedAt: wk.dash.fetchedAt
+      })
     }
   }
 
@@ -228,15 +377,17 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       blocked: tokenField.activeFocus
-      onMoveRequested: function(dx, dy) {
-        if (!root.cursorActive) { root.cursorActive = true; return }
-        root.moveCursor(dy)
+      onMoveRequested: function(dx, dy) { root.navMove(dx, dy) }
+      onActivateRequested: root.navActivate()
+      onCloseRequested: {
+        if (root.upcomingDrill >= 0) root.upcomingDrill = -1
+        else root.close()
       }
-      onActivateRequested: if (root.cursorActive) root.activateCursor()
-      onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
         if (text === "r" || text === "R") wk.refreshAll()
+        else if (text === "g") root.navEnd(false)
+        else if (text === "G") root.navEnd(true)
       }
 
       Flickable {
@@ -317,8 +468,9 @@ Panel {
                 foreground: root.foreground
                 font.family: root.fontFamily
                 enabled: !wk.actionBusy
-                hasCursor: !activeFocus && root.sectionHasCursor("token")
-                onHoveredChanged: if (hovered) root.focusSection("token")
+                hasCursor: !activeFocus && root.hasCursor("token", 0)
+                onHoveredChanged: if (hovered) root.setCursor("token", 0)
+                onHasCursorChanged: if (hasCursor) root.setCursorItem(tokenField)
                 onAccepted: root.commitToken()
                 Keys.onPressed: function(event) {
                   if (event.key === Qt.Key_Escape) { focus = false; event.accepted = true }
@@ -390,11 +542,15 @@ Panel {
               spacing: Style.space(6)
 
               PanelActionButton {
+                id: drillBackBtn
                 visible: upcomingBlock.drillDay !== null
                 iconText: "󰅁"
                 tooltipText: "Back to the week"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
+                hasCursor: root.hasCursor("drillback", 0)
+                onHovered: function(h) { if (h) root.setCursor("drillback", 0) }
+                onHasCursorChanged: if (hasCursor) root.setCursorItem(drillBackBtn)
                 onClicked: root.upcomingDrill = -1
               }
 
@@ -477,18 +633,21 @@ Panel {
 
             ExtraStudyRow {
               width: parent.width
+              idx: 0
               label: "Recent Lessons"
               count: Number(parent.es.recentLessons)
               queue: "recent_lessons"
             }
             ExtraStudyRow {
               width: parent.width
+              idx: 1
               label: "Recent Mistakes"
               count: Number(parent.es.recentMistakes)
               queue: "recent_mistakes"
             }
             ExtraStudyRow {
               width: parent.width
+              idx: 2
               label: "Burned Items"
               count: Number(parent.es.burnedItems)
               queue: "burned"
@@ -612,6 +771,7 @@ Panel {
 
           ItemList {
             width: parent.width
+            section: "unlocked"
             title: "RECENTLY UNLOCKED"
             note: "30 days"
             items: wk.recentlyUnlocked
@@ -625,6 +785,7 @@ Panel {
 
           ItemList {
             width: parent.width
+            section: "critical"
             title: "CRITICAL CONDITION"
             note: "< 75%"
             items: wk.criticalCondition
@@ -638,6 +799,7 @@ Panel {
 
           ItemList {
             width: parent.width
+            section: "burned"
             title: "RECENTLY BURNED"
             note: "30 days"
             items: wk.recentlyBurned
@@ -672,30 +834,43 @@ Panel {
             }
 
             PanelActionButton {
+              id: footerRefresh
               iconText: "󰑐"
               tooltipText: "Refresh"
               foreground: root.foreground
               fontFamily: root.fontFamily
               enabled: !wk.refreshing
+              hasCursor: root.hasCursor("footer", 0)
+              onHovered: function(h) { if (h) root.setCursor("footer", 0) }
+              onHasCursorChanged: if (hasCursor) root.setCursorItem(footerRefresh)
               Layout.alignment: Qt.AlignVCenter
               onClicked: wk.refreshAll()
             }
 
             PanelActionButton {
+              id: footerOpen
               iconText: "󰏌"
               tooltipText: "Open wanikani.com"
               foreground: root.foreground
               fontFamily: root.fontFamily
+              hasCursor: root.hasCursor("footer", 1)
+              onHovered: function(h) { if (h) root.setCursor("footer", 1) }
+              onHasCursorChanged: if (hasCursor) root.setCursorItem(footerOpen)
               Layout.alignment: Qt.AlignVCenter
-              onClicked: Quickshell.execDetached(["xdg-open", "https://www.wanikani.com/dashboard"])
+              onClicked: root.openDashboard()
             }
 
             PanelActionButton {
+              id: footerForget
               iconText: "󰌆"
               tooltipText: "Forget the stored API token"
               foreground: root.foreground
               fontFamily: root.fontFamily
               enabled: !wk.actionBusy
+              hoverColor: root.urgent
+              hasCursor: root.hasCursor("footer", 2)
+              onHovered: function(h) { if (h) root.setCursor("footer", 2) }
+              onHasCursorChanged: if (hasCursor) root.setCursorItem(footerForget)
               Layout.alignment: Qt.AlignVCenter
               onClicked: wk.clearToken()
             }
@@ -736,9 +911,23 @@ Panel {
     property string label: ""
     property int count: 0
     property string queue: ""
+    property int idx: 0
     readonly property bool available: count > 0
+    readonly property bool cursored: root.hasCursor("extra", idx)
     implicitHeight: Style.space(20)
     opacity: available ? 1 : 0.45
+    onCursoredChanged: if (cursored) root.setCursorItem(esr)
+
+    Rectangle {
+      anchors.fill: parent
+      anchors.leftMargin: -Style.space(4)
+      anchors.rightMargin: -Style.space(4)
+      radius: Style.cornerRadius
+      color: esr.cursored
+        ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        : "transparent"
+      Behavior on color { ColorAnimation { duration: 60 } }
+    }
 
     RowLayout {
       anchors.fill: parent
@@ -783,10 +972,10 @@ Panel {
 
     MouseArea {
       anchors.fill: parent
-      enabled: esr.available && esr.queue !== ""
-      cursorShape: Qt.PointingHandCursor
-      onClicked: Quickshell.execDetached(["xdg-open",
-        "https://www.wanikani.com/subjects/extra_study?queue_type=" + esr.queue])
+      hoverEnabled: true
+      cursorShape: esr.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onContainsMouseChanged: if (containsMouse) root.setCursor("extra", esr.idx)
+      onClicked: if (esr.available) root.openExtraStudy(esr.idx)
     }
   }
 
@@ -892,15 +1081,22 @@ Panel {
   // A subject as a coloured chip: its characters (or, for character-less
   // radicals, its meaning). Click opens the item's page on wanikani.com.
   component ItemChip: Rectangle {
+    id: chip
     property var item: ({})
+    property string section: ""
+    property int idx: 0
     readonly property string glyph: (item && item.characters && String(item.characters).length)
       ? String(item.characters)
       : String((item && item.meaning) || "•")
+    readonly property bool cursored: root.hasCursor(section, idx)
     implicitHeight: Style.space(19)
     implicitWidth: chipLabel.implicitWidth + Style.space(12)
     radius: Style.space(4)
     color: root.typeColor(item ? item.type : "")
     opacity: chipMouse.containsMouse ? 0.82 : 1
+    border.width: cursored ? Math.max(1, Style.space(2)) : 0
+    border.color: root.foreground
+    onCursoredChanged: if (cursored) root.setCursorItem(chip)
 
     Text {
       id: chipLabel
@@ -916,8 +1112,8 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: if (parent.item && parent.item.url)
-        Quickshell.execDetached(["xdg-open", String(parent.item.url)])
+      onContainsMouseChanged: if (containsMouse) root.setCursor(chip.section, chip.idx)
+      onClicked: root.openItem(chip.item)
     }
   }
 
@@ -927,9 +1123,10 @@ Panel {
     id: il
     property string title: ""
     property string note: ""
+    property string section: ""
     property var items: []
     property string emptyText: ""
-    property int cap: 15
+    property int cap: root.chipCap
     spacing: Style.space(6)
     visible: wk.configured && wk.dashboardLoaded
 
@@ -960,7 +1157,7 @@ Panel {
 
       Repeater {
         model: il.items ? il.items.slice(0, il.cap) : []
-        delegate: ItemChip { item: modelData }
+        delegate: ItemChip { item: modelData; section: il.section; idx: index }
       }
 
       Rectangle {
@@ -1024,15 +1221,20 @@ Panel {
         height: Style.space(19)
         readonly property int count: Number(modelData.count) || 0
         readonly property bool clickable: rows.isWeek && count > 0
+        readonly property bool cursored: rows.isWeek && root.hasCursor("upcoming", index)
+        onCursoredChanged: if (cursored) root.setCursorItem(rowItem)
 
         Rectangle {
           anchors.fill: parent
           anchors.leftMargin: -Style.space(4)
           anchors.rightMargin: -Style.space(4)
           radius: Style.cornerRadius
-          color: hover.containsMouse && rowItem.clickable
-            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
-            : "transparent"
+          color: rowItem.cursored
+            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.09)
+            : (hover.containsMouse && rowItem.clickable
+              ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
+              : "transparent")
+          Behavior on color { ColorAnimation { duration: 60 } }
         }
 
         RowLayout {
@@ -1097,9 +1299,9 @@ Panel {
           id: hover
           anchors.fill: parent
           hoverEnabled: true
-          enabled: rowItem.clickable
-          cursorShape: Qt.PointingHandCursor
-          onClicked: rows.drillInto(index)
+          cursorShape: rowItem.clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onContainsMouseChanged: if (containsMouse && rows.isWeek) root.setCursor("upcoming", index)
+          onClicked: if (rowItem.clickable) rows.drillInto(index)
         }
       }
     }
