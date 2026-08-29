@@ -2,14 +2,16 @@
 
 A [WaniKani](https://www.wanikani.com/) cockpit for the [Omarchy](https://omarchy.org/) bar.
 
-A quiet Crabigator mark sits in the bar and takes the accent colour when reviews
-(or lessons) are waiting. Click it for a dashboard drop-down: how many reviews
-and lessons are due now, the next-review countdown, a 24-hour forecast, and
-which level you're on.
+A quiet alligator-head mark sits in the bar and takes the accent colour when
+reviews (or lessons) are waiting. Click it for a dashboard drop-down that
+mirrors the website: reviews and lessons due, an Upcoming Reviews forecast you
+can drill into hour by hour, Level Progress, Item Spread, Critical Condition,
+recent unlocks and burns, and the Extra Study counts. Fully keyboard-driven.
 
-> **Status: early.** This is phase 1 of a larger plan — the read-only dashboard.
-> Doing lessons and reviews inside the shell, the Extra Study modes, and desktop
-> notifications are still to come. See the
+Desktop notifications for reviews piling up, new lessons, level-ups and burns.
+
+> **Status: read-only.** The dashboard and notifications are done. Doing lessons
+> and reviews *inside* the shell is still to come. See the
 > [build plan](https://claude.ai/code/artifact/683e07bc-d1e2-4bc6-8bc9-2afac661ad7d).
 
 Not affiliated with, sponsored by, or endorsed by WaniKani or Tofugu LLC.
@@ -23,7 +25,8 @@ omarchy plugin add https://github.com/aphelion-studios/omawanikani.git
 ```
 
 Accept the prompt to enable the plugin. It needs `python3` (standard library
-only) and `xdg-open` for the "open wanikani.com" button.
+only), `libnotify` (`notify-send`) for notifications, and `xdg-open` for the
+links.
 
 ## Connecting your account
 
@@ -65,24 +68,36 @@ cursor.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| Refresh interval | 60 s | How often the counts re-read from WaniKani (two requests each; the API allows 60/min). |
+| Refresh interval | 60 s | How often the counts re-read from WaniKani. The dashboard sync runs on a longer cadence. |
 | Light the mark for lessons too | on | Accent the mark for waiting lessons, not only reviews. |
 | Hide the mark when nothing is due | off | Hide a connected, caught-up widget. It always shows while no token is stored. |
+| Notify at N reviews | 25 | Notify once your review count climbs past this. 0 turns it off. |
+| Notify when new lessons unlock | on | |
+| Notify on level-up | on | |
+| Notify when items burn | on | |
+
+Notifications follow Do Not Disturb, stay quiet on vacation, and are silent
+until the plugin has taken its first reading (so a shell restart never dumps a
+backlog on you).
 
 ## What it does on your system
 
-- **Runs `wanikani.py`** (Python standard library, no dependencies) on a timer
-  while the bar is up — one `GET /user` and one `GET /summary` per refresh.
+- **Runs `wanikani.py`** (Python standard library, no dependencies) in the
+  background while the shell is up — a light `summary` poll on the short
+  interval, a heavier `dashboard` sync (which caches subjects, assignments and
+  review statistics under `~/.cache/omawanikani/`) on a longer one.
 - **Reads and writes** `~/.config/omarchy/wanikani.json` (`0600`) — just your API
-  token.
+  token — and the cache directory above.
 - **Reaches** `api.wanikani.com` over HTTPS. No other network access, no
   telemetry.
-- **Never writes to your WaniKani account.** This phase is read-only.
+- **Runs `notify-send`** for the events you've enabled.
+- **Never writes to your WaniKani account.** It is read-only.
 
 ## From a terminal
 
 ```bash
 ./wanikani.py summary | jq
+./wanikani.py dashboard | jq
 printf '%s\n' "$TOKEN" | ./wanikani.py set-token
 ./wanikani.py clear-token
 ```
