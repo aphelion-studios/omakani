@@ -451,11 +451,16 @@ Panel {
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
         interactive: contentHeight > height
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        ScrollBar.vertical: ScrollBar {
+          id: vScroll
+          policy: ScrollBar.AsNeeded
+        }
 
         Column {
           id: column
-          width: panelFlick.width
+          // Narrow the content when the scrollbar shows so it never sits over
+          // the text.
+          width: panelFlick.width - (vScroll.visible ? vScroll.width + Style.space(3) : 0)
           spacing: Style.space(12)
 
           PanelHero {
