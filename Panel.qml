@@ -155,13 +155,13 @@ Panel {
       }
     } else if (dx !== 0) {
       var right = dx > 0
-      if (cur.o === "h") {
+      if (cur.n === "drillback") {
+        if (!right) upcomingDrill = -1
+      } else if (cur.o === "h") {
         navIndex = Math.max(0, Math.min(cur.c - 1, navIndex + (right ? 1 : -1)))
       } else if (right) {
         navActivate()
         return
-      } else if (cur.n === "drillback") {
-        upcomingDrill = -1
       }
     }
     scrollTimer.restart()
@@ -219,14 +219,21 @@ Panel {
   function scrollToCursor() {
     var it = cursorItem
     if (!it || !it.visible || !panelFlick) return
+    // At the very first target, show the whole header above it.
+    if (navSecAt(navSection) === 0 && navIndex === 0) {
+      panelFlick.contentY = 0
+      return
+    }
     var y = it.mapToItem(panelFlick.contentItem, 0, 0).y
-    var m = Style.space(16)
+    // A fatter top margin on the first row of a section pulls its heading in too.
+    var topM = navIndex === 0 ? Style.space(38) : Style.space(16)
+    var botM = Style.space(16)
     var viewH = panelFlick.height
     var maxY = Math.max(0, panelFlick.contentHeight - viewH)
-    if (y - m < panelFlick.contentY)
-      panelFlick.contentY = Math.max(0, y - m)
-    else if (y + it.height + m > panelFlick.contentY + viewH)
-      panelFlick.contentY = Math.min(maxY, y + it.height + m - viewH)
+    if (y - topM < panelFlick.contentY)
+      panelFlick.contentY = Math.max(0, y - topM)
+    else if (y + it.height + botM > panelFlick.contentY + viewH)
+      panelFlick.contentY = Math.min(maxY, y + it.height + botM - viewH)
   }
 
   function commitToken() {
@@ -246,12 +253,13 @@ Panel {
   }
 
   // Drilling in / out of a day rebuilds the section list; land the cursor
-  // somewhere valid without dropping an active cursor.
-  onUpcomingDrillChanged: {
-    navSection = navSections.length > 0 ? navSections[0].n : ""
-    navIndex = 0
+  // somewhere valid. Deferred, because `navSections` is not yet re-evaluated
+  // while this change signal is being delivered.
+  onUpcomingDrillChanged: Qt.callLater(function() {
+    root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
+    root.navIndex = 0
     scrollTimer.restart()
-  }
+  })
 
   // Which day the Upcoming Reviews section is drilled into; -1 is the day list.
   property int upcomingDrill: -1
