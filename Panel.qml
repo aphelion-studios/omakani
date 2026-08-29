@@ -30,6 +30,19 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
+  // WaniKani's subject-type colours, held a touch off their vivid web values so
+  // they read on a dark bar without shouting. Used for Level Progress and the
+  // Item Spread pills, where the colour carries meaning.
+  readonly property color radicalColor: "#1f93e6"
+  readonly property color kanjiColor: "#e42e9c"
+  readonly property color vocabColor: "#9457e8"
+
+  function typeColor(type) {
+    if (type === "radical" || type === "radicals") return radicalColor
+    if (type === "kanji") return kanjiColor
+    return vocabColor
+  }
+
   readonly property bool showLessons: setting("showLessons", true) === true
   readonly property bool hideWhenZero: setting("hideWhenZero", false) === true
 
@@ -437,6 +450,114 @@ Panel {
             foreground: root.foreground
           }
 
+          // ----------------------------------------- level progress
+
+          Column {
+            visible: wk.configured && wk.dashboardLoaded
+            width: parent.width
+            spacing: Style.space(8)
+
+            readonly property var lp: wk.levelProgress
+            readonly property int gate: Number(lp.kanjiToLevelUp) || 0
+
+            PanelSectionHeader {
+              text: "LEVEL " + wk.level + " PROGRESS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            ProgressRow {
+              width: parent.width
+              label: "Radicals"
+              tint: root.radicalColor
+              passed: Number(parent.lp.radicals ? parent.lp.radicals.passed : 0)
+              total: Number(parent.lp.radicals ? parent.lp.radicals.total : 0)
+            }
+            ProgressRow {
+              width: parent.width
+              label: "Kanji"
+              tint: root.kanjiColor
+              passed: Number(parent.lp.kanji ? parent.lp.kanji.passed : 0)
+              total: Number(parent.lp.kanji ? parent.lp.kanji.total : 0)
+            }
+            ProgressRow {
+              width: parent.width
+              label: "Vocabulary"
+              tint: root.vocabColor
+              passed: Number(parent.lp.vocabulary ? parent.lp.vocabulary.passed : 0)
+              total: Number(parent.lp.vocabulary ? parent.lp.vocabulary.total : 0)
+            }
+
+            Text {
+              width: parent.width
+              topPadding: Style.space(2)
+              text: parent.gate > 0
+                ? "Guru " + parent.gate + " more kanji to reach level " + (wk.level + 1)
+                : "Kanji gate cleared — level " + (wk.level + 1) + " is unlocked."
+              color: parent.gate > 0 ? root.foreground : root.accent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              wrapMode: Text.WordWrap
+            }
+          }
+
+          PanelSeparator {
+            visible: wk.configured && wk.dashboardLoaded
+            foreground: root.foreground
+          }
+
+          // -------------------------------------------- item spread
+
+          Column {
+            visible: wk.configured && wk.dashboardLoaded
+            width: parent.width
+            spacing: Style.space(6)
+
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(10)
+
+              PanelSectionHeader {
+                text: "ITEM SPREAD"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                Layout.fillWidth: true
+              }
+              Repeater {
+                model: [
+                  { t: "Rad", c: root.radicalColor },
+                  { t: "Kan", c: root.kanjiColor },
+                  { t: "Voc", c: root.vocabColor },
+                ]
+                delegate: Row {
+                  spacing: Style.space(3)
+                  Rectangle {
+                    width: Style.space(6); height: Style.space(6); radius: width / 2
+                    color: modelData.c
+                    anchors.verticalCenter: parent.verticalCenter
+                  }
+                  Text {
+                    text: modelData.t
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+                }
+              }
+            }
+
+            SpreadRow { width: parent.width; label: "Apprentice";   bucket: wk.itemSpread.apprentice }
+            SpreadRow { width: parent.width; label: "Guru";         bucket: wk.itemSpread.guru }
+            SpreadRow { width: parent.width; label: "Master";       bucket: wk.itemSpread.master }
+            SpreadRow { width: parent.width; label: "Enlightened";  bucket: wk.itemSpread.enlightened }
+            SpreadRow { width: parent.width; label: "Burned";       bucket: wk.itemSpread.burned }
+          }
+
+          PanelSeparator {
+            visible: wk.configured && wk.dashboardLoaded
+            foreground: root.foreground
+          }
+
           // ---------------------------------------------------- footer
 
           RowLayout {
@@ -514,6 +635,105 @@ Panel {
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.displayLarge
+    }
+  }
+
+  // One Level Progress line: "Radicals  19 / 20" over a tinted fill bar.
+  component ProgressRow: Column {
+    id: pr
+    property string label: ""
+    property color tint: root.accent
+    property int passed: 0
+    property int total: 0
+    readonly property real frac: total > 0 ? Math.max(0, Math.min(1, passed / total)) : 0
+    spacing: Style.space(3)
+
+    RowLayout {
+      width: parent.width
+      Text {
+        text: pr.label
+        color: root.foreground
+        opacity: 0.9
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        Layout.fillWidth: true
+      }
+      Text {
+        text: pr.passed + " / " + pr.total
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        font.bold: true
+      }
+    }
+
+    Rectangle {
+      width: parent.width
+      height: Style.space(4)
+      radius: 2
+      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
+      Rectangle {
+        width: Math.round(parent.width * pr.frac)
+        height: parent.height
+        radius: parent.radius
+        color: pr.tint
+      }
+    }
+  }
+
+  // A coloured number chip in the Item Spread table.
+  component Pill: Rectangle {
+    property int value: 0
+    property color tint: root.accent
+    readonly property bool filled: value > 0
+    implicitHeight: Style.space(16)
+    Layout.fillWidth: true
+    Layout.minimumWidth: Style.space(24)
+    radius: Style.space(4)
+    color: filled ? tint
+      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.07)
+    Text {
+      anchors.centerIn: parent
+      text: String(parent.value)
+      color: parent.filled ? "#ffffff" : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+    }
+  }
+
+  // One Item Spread row: stage name, a chip per subject type, the stage total.
+  component SpreadRow: RowLayout {
+    id: sr
+    property string label: ""
+    property var bucket: ({})
+    readonly property int rad: Number(bucket && bucket.radicals) || 0
+    readonly property int kan: Number(bucket && bucket.kanji) || 0
+    readonly property int voc: Number(bucket && bucket.vocabulary) || 0
+    readonly property int total: rad + kan + voc
+    spacing: Style.space(5)
+
+    Text {
+      text: sr.label
+      color: root.foreground
+      opacity: 0.85
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      Layout.preferredWidth: Style.space(72)
+    }
+
+    Pill { value: sr.rad; tint: root.radicalColor }
+    Pill { value: sr.kan; tint: root.kanjiColor }
+    Pill { value: sr.voc; tint: root.vocabColor }
+
+    Text {
+      text: String(sr.total)
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+      horizontalAlignment: Text.AlignRight
+      Layout.preferredWidth: Style.space(28)
     }
   }
 
