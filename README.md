@@ -46,6 +46,21 @@ Your token is left behind deliberately; delete it yourself with:
 rm -f ~/.config/omarchy/wanikani.json
 ```
 
+## Keyboard
+
+The dashboard is fully keyboard-driven. Mouse hover and the keyboard share one
+cursor.
+
+| Key | Effect |
+| --- | --- |
+| `j` / `k` (or `↓` / `↑`) | Move the cursor down / up — through the days, the Extra Study rows, the item chips, the footer |
+| `h` / `l` (or `←` / `→`) | Move sideways on a chip row or the footer; on a day, `l` opens its hour breakdown and `h` goes back |
+| `Enter` / `Space` | Open — drill into a day, launch an Extra Study session, open an item's page, hit a footer button |
+| `g` / `G` | Jump to the first / last item |
+| `r` | Refresh |
+| `Esc` | Back out of a day's breakdown, or close the panel |
+| `Tab` / `Shift+Tab` | Next / previous bar panel |
+
 ## Settings
 
 | Setting | Default | Effect |
