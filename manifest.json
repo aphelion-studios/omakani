@@ -8,11 +8,13 @@
   "description": "A WaniKani cockpit for the bar: reviews and lessons due at a glance, a 24-hour forecast, the next-review countdown, and where you stand in the current level. Full lesson and review sessions come in a later release.",
   "kinds": [
     "service",
-    "bar-widget"
+    "bar-widget",
+    "panel"
   ],
   "entryPoints": {
     "service": "Service.qml",
-    "barWidget": "Panel.qml"
+    "barWidget": "Panel.qml",
+    "panel": "App.qml"
   },
   "barWidget": {
     "displayName": "OmaWaniKani",
