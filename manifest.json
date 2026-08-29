@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.aphelion-studios.omawanikani",
+  "name": "OmaWaniKani",
+  "version": "0.1.0",
+  "author": "aphelion-studios",
+  "license": "MIT",
+  "description": "A WaniKani cockpit for the bar: reviews and lessons due at a glance, a 24-hour forecast, the next-review countdown, and where you stand in the current level. Full lesson and review sessions come in a later release.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "OmaWaniKani",
+    "description": "A quiet Crabigator mark that takes the accent colour while reviews are waiting, with a dashboard drop-down for the numbers.",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 60,
+      "showLessons": true,
+      "hideWhenZero": false
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 30,
+        "max": 3600,
+        "step": 15,
+        "defaultValue": 60,
+        "description": "How often the bar re-reads your review and lesson counts from WaniKani. WaniKani allows 60 requests per minute; each refresh uses two."
+      },
+      {
+        "key": "showLessons",
+        "type": "boolean",
+        "label": "Light the mark for lessons too",
+        "defaultValue": true,
+        "description": "Give the mark the accent colour when lessons are waiting, not only reviews."
+      },
+      {
+        "key": "hideWhenZero",
+        "type": "boolean",
+        "label": "Hide the mark when nothing is due",
+        "defaultValue": false,
+        "description": "The mark still appears while no API token is stored, so you can always reach the panel to connect one."
+      }
+    ]
+  }
+}
