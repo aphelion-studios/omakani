@@ -813,22 +813,40 @@ def cmd_clear_token(args):
 
 def cmd_browse(args):
     """Every subject on one level, from the slim cache -- id, characters,
-    primary meaning, ordered radicals -> kanji -> vocabulary. For the level
-    browser; the full detail arrives lazily via `detail`."""
+    primary meaning, ordered radicals -> kanji -> vocabulary, each tagged
+    with its unlock / SRS state so the browser can tell locked items apart.
+    The full detail arrives lazily via `detail`."""
     config = load_config()
     token = api_token(config)
     if not token:
         return unconfigured()
     api = Api(token)
     subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
+    assignments_by_id, _ = sync_collection(api, "assignments", "/assignments")
+    assignment_by_subject = {}
+    for assignment in assignments_by_id.values():
+        assignment_by_subject[data_of(assignment).get("subject_id")] = assignment
 
     level = int(args.level or 0)
     order = {"radical": 0, "kanji": 1, "vocabulary": 2, "kana_vocabulary": 2}
     rows = []
+    progress = {key: {"passed": 0, "unlocked": 0, "total": 0}
+                for key in ("radicals", "kanji", "vocabulary")}
     for subject in subjects.values():
         data = data_of(subject)
         if data.get("level") != level or data.get("hidden_at"):
             continue
+        a_data = data_of(assignment_by_subject.get(subject.get("id")))
+        stage = a_data.get("srs_stage") or 0
+        unlocked = bool(a_data.get("unlocked_at"))
+        passed = bool(a_data.get("passed_at")) or stage >= 5
+        burned = bool(a_data.get("burned_at"))
+        key = type_key(subject.get("object"))
+        progress[key]["total"] += 1
+        if unlocked:
+            progress[key]["unlocked"] += 1
+        if passed:
+            progress[key]["passed"] += 1
         meanings = data.get("meanings") or []
         primary = next((m.get("meaning") for m in meanings if m.get("primary")),
                        meanings[0].get("meaning") if meanings else "")
@@ -838,10 +856,15 @@ def cmd_browse(args):
             "characters": data.get("characters") or "",
             "meaning": primary or "",
             "slug": data.get("slug") or "",
+            "unlocked": unlocked,
+            "passed": passed,
+            "burned": burned,
+            "srsStage": stage,
         })
     rows.sort(key=lambda row: (order.get(row["object"], 3), row["slug"]))
     return {"ok": True, "configured": True, "error": "", "level": level,
-            "subjects": rows, "requests": api.requests, "fetchedAt": iso(now_utc())}
+            "subjects": rows, "progress": progress,
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
 def cmd_detail(args):
