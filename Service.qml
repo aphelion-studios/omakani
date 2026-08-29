@@ -154,8 +154,8 @@ Item {
     for (var i = 0; i < list.length; i++) {
       var text = String(list[i] && list[i].text || "").trim()
       if (text === "") continue
-      Quickshell.execDetached(["notify-send", "-a", "OmaWaniKani",
-                               "-h", "string:x-canonical-private-synchronous:omawanikani-" + String(list[i].id || i),
+      Quickshell.execDetached(["notify-send", "-a", "OmaKani",
+                               "-h", "string:x-canonical-private-synchronous:omakani-" + String(list[i].id || i),
                                text])
     }
   }

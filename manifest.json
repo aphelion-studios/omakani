@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.aphelion-studios.omawanikani",
-  "name": "OmaWaniKani",
+  "id": "io.github.aphelion-studios.omakani",
+  "name": "OmaKani",
   "version": "0.1.0",
   "author": "aphelion-studios",
   "license": "MIT",
@@ -17,7 +17,7 @@
     "panel": "App.qml"
   },
   "barWidget": {
-    "displayName": "OmaWaniKani",
+    "displayName": "OmaKani",
     "description": "A quiet Crabigator mark that takes the accent colour while reviews are waiting, with a dashboard drop-down for the numbers.",
     "category": "Productivity",
     "allowMultiple": false,

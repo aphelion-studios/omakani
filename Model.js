@@ -1,4 +1,4 @@
-// Pure helpers for the OmaWaniKani plugin: parsing the helper's JSON and turning
+// Pure helpers for the OmaKani plugin: parsing the helper's JSON and turning
 // counts and timestamps into the strings the bar and the dashboard render. Kept
 // out of the QML so the formatting rules live in one place.
 

@@ -8,15 +8,15 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 
-// Bar widget and dashboard for OmaWaniKani. One entry point, like the
+// Bar widget and dashboard for OmaKani. One entry point, like the
 // first-party dropbox plugin: a quiet alligator-head mark that takes the accent
 // colour while reviews (or lessons) are waiting, and a drop-down with the counts
 // and the Upcoming Reviews forecast (day list -> hour breakdown, mirroring the
 // website). The rest of the dashboard sections land here across phase 2.
 Panel {
   id: root
-  moduleName: "io.github.aphelion-studios.omawanikani"
-  ipcTarget: "io.github.aphelion-studios.omawanikani"
+  moduleName: "io.github.aphelion-studios.omakani"
+  ipcTarget: "io.github.aphelion-studios.omakani"
   manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -338,7 +338,7 @@ Panel {
   // The shared service instance. Null for a beat at startup before the shell
   // mounts it, so every read below is guarded.
   readonly property var svc: (bar && bar.shell && bar.shell.serviceFor)
-    ? bar.shell.serviceFor("io.github.aphelion-studios.omawanikani")
+    ? bar.shell.serviceFor("io.github.aphelion-studios.omakani")
     : null
 
   // Push this bar-widget entry's settings into the shared service.

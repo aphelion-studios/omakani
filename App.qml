@@ -4,9 +4,9 @@ import Quickshell
 import qs.Commons
 import qs.Ui
 
-// The full OmaWaniKani app: subject browser, lessons and reviews done in-shell.
+// The full OmaKani app: subject browser, lessons and reviews done in-shell.
 // A `panel`-kind plugin, mounted by the shell and summoned with
-//   omarchy-shell -q shell toggle io.github.aphelion-studios.omawanikani
+//   omarchy-shell -q shell toggle io.github.aphelion-studios.omakani
 // It reads the shared Service the bar widget also uses.
 //
 // Host contract (same as the Spotify full player): the shell sets `opened`
@@ -24,7 +24,7 @@ Item {
   property bool closingFromHost: false
 
   readonly property string pluginId: manifest && manifest.id
-    ? String(manifest.id) : "io.github.aphelion-studios.omawanikani"
+    ? String(manifest.id) : "io.github.aphelion-studios.omakani"
 
   readonly property color bg: Color.background
   readonly property color fg: Color.foreground
@@ -52,7 +52,7 @@ Item {
   FloatingWindow {
     id: window
     visible: root.opened
-    title: "OmaWaniKani"
+    title: "OmaKani"
     color: root.bg
     implicitWidth: 1120
     implicitHeight: 780
@@ -82,7 +82,7 @@ Item {
 
         Text {
           anchors.horizontalCenter: parent.horizontalCenter
-          text: "OmaWaniKani"
+          text: "OmaKani"
           color: root.fg
           font.family: root.fontFamily
           font.pixelSize: Style.font.displayLarge

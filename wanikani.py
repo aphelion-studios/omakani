@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WaniKani bridge for the io.github.aphelion-studios.omawanikani Omarchy plugin.
+"""WaniKani bridge for the io.github.aphelion-studios.omakani Omarchy plugin.
 
 Every subcommand prints exactly one JSON object on stdout and exits 0, even when
 WaniKani refuses the call, so the QML side has a single shape to parse and only
@@ -46,7 +46,7 @@ HOST = "api.wanikani.com"
 API_BASE = "/v2"
 API_ROOT = "https://" + HOST + API_BASE
 API_REVISION = "20170710"
-USER_AGENT = "omarchy-omawanikani/0.2"
+USER_AGENT = "omarchy-omakani/0.2"
 TIMEOUT = 10
 # Ceiling for one call including its failover attempts.
 DEADLINE = 30
@@ -89,7 +89,7 @@ def config_path():
 
 def cache_dir():
     base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(base) / "omawanikani"
+    return Path(base) / "omakani"
 
 
 def load_config():

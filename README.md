@@ -1,4 +1,4 @@
-# OmaWaniKani
+# OmaKani
 
 A [WaniKani](https://www.wanikani.com/) cockpit for the [Omarchy](https://omarchy.org/) bar.
 
@@ -21,7 +21,7 @@ Not affiliated with, sponsored by, or endorsed by WaniKani or Tofugu LLC.
 Review the source, then:
 
 ```bash
-omarchy plugin add https://github.com/aphelion-studios/omawanikani.git
+omarchy plugin add https://github.com/aphelion-studios/omakani.git
 ```
 
 Accept the prompt to enable the plugin. It needs `python3` (standard library
@@ -40,7 +40,7 @@ line.
 ## Remove
 
 ```bash
-omarchy plugin remove io.github.aphelion-studios.omawanikani
+omarchy plugin remove io.github.aphelion-studios.omakani
 ```
 
 Your token is left behind deliberately; delete it yourself with:
@@ -69,10 +69,10 @@ notification controls). Everything there is keyboard-driven too. To bind a key
 straight to it, add to `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER + CTRL + K", "OmaWaniKani", "omarchy-shell -q io.github.aphelion-studios.omawanikani toggle")
+o.bind("SUPER + CTRL + K", "OmaKani", "omarchy-shell -q io.github.aphelion-studios.omakani toggle")
 ```
 
-IPC methods on `io.github.aphelion-studios.omawanikani`: `toggle`, `open`,
+IPC methods on `io.github.aphelion-studios.omakani`: `toggle`, `open`,
 `close`, `refresh`, `settings`.
 
 ## Settings
@@ -96,7 +96,7 @@ backlog on you).
 - **Runs `wanikani.py`** (Python standard library, no dependencies) in the
   background while the shell is up — a light `summary` poll on the short
   interval, a heavier `dashboard` sync (which caches subjects, assignments and
-  review statistics under `~/.cache/omawanikani/`) on a longer one.
+  review statistics under `~/.cache/omakani/`) on a longer one.
 - **Reads and writes** `~/.config/omarchy/wanikani.json` (`0600`) — just your API
   token — and the cache directory above.
 - **Reaches** `api.wanikani.com` over HTTPS. No other network access, no
