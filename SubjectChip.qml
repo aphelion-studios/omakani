@@ -5,6 +5,9 @@ import qs.Commons
 // type, with the meaning trailing when known. Feed it either an explicit
 // object/characters/meaning (level browser, slim data) or a full `resource`
 // from the detail cache (component links, which resolve lazily).
+//
+// `locked` items (not yet unlocked on the account) render hollow with a
+// dashed border, the way the website's level page shows them.
 Rectangle {
   id: chip
 
@@ -15,6 +18,7 @@ Rectangle {
   property string meaning: ""
   property bool cursored: false
   property bool hovered: false
+  property bool locked: false
   readonly property bool lit: cursored || hovered
 
   property string fontFamily: Style.font.family
@@ -52,14 +56,58 @@ Rectangle {
   implicitWidth: row.implicitWidth + Style.space(20)
   implicitHeight: Style.space(34)
   radius: Style.space(5)
-  color: Qt.rgba(tint.r, tint.g, tint.b, lit ? 0.32 : 0.16)
-  border.width: cursored ? 2 : 1
-  border.color: Qt.rgba(tint.r, tint.g, tint.b, lit ? 1.0 : 0.4)
+
+  color: locked
+    ? (lit ? Qt.rgba(tint.r, tint.g, tint.b, 0.10) : "transparent")
+    : Qt.rgba(tint.r, tint.g, tint.b, lit ? 0.34 : 0.16)
+  // The keyboard cursor gets a bright foreground-coloured ring; hover/normal
+  // keep the tint border. Locked items draw their border in the dashed Canvas.
+  border.width: cursored ? 2 : (locked ? 0 : 1)
+  border.color: cursored
+    ? Qt.rgba(fg.r, fg.g, fg.b, 0.95)
+    : Qt.rgba(tint.r, tint.g, tint.b, hovered ? 0.9 : 0.4)
+
+  Loader {
+    anchors.fill: parent
+    active: chip.locked && !chip.cursored
+    sourceComponent: Canvas {
+      id: dashed
+      onPaint: {
+        var ctx = getContext("2d")
+        ctx.reset()
+        var a = chip.lit ? 0.95 : 0.5
+        ctx.strokeStyle = Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, a)
+        ctx.lineWidth = chip.cursored ? 2 : 1.3
+        ctx.setLineDash([4, 3])
+        var r = chip.radius
+        var i = ctx.lineWidth / 2
+        var w = width - i
+        var h = height - i
+        ctx.beginPath()
+        ctx.moveTo(i + r, i)
+        ctx.arcTo(w, i, w, i + r, r)
+        ctx.arcTo(w, h, w - r, h, r)
+        ctx.arcTo(i, h, i, h - r, r)
+        ctx.arcTo(i, i, i + r, i, r)
+        ctx.closePath()
+        ctx.stroke()
+      }
+      Component.onCompleted: requestPaint()
+      onWidthChanged: requestPaint()
+      onHeightChanged: requestPaint()
+      Connections {
+        target: chip
+        function onLitChanged() { dashed.requestPaint() }
+        function onCursoredChanged() { dashed.requestPaint() }
+      }
+    }
+  }
 
   Row {
     id: row
     anchors.centerIn: parent
     spacing: Style.space(6)
+    opacity: chip.locked && !chip.lit ? 0.55 : 1.0
 
     Text {
       anchors.verticalCenter: parent.verticalCenter

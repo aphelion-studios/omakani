@@ -90,7 +90,6 @@ Item {
   FocusScope {
     id: keys
     anchors.fill: parent
-    focus: true
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)
