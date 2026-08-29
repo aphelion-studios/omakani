@@ -125,11 +125,16 @@ Panel {
 
   // ---- the recolourable mark -------------------------------------------------
 
+  // The alligator head fills its viewBox, so it needs to run a touch smaller
+  // than a nominal bar glyph (which leaves ink room inside its em) to weigh the
+  // same as the Nerd Font icons around it.
+  readonly property int barMarkHeight: Math.round(Style.bar.iconFont * 1.02)
+
   component Mark: Item {
     id: markRoot
     // `size` is the mark's height; the alligator head is taller than it is wide,
     // so the box it occupies is narrower and the bar keeps its neighbours close.
-    property real size: Math.round(Style.bar.iconFont * 1.3)
+    property real size: root.barMarkHeight
     readonly property real aspect: 0.78
     property color tint: root.foreground
     implicitWidth: Math.round(size * aspect)
@@ -164,7 +169,7 @@ Panel {
     // is the child below, and labelVisible is off.
     text: "wanikani"
     labelVisible: false
-    fixedWidth: Math.round(Style.bar.iconFont * 1.3 * 0.78) + Style.space(10)
+    fixedWidth: Math.round(root.barMarkHeight * 0.78) + Style.space(10)
     tooltipText: Model.barTooltip(wk.view, clock.date)
     onPressed: function(pressedButton) {
       if (pressedButton === Qt.MiddleButton) wk.refresh()
