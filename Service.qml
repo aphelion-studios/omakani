@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import "Model.js" as Model
 
@@ -79,17 +80,38 @@ Item {
     return Math.max(min, Math.min(max, parsed))
   }
 
+  function boolSetting(name, fallback) {
+    var value = setting(name, fallback)
+    return value === true || value === "true" || value === 1
+  }
+
   // ---------------------------------------------------------------- commands
+
+  // The notification flags the helper's summary / dashboard commands take,
+  // derived from the bar widget's settings. The helper stays silent until its
+  // first snapshot and while on vacation, so passing these always is safe.
+  function summaryArgs() {
+    var out = ["summary", "--notify-reviews",
+               String(intSetting("notifyReviewsThreshold", 25, 0, 500))]
+    if (boolSetting("notifyLessons", true)) out.push("--notify-lessons")
+    if (boolSetting("notifyLevelUp", true)) out.push("--notify-levelup")
+    return out
+  }
+  function dashboardArgs() {
+    var out = ["dashboard"]
+    if (boolSetting("notifyBurns", true)) out.push("--notify-burns")
+    return out
+  }
 
   function refresh() {
     if (!ready || statusProcess.running) return
-    statusProcess.command = ["python3", helperPath, "summary"]
+    statusProcess.command = ["python3", helperPath].concat(summaryArgs())
     statusProcess.running = true
   }
 
   function refreshDashboard() {
     if (!ready || dashProcess.running) return
-    dashProcess.command = ["python3", helperPath, "dashboard"]
+    dashProcess.command = ["python3", helperPath].concat(dashboardArgs())
     dashProcess.running = true
   }
 
@@ -124,6 +146,20 @@ Item {
 
   // ---------------------------------------------------------------- payloads
 
+  // Fire each event the helper flagged as a desktop notification. notify-send
+  // routes through the shell's notification server, so Do Not Disturb is
+  // honoured for free.
+  function fireNotifications(list) {
+    if (!Array.isArray(list)) return
+    for (var i = 0; i < list.length; i++) {
+      var text = String(list[i] && list[i].text || "").trim()
+      if (text === "") continue
+      Quickshell.execDetached(["notify-send", "-a", "OmaWaniKani",
+                               "-h", "string:x-canonical-private-synchronous:omawanikani-" + String(list[i].id || i),
+                               text])
+    }
+  }
+
   function apply(raw) {
     var payload = Model.parsePayload(raw)
     if (payload.ok === false) {
@@ -138,6 +174,7 @@ Item {
     fetchedAt = String(payload.fetchedAt || "")
     everLoaded = true
     if (note !== "") noteTimer.restart()
+    fireNotifications(payload.notifications)
     // First time we learn we're connected, pull the dashboard too.
     if (configured && !dashboardLoaded && !dashProcess.running) refreshDashboard()
     return payload
@@ -152,6 +189,7 @@ Item {
     dash = payload
     lastDashboardAt = Date.now()
     if (payload.error) lastError = String(payload.error)
+    fireNotifications(payload.notifications)
   }
 
   function helperFailure(text, code) {

@@ -186,17 +186,15 @@ def detect_notifications(payload, args, scope):
         if not quiet:
             threshold = int(getattr(args, "notify_reviews", 0) or 0)
             if threshold > 0 and int(state.get("reviewsNow") or 0) < threshold <= reviews:
-                events.append({"id": "reviews", "title": "WaniKani",
-                               "body": "%d reviews waiting" % reviews})
+                events.append({"id": "reviews", "text": "%d reviews waiting" % reviews})
             if getattr(args, "notify_lessons", False) \
                     and int(state.get("lessonsNow") or 0) == 0 and lessons > 0:
-                events.append({"id": "lessons", "title": "WaniKani",
-                               "body": "%d new %s to learn"
+                events.append({"id": "lessons",
+                               "text": "%d new %s to learn"
                                % (lessons, "lesson" if lessons == 1 else "lessons")})
             if getattr(args, "notify_levelup", False) \
                     and level > int(state.get("level") or 0) > 0:
-                events.append({"id": "levelup", "title": "WaniKani",
-                               "body": "You reached level %d" % level})
+                events.append({"id": "levelup", "text": "You reached level %d" % level})
         state["reviewsNow"] = reviews
         state["lessonsNow"] = lessons
         state["level"] = level
@@ -206,8 +204,8 @@ def detect_notifications(payload, args, scope):
         if not quiet and getattr(args, "notify_burns", False):
             gained = burned - int(state.get("burnedItems") or 0)
             if gained > 0:
-                events.append({"id": "burns", "title": "WaniKani",
-                               "body": "%d %s burned" % (gained, "item" if gained == 1 else "items")})
+                events.append({"id": "burns",
+                               "text": "%d %s burned" % (gained, "item" if gained == 1 else "items")})
         state["burnedItems"] = burned
 
     state["seeded"] = True
