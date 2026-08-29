@@ -78,7 +78,9 @@ Panel {
   // Only the sections that exist right now, in visual order. { n: name,
   // o: orientation "v"|"h", c: item count }.
   readonly property var navSections: {
-    if (!wk.configured) return [{ n: "token", o: "v", c: 1 }]
+    if (settingsOpen) return [{ n: "settings", o: "v", c: settingRows.length },
+                              { n: "settingsdone", o: "h", c: 1 }]
+    if (!wk.configured) return [{ n: "token", o: "v", c: 1 }, { n: "footer", o: "h", c: 4 }]
     if (upcomingDrill >= 0) return [{ n: "drillback", o: "h", c: 1 }]
     var out = []
     if (wk.dashboardLoaded && wk.upcoming.length > 0)
@@ -91,7 +93,7 @@ Panel {
       out.push({ n: "critical", o: "h", c: chipCount(wk.criticalCondition) })
     if (chipCount(wk.recentlyBurned) > 0)
       out.push({ n: "burned", o: "h", c: chipCount(wk.recentlyBurned) })
-    out.push({ n: "footer", o: "h", c: 3 })
+    out.push({ n: "footer", o: "h", c: 4 })
     return out
   }
 
@@ -152,6 +154,10 @@ Panel {
       var right = dx > 0
       if (cur.n === "drillback") {
         if (!right) upcomingDrill = -1
+      } else if (cur.n === "settingsdone") {
+        if (!right) settingsOpen = false
+      } else if (cur.n === "settings") {
+        settingsAdjust(navIndex, right ? 1 : -1)
       } else if (cur.o === "h") {
         navIndex = Math.max(0, Math.min(cur.c - 1, navIndex + (right ? 1 : -1)))
       } else if (right) {
@@ -177,6 +183,8 @@ Panel {
     var s = navSection, i = navIndex
     if (s === "token") tokenField.forceActiveFocus()
     else if (s === "drillback") upcomingDrill = -1
+    else if (s === "settingsdone") settingsOpen = false
+    else if (s === "settings") settingsActivate(i)
     else if (s === "upcoming") {
       if (i < wk.upcoming.length && Number(wk.upcoming[i].count) > 0) upcomingDrill = i
     }
@@ -187,6 +195,7 @@ Panel {
     else if (s === "footer") {
       if (i === 0) wk.refreshAll()
       else if (i === 1) openDashboard()
+      else if (i === 2) settingsOpen = !settingsOpen
       else wk.clearToken()
     }
   }
@@ -241,6 +250,7 @@ Panel {
 
   onOpenedChanged: if (opened) {
     upcomingDrill = -1
+    settingsOpen = false
     navReset()
     if (panelFlick) panelFlick.contentY = 0
     wk.refreshAll()
@@ -258,6 +268,72 @@ Panel {
 
   // Which day the Upcoming Reviews section is drilled into; -1 is the day list.
   property int upcomingDrill: -1
+
+  // ---- settings ---------------------------------------------------------
+
+  property bool settingsOpen: false
+  onSettingsOpenChanged: {
+    if (panelFlick) panelFlick.contentY = 0
+    Qt.callLater(function() {
+      root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
+      root.navIndex = 0
+      scrollTimer.restart()
+    })
+  }
+
+  // Ordered { key, kind } for the settings sheet. bool rows flip on Enter;
+  // the number row takes h/l.
+  readonly property var settingRows: [
+    { key: "showLessons",           kind: "bool", label: "Light the mark for lessons",
+      fallback: true },
+    { key: "hideWhenZero",          kind: "bool", label: "Hide the mark when caught up",
+      fallback: false },
+    { key: "notifyReviewsThreshold", kind: "int", label: "Notify at N reviews",
+      fallback: 25, from: 0, to: 500, step: 5 },
+    { key: "notifyLessons",         kind: "bool", label: "Notify on new lessons",
+      fallback: true },
+    { key: "notifyLevelUp",         kind: "bool", label: "Notify on level-up",
+      fallback: true },
+    { key: "notifyBurns",           kind: "bool", label: "Notify when items burn",
+      fallback: true },
+  ]
+
+  function settingValue(row) {
+    var v = setting(row.key, row.fallback)
+    if (row.kind === "bool") return v === true || v === "true" || v === 1
+    var n = parseInt(String(v), 10)
+    return isFinite(n) ? n : row.fallback
+  }
+
+  // Merge new values into this widget's shell.json layout entry and persist.
+  // The local `settings` update redraws immediately; the Binding pushes it to
+  // the shared service.
+  function persistSettings(values) {
+    var entry = { id: root.moduleName }
+    for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
+    for (var k in values) entry[k] = values[k]
+    root.settings = entry
+    if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function")
+      bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  function settingsActivate(index) {
+    var row = settingRows[index]
+    if (!row || row.kind !== "bool") return
+    var next = {}
+    next[row.key] = !settingValue(row)
+    persistSettings(next)
+  }
+
+  function settingsAdjust(index, dir) {
+    var row = settingRows[index]
+    if (!row || row.kind !== "int") return
+    var step = row.step || 1
+    var v = Math.max(row.from, Math.min(row.to, settingValue(row) + dir * step))
+    var next = {}
+    next[row.key] = v
+    persistSettings(next)
+  }
 
   // The shared service instance. Null for a beat at startup before the shell
   // mounts it, so every read below is guarded.
@@ -331,6 +407,7 @@ Panel {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
+    function settings(): void { root.open(); root.settingsOpen = true }
     function refresh(): string { wk.refreshAll(); return "ok" }
     function status(): string {
       if (!wk.configured) return "not connected"
@@ -432,7 +509,8 @@ Panel {
       onMoveRequested: function(dx, dy) { root.navMove(dx, dy) }
       onActivateRequested: root.navActivate()
       onCloseRequested: {
-        if (root.upcomingDrill >= 0) root.upcomingDrill = -1
+        if (root.settingsOpen) root.settingsOpen = false
+        else if (root.upcomingDrill >= 0) root.upcomingDrill = -1
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
@@ -451,16 +529,9 @@ Panel {
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
         interactive: contentHeight > height
-        ScrollBar.vertical: ScrollBar {
-          id: vScroll
-          policy: ScrollBar.AsNeeded
-        }
-
         Column {
           id: column
-          // Narrow the content when the scrollbar shows so it never sits over
-          // the text.
-          width: panelFlick.width - (vScroll.visible ? vScroll.width + Style.space(3) : 0)
+          width: panelFlick.width
           spacing: Style.space(12)
 
           PanelHero {
@@ -918,6 +989,19 @@ Panel {
             }
 
             PanelActionButton {
+              id: footerSettings
+              iconText: "󰒓"
+              tooltipText: "Settings"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              hasCursor: root.hasCursor("footer", 2)
+              onHovered: function(h) { if (h) root.setCursor("footer", 2) }
+              onHasCursorChanged: if (hasCursor) root.setCursorItem(footerSettings)
+              Layout.alignment: Qt.AlignVCenter
+              onClicked: root.settingsOpen = !root.settingsOpen
+            }
+
+            PanelActionButton {
               id: footerForget
               iconText: "󰌆"
               tooltipText: "Forget the stored API token"
@@ -925,12 +1009,82 @@ Panel {
               fontFamily: root.fontFamily
               enabled: !wk.actionBusy
               hoverColor: root.urgent
-              hasCursor: root.hasCursor("footer", 2)
-              onHovered: function(h) { if (h) root.setCursor("footer", 2) }
+              hasCursor: root.hasCursor("footer", 3)
+              onHovered: function(h) { if (h) root.setCursor("footer", 3) }
               onHasCursorChanged: if (hasCursor) root.setCursorItem(footerForget)
               Layout.alignment: Qt.AlignVCenter
               onClicked: wk.clearToken()
             }
+          }
+        }
+      }
+
+      // Standalone so it can sit in the card's right padding rather than over
+      // the content; wired to the flickable by hand.
+      ScrollBar {
+        id: vScroll
+        orientation: Qt.Vertical
+        anchors.top: panelFlick.top
+        anchors.bottom: panelFlick.bottom
+        anchors.right: panelFlick.right
+        anchors.rightMargin: -Style.space(11)
+        policy: ScrollBar.AsNeeded
+        size: panelFlick.visibleArea.heightRatio
+        position: panelFlick.visibleArea.yPosition
+        active: panelFlick.movingVertically || hovered || pressed
+        onPositionChanged: if (pressed) panelFlick.contentY = position * panelFlick.contentHeight
+      }
+
+      // ---- settings sheet ----
+
+      Rectangle {
+        anchors.fill: parent
+        visible: root.settingsOpen
+        color: Color.popups.background
+
+        Column {
+          width: parent.width
+          spacing: Style.space(10)
+
+          RowLayout {
+            width: parent.width
+            spacing: Style.space(6)
+            PanelActionButton {
+              id: settingsBack
+              iconText: "󰅁"
+              tooltipText: "Done"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              hasCursor: root.hasCursor("settingsdone", 0)
+              onHovered: function(h) { if (h) root.setCursor("settingsdone", 0) }
+              onHasCursorChanged: if (hasCursor) root.setCursorItem(settingsBack)
+              onClicked: root.settingsOpen = false
+            }
+            PanelSectionHeader {
+              text: "SETTINGS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              Layout.fillWidth: true
+            }
+          }
+
+          Repeater {
+            model: root.settingRows
+            delegate: SettingRow {
+              width: parent.width
+              row: modelData
+              idx: index
+            }
+          }
+
+          Text {
+            width: parent.width
+            topPadding: Style.space(4)
+            text: "Notifications follow Do Not Disturb and stay quiet on vacation."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
           }
         }
       }
@@ -958,6 +1112,90 @@ Panel {
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.displayLarge
+    }
+  }
+
+  // One row in the settings sheet: a label plus a switch (bool) or a
+  // minus / value / plus stepper (int). The row owns the click.
+  component SettingRow: Item {
+    id: sr
+    property var row: ({})
+    property int idx: 0
+    readonly property bool cursored: root.hasCursor("settings", idx)
+    readonly property bool isBool: row.kind === "bool"
+    readonly property var currentValue: root.settingValue(row)
+    implicitHeight: Style.space(28)
+    onCursoredChanged: if (cursored) root.setCursorItem(sr)
+
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: sr.isBool ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onContainsMouseChanged: if (containsMouse) root.setCursor("settings", sr.idx)
+      onClicked: if (sr.isBool) root.settingsActivate(sr.idx)
+    }
+
+    Rectangle {
+      anchors.fill: parent
+      anchors.leftMargin: -Style.space(4)
+      anchors.rightMargin: -Style.space(4)
+      radius: Style.cornerRadius
+      color: sr.cursored
+        ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        : "transparent"
+      Behavior on color { ColorAnimation { duration: 60 } }
+    }
+
+    RowLayout {
+      anchors.fill: parent
+      spacing: Style.space(8)
+
+      Text {
+        text: String(sr.row.label || "")
+        color: root.foreground
+        opacity: 0.92
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        Layout.fillWidth: true
+        elide: Text.ElideRight
+      }
+
+      ToggleSwitch {
+        visible: sr.isBool
+        checked: sr.currentValue === true
+        interactive: false
+        hasCursor: sr.cursored
+        Layout.alignment: Qt.AlignVCenter
+      }
+
+      Row {
+        visible: !sr.isBool
+        spacing: Style.space(6)
+        Layout.alignment: Qt.AlignVCenter
+
+        PanelActionButton {
+          iconText: "󰍵"
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onClicked: root.settingsAdjust(sr.idx, -1)
+        }
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(30)
+          horizontalAlignment: Text.AlignHCenter
+          text: sr.currentValue === 0 ? "off" : String(sr.currentValue)
+          color: sr.currentValue === 0 ? root.dim : root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+        PanelActionButton {
+          iconText: "󰐕"
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onClicked: root.settingsAdjust(sr.idx, 1)
+        }
+      }
     }
   }
 
