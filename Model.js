@@ -69,31 +69,6 @@ function barTooltip(view, now) {
   return lines.join("\n")
 }
 
-// The future hourly buckets, each carrying a running cumulative total that
-// starts from what is due now.
-function forecastBars(forecast, startCount) {
-  var list = Array.isArray(forecast) ? forecast : []
-  var running = Math.max(0, Math.round(Number(startCount) || 0))
-  var out = []
-  for (var i = 0; i < list.length; i++) {
-    var count = Math.max(0, Math.round(Number(list[i].count) || 0))
-    running += count
-    out.push({ at: list[i].at, count: count, cumulative: running })
-  }
-  return out
-}
-
-// Short hour label like "3p" / "11a" for a forecast bucket.
-function hourLabel(stamp) {
-  var date = parseStamp(stamp)
-  if (!date) return ""
-  var hour = date.getHours()
-  var suffix = hour < 12 ? "a" : "p"
-  var twelve = hour % 12
-  if (twelve === 0) twelve = 12
-  return twelve + suffix
-}
-
 // One-line status under the hero. Errors win over notes.
 function statusLine(view) {
   if (!view) return ""
