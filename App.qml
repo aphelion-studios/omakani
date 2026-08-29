@@ -33,6 +33,11 @@ Item {
   readonly property string fontFamily: Style.font.family
   readonly property string jpFamily: "Noto Sans CJK JP"
 
+  readonly property bool startLessons: !!service && service.configured
+    && !service.vacation && service.lessonsNow > 0
+  readonly property bool startReviews: !!service && service.configured
+    && !service.vacation && service.reviewsNow > 0
+
   // Website type colours (vivid variants, tuned against the dark app ground).
   readonly property color radicalColor: "#00a1f1"
   readonly property color kanjiColor: "#f100a1"
@@ -44,6 +49,15 @@ Item {
   readonly property var currentPage: navStack.length > 0
     ? navStack[navStack.length - 1] : ({ view: "home" })
   readonly property string view: String(currentPage.view || "home")
+
+  // Route keyboard focus to whichever view is showing (each owns its keys).
+  onViewChanged: Qt.callLater(applyFocus)
+  function applyFocus() {
+    if (!opened) return
+    if (view === "browse") levelBrowser.focusGrid()
+    else if (view === "subject") subjectPage.focusPage()
+    else focusScope.forceActiveFocus()
+  }
 
   // Set while a linked-subject fetch triggered by detailReady is in flight,
   // so the follow-up fetch doesn't recurse.
@@ -102,7 +116,7 @@ Item {
     opened = true
     resetNav()
     if (service) service.refreshAll()
-    Qt.callLater(function () { focusScope.forceActiveFocus() })
+    Qt.callLater(applyFocus)
   }
 
   function close() {
@@ -140,7 +154,10 @@ Item {
         stackDepth: root.navStack.length,
         page: root.currentPage,
         detailError: root.service ? root.service.detailError : "",
-        browseError: root.service ? root.service.browseError : ""
+        browseError: root.service ? root.service.browseError : "",
+        browseCursor: levelBrowser.cursor,
+        browseRows: levelBrowser.rows.length,
+        browseKeyFocus: levelBrowser.hasKeyFocus
       })
     }
   }
@@ -282,6 +299,54 @@ Item {
               var s = root.service
               return s.username + "   ·   Level " + s.level + "\n"
                 + s.reviewsNow + " reviews   ·   " + s.lessonsNow + " lessons ready"
+            }
+          }
+
+          // Start Lessons / Start Reviews — shown for whichever queue has
+          // something waiting. Interim: opens the session on wanikani.com
+          // until the in-shell flow lands.
+          Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Style.space(12)
+            visible: !!root.service && root.service.configured
+              && (root.startLessons || root.startReviews)
+
+            Repeater {
+              model: {
+                var out = []
+                if (root.startLessons)
+                  out.push({ text: "Start Lessons", url: "https://www.wanikani.com/subjects/lesson" })
+                if (root.startReviews)
+                  out.push({ text: "Start Reviews", url: "https://www.wanikani.com/subjects/review" })
+                return out
+              }
+              delegate: Rectangle {
+                width: startLabel.implicitWidth + Style.space(44)
+                height: Style.space(40)
+                radius: Style.space(6)
+                color: startHover.containsMouse
+                  ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.24)
+                  : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
+                border.width: 1
+                border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.4)
+
+                Text {
+                  id: startLabel
+                  anchors.centerIn: parent
+                  text: modelData.text + "  ›"
+                  color: root.fg
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+                MouseArea {
+                  id: startHover
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: Quickshell.execDetached(["xdg-open", String(modelData.url)])
+                }
+              }
             }
           }
 

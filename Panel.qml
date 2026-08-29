@@ -52,6 +52,29 @@ Panel {
   readonly property bool anythingDue: wk.reviewsNow > 0 || (showLessons && wk.lessonsNow > 0)
   readonly property bool markActive: wk.configured && anythingDue && !wk.vacation
 
+  // "Start Lessons" / "Start Reviews" — shown only for the queue that has
+  // something waiting, in that order. Until the in-shell lesson/review flow
+  // lands (Phase 4g/5) these open the session on wanikani.com.
+  readonly property var startActions: {
+    var out = []
+    if (showLessons && wk.lessonsNow > 0 && !wk.vacation)
+      out.push({ kind: "lessons", text: "Start Lessons",
+                 url: "https://www.wanikani.com/subjects/lesson" })
+    if (wk.reviewsNow > 0 && !wk.vacation)
+      out.push({ kind: "reviews", text: "Start Reviews",
+                 url: "https://www.wanikani.com/subjects/review" })
+    return out
+  }
+  function startIndexFor(kind) {
+    for (var i = 0; i < startActions.length; i++)
+      if (startActions[i].kind === kind) return i
+    return -1
+  }
+  function openStart(index) {
+    var a = startActions[index]
+    if (a && a.url) Quickshell.execDetached(["xdg-open", String(a.url)])
+  }
+
   // The mark always shows while unconnected (so the panel stays reachable to
   // paste a token) and while something is due; hideWhenZero only hides a
   // connected, caught-up widget.
@@ -86,6 +109,8 @@ Panel {
     if (!wk.configured) return [{ n: "token", o: "v", c: 1 }, { n: "footer", o: "h", c: 4 }]
     if (upcomingDrill >= 0) return [{ n: "drillback", o: "h", c: 1 }]
     var out = []
+    if (startActions.length > 0)
+      out.push({ n: "start", o: "h", c: startActions.length })
     if (wk.dashboardLoaded && wk.upcoming.length > 0)
       out.push({ n: "upcoming", o: "v", c: wk.upcoming.length })
     if (wk.dashboardLoaded)
@@ -191,6 +216,7 @@ Panel {
     else if (s === "upcoming") {
       if (i < wk.upcoming.length && Number(wk.upcoming[i].count) > 0) upcomingDrill = i
     }
+    else if (s === "start") openStart(i)
     else if (s === "extra") openExtraStudy(i)
     else if (s === "unlocked") openItem(wk.recentlyUnlocked[i])
     else if (s === "critical") openItem(wk.criticalCondition[i])
@@ -634,20 +660,40 @@ Panel {
 
           // ---------------------------------------------------- counts
 
-          RowLayout {
+          Column {
             visible: wk.configured
             width: parent.width
-            spacing: Style.space(12)
+            spacing: Style.space(10)
 
-            Total {
-              label: "LESSONS NOW"
-              value: String(wk.lessonsNow)
-              Layout.fillWidth: true
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(12)
+
+              Total {
+                label: "LESSONS"
+                value: String(wk.lessonsNow)
+                Layout.fillWidth: true
+              }
+              Total {
+                label: "REVIEWS"
+                value: String(wk.reviewsNow)
+                Layout.fillWidth: true
+              }
             }
-            Total {
-              label: "REVIEWS NOW"
-              value: String(wk.reviewsNow)
-              Layout.fillWidth: true
+
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(10)
+              visible: root.startActions.length > 0
+
+              Repeater {
+                model: root.startActions
+                delegate: StartButton {
+                  Layout.fillWidth: true
+                  index: model.index
+                  text: modelData.text
+                }
+              }
             }
           }
 
@@ -1115,6 +1161,57 @@ Panel {
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.displayLarge
+    }
+  }
+
+  // "Start Lessons" / "Start Reviews" pill under the counts. `index` is the
+  // slot in root.startActions (0 or 1).
+  component StartButton: Rectangle {
+    id: sb
+    property int index: 0
+    property alias text: sbLabel.text
+    readonly property bool cursored: root.hasCursor("start", index)
+    readonly property bool lit: cursored || sbHover.containsMouse
+
+    implicitHeight: Style.space(32)
+    radius: Style.space(5)
+    color: lit
+      ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.22)
+      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+    border.width: cursored ? 2 : 1
+    border.color: cursored
+      ? root.accent
+      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22)
+
+    onCursoredChanged: if (cursored) root.setCursorItem(sb)
+
+    Text {
+      id: sbLabel
+      anchors.centerIn: parent
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+    }
+
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(10)
+      text: "›"
+      color: root.foreground
+      opacity: 0.7
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.body
+    }
+
+    MouseArea {
+      id: sbHover
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onContainsMouseChanged: if (containsMouse) root.setCursor("start", sb.index)
+      onClicked: root.openStart(sb.index)
     }
   }
 
