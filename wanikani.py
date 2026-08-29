@@ -493,6 +493,7 @@ def upcoming_reviews(assignments, reviews_now):
         days.append({
             "date": day.isoformat(),
             "label": day.strftime("%a"),
+            "labelLong": day.strftime("%A"),
             "count": len(moments),
             "cumulative": cumulative,
             "hours": hours,

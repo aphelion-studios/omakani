@@ -15,7 +15,10 @@ Item {
   property var settings: ({})
   property string helperPath: ""
 
+  // `view` is the cheap /summary snapshot (counts, countdown); `dash` is the
+  // heavier /dashboard payload (caches synced, everything derived).
   property var view: ({ ok: true, configured: false })
+  property var dash: ({})
   property bool configured: false
   property string lastError: ""
   property string note: ""
@@ -23,18 +26,33 @@ Item {
   property bool everLoaded: false
 
   readonly property bool ready: helperPath !== ""
-  readonly property bool refreshing: statusProcess.running
+  readonly property bool refreshing: statusProcess.running || dashProcess.running
   readonly property bool actionBusy: tokenProcess.running
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 60, 30, 3600)
+  // The dashboard changes slowly (distributions, level progress) and its sync
+  // is heavier, so it polls on its own, longer cadence.
+  readonly property int dashboardIntervalSec: Math.max(120, refreshIntervalSec * 5)
 
   readonly property int reviewsNow: Number(view.reviewsNow) || 0
   readonly property int lessonsNow: Number(view.lessonsNow) || 0
-  readonly property int upcomingReviews: Number(view.upcomingReviews) || 0
   readonly property string nextReviewsAt: String(view.nextReviewsAt || "")
   readonly property int level: Number(view.level) || 0
   readonly property string username: String(view.username || "")
   readonly property bool vacation: view.vacation === true
-  readonly property var forecast: view.forecast || []
+
+  // ---- dashboard ----
+  readonly property bool dashboardLoaded: dash.ok === true && dash.configured === true
+  readonly property bool dashboardBusy: dashProcess.running
+  readonly property bool coldStart: dash.coldStart === true
+  readonly property var itemSpread: dash.itemSpread || ({})
+  readonly property var levelProgress: dash.levelProgress || ({})
+  readonly property string projectedLevelUp: String(dash.projectedLevelUp || "")
+  readonly property var upcoming: dash.upcoming || []
+  readonly property int upcomingTotal: Number(dash.upcomingTotal) || 0
+  readonly property var recentlyUnlocked: dash.recentlyUnlocked || []
+  readonly property var recentlyBurned: dash.recentlyBurned || []
+  readonly property var criticalCondition: dash.criticalCondition || []
+  readonly property var extraStudy: dash.extraStudy || ({})
 
   signal tokenRejected(string message)
 
@@ -56,6 +74,22 @@ Item {
     statusProcess.command = ["python3", helperPath, "summary"]
     statusProcess.running = true
   }
+
+  function refreshDashboard() {
+    if (!ready || dashProcess.running) return
+    dashProcess.command = ["python3", helperPath, "dashboard"]
+    dashProcess.running = true
+  }
+
+  // Called when the panel opens: freshen both, but skip the dashboard sync if
+  // it ran in the last minute (opening and closing the panel repeatedly should
+  // not hammer the API).
+  function refreshAll() {
+    refresh()
+    if (!dashboardLoaded || Date.now() - lastDashboardAt > 60000) refreshDashboard()
+  }
+
+  property double lastDashboardAt: 0
 
   function saveToken(token) {
     var trimmed = String(token || "").trim()
@@ -92,7 +126,20 @@ Item {
     fetchedAt = String(payload.fetchedAt || "")
     everLoaded = true
     if (note !== "") noteTimer.restart()
+    // First time we learn we're connected, pull the dashboard too.
+    if (configured && !dashboardLoaded && !dashProcess.running) refreshDashboard()
     return payload
+  }
+
+  function applyDashboard(raw) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok === false) {
+      lastError = String(payload.error || "WaniKani dashboard request failed")
+      return
+    }
+    dash = payload
+    lastDashboardAt = Date.now()
+    if (payload.error) lastError = String(payload.error)
   }
 
   function helperFailure(text, code) {
@@ -124,6 +171,29 @@ Item {
     interval: 3200
     repeat: false
     onTriggered: root.note = ""
+  }
+
+  Timer {
+    id: dashboardTimer
+    interval: root.dashboardIntervalSec * 1000
+    repeat: true
+    running: root.ready && root.configured
+    onTriggered: root.refreshDashboard()
+  }
+
+  Process {
+    id: dashProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: dashOut; waitForEnd: true }
+    stderr: StdioCollector { id: dashErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.lastError = root.helperFailure(dashErr.text, exitCode)
+        return
+      }
+      root.applyDashboard(dashOut.text)
+    }
   }
 
   Process {

@@ -9,10 +9,10 @@ import qs.Ui
 import "Model.js" as Model
 
 // Bar widget and dashboard for OmaWaniKani. One entry point, like the
-// first-party dropbox plugin: a quiet Crabigator mark that takes the accent
-// colour while reviews (or lessons) are waiting, and a drop-down that shows the
-// counts, the next-review countdown, a 24-hour forecast, and where you stand in
-// the current level.
+// first-party dropbox plugin: a quiet alligator-head mark that takes the accent
+// colour while reviews (or lessons) are waiting, and a drop-down with the counts
+// and the Upcoming Reviews forecast (day list -> hour breakdown, mirroring the
+// website). The rest of the dashboard sections land here across phase 2.
 Panel {
   id: root
   moduleName: "io.github.aphelion-studios.omawanikani"
@@ -88,10 +88,14 @@ Panel {
   onOpenedChanged: if (opened) {
     cursorActive = false
     cursorIndex = 0
+    upcomingDrill = -1
     if (panelFlick) panelFlick.contentY = 0
-    wk.refresh()
+    wk.refreshAll()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
+
+  // Which day the Upcoming Reviews section is drilled into; -1 is the day list.
+  property int upcomingDrill: -1
 
   Service {
     id: wk
@@ -116,7 +120,7 @@ Panel {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function refresh(): string { wk.refresh(); return "ok" }
+    function refresh(): string { wk.refreshAll(); return "ok" }
     function status(): string {
       if (!wk.configured) return "not connected"
       return wk.lessonsNow + " lessons, " + wk.reviewsNow + " reviews"
@@ -209,7 +213,7 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
-        if (text === "r" || text === "R") wk.refresh()
+        if (text === "r" || text === "R") wk.refreshAll()
       }
 
       Flickable {
@@ -346,46 +350,85 @@ Panel {
             foreground: root.foreground
           }
 
-          // -------------------------------------------------- forecast
+          // ------------------------------------------ upcoming reviews
 
           Column {
+            id: upcomingBlock
             visible: wk.configured
             width: parent.width
             spacing: Style.space(8)
 
+            readonly property var drillDay: root.upcomingDrill >= 0
+              && root.upcomingDrill < wk.upcoming.length
+              ? wk.upcoming[root.upcomingDrill] : null
+
             RowLayout {
               width: parent.width
+              spacing: Style.space(6)
+
+              PanelActionButton {
+                visible: upcomingBlock.drillDay !== null
+                iconText: "󰅁"
+                tooltipText: "Back to the week"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: root.upcomingDrill = -1
+              }
+
               PanelSectionHeader {
-                text: "NEXT 24 HOURS"
+                text: upcomingBlock.drillDay
+                  ? String(upcomingBlock.drillDay.labelLong || upcomingBlock.drillDay.label).toUpperCase()
+                  : "UPCOMING REVIEWS"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 Layout.fillWidth: true
               }
+
               Text {
-                text: wk.upcomingReviews > 0 ? "+" + wk.upcomingReviews : "nothing scheduled"
-                color: root.dim
+                visible: wk.dashboardLoaded
+                text: {
+                  var d = upcomingBlock.drillDay
+                  var added = d ? d.count : wk.upcomingTotal
+                  return added > 0 ? "+" + added : "—"
+                }
+                color: root.accent
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
               }
             }
 
-            Forecast {
+            UpcomingRows {
               width: parent.width
-              bars: Model.forecastBars(wk.forecast, wk.reviewsNow)
-              barColor: root.accent
+              day: upcomingBlock.drillDay
+              onDrillInto: function (index) { root.upcomingDrill = index }
             }
 
             Text {
-              visible: wk.reviewsNow === 0
+              visible: wk.dashboardLoaded && upcomingBlock.drillDay === null
+                && wk.upcomingTotal === 0
               width: parent.width
               text: {
                 var rel = Model.relativeTime(wk.nextReviewsAt, clock.date)
-                return rel === "" ? "No upcoming reviews." : "Next review " + rel + "."
+                return "Nothing due in the next 5 days"
+                  + (rel === "" || rel === "now" ? "." : " — next review " + rel + ".")
               }
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall
+              wrapMode: Text.WordWrap
+            }
+
+            Text {
+              visible: !wk.dashboardLoaded
+              width: parent.width
+              text: wk.coldStart || wk.dashboardBusy
+                ? "Building your dashboard… this first sync can take a few seconds."
+                : "Loading…"
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              wrapMode: Text.WordWrap
             }
           }
 
@@ -423,7 +466,7 @@ Panel {
               fontFamily: root.fontFamily
               enabled: !wk.refreshing
               Layout.alignment: Qt.AlignVCenter
-              onClicked: wk.refresh()
+              onClicked: wk.refreshAll()
             }
 
             PanelActionButton {
@@ -474,40 +517,110 @@ Panel {
     }
   }
 
-  component Forecast: Item {
-    id: forecast
-    property var bars: []
-    property color barColor: root.accent
-    readonly property int slots: Math.max(1, bars.length)
+  // Upcoming Reviews, the website's forecast widget: a day list, or one day's
+  // hour-by-hour breakdown when `day` is set. Each row is
+  // label | bar | +delta | cumulative | (chevron on the day list).
+  component UpcomingRows: Column {
+    id: rows
+    property var day: null
+    signal drillInto(int index)
+
+    readonly property bool isWeek: day === null || day === undefined
+    readonly property var model: isWeek ? wk.upcoming : (day.hours || [])
     readonly property real peak: {
       var maximum = 1
-      for (var i = 0; i < bars.length; i++)
-        if (bars[i].count > maximum) maximum = bars[i].count
+      for (var i = 0; i < model.length; i++)
+        if (Number(model[i].count) > maximum) maximum = Number(model[i].count)
       return maximum
     }
-    implicitHeight: Style.space(44)
-    visible: bars.length > 0
 
-    Row {
-      anchors.fill: parent
-      spacing: 2
+    spacing: Style.space(3)
+    visible: wk.dashboardLoaded && model.length > 0
 
-      Repeater {
-        model: forecast.bars
-        delegate: Item {
-          width: (forecast.width - (forecast.slots - 1) * 2) / forecast.slots
-          height: forecast.height
+    Repeater {
+      model: rows.model
+      delegate: Item {
+        id: rowItem
+        width: rows.width
+        height: Style.space(19)
+        readonly property int count: Number(modelData.count) || 0
+        readonly property bool clickable: rows.isWeek && count > 0
 
-          Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: Math.max(2, Math.round(parent.height * (modelData.count / forecast.peak)))
-            radius: 1
-            color: modelData.count > 0
-              ? forecast.barColor
-              : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.14)
-            opacity: modelData.count > 0 ? 0.9 : 0.6
+        Rectangle {
+          anchors.fill: parent
+          anchors.leftMargin: -Style.space(4)
+          anchors.rightMargin: -Style.space(4)
+          radius: Style.cornerRadius
+          color: hover.containsMouse && rowItem.clickable
+            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.06)
+            : "transparent"
+        }
+
+        RowLayout {
+          anchors.fill: parent
+          spacing: Style.space(8)
+
+          Text {
+            text: String(modelData.label || "")
+            color: root.foreground
+            opacity: 0.85
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            Layout.preferredWidth: Style.space(rows.isWeek ? 30 : 42)
           }
+
+          Item {
+            Layout.fillWidth: true
+            implicitHeight: Style.space(10)
+            Rectangle {
+              anchors.verticalCenter: parent.verticalCenter
+              height: parent.height
+              radius: 2
+              width: rowItem.count > 0
+                ? Math.max(3, parent.width * (rowItem.count / rows.peak))
+                : 0
+              color: root.accent
+              opacity: 0.9
+            }
+          }
+
+          Text {
+            text: rowItem.count > 0 ? "+" + rowItem.count : ""
+            color: root.accent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            horizontalAlignment: Text.AlignRight
+            Layout.preferredWidth: Style.space(32)
+          }
+
+          Text {
+            text: String(modelData.cumulative)
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignRight
+            Layout.preferredWidth: Style.space(34)
+          }
+
+          Text {
+            visible: rows.isWeek
+            text: "󰅂"
+            color: rowItem.clickable
+              ? root.dim
+              : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.2)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        MouseArea {
+          id: hover
+          anchors.fill: parent
+          hoverEnabled: true
+          enabled: rowItem.clickable
+          cursorShape: Qt.PointingHandCursor
+          onClicked: rows.drillInto(index)
         }
       }
     }
