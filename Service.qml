@@ -67,6 +67,20 @@ Item {
   readonly property var criticalCondition: dash.criticalCondition || []
   readonly property var extraStudy: dash.extraStudy || ({})
 
+  // ---- full app: subject browser + detail pages ----
+  // These are only ever driven by App.qml; the bar widget never touches them.
+  // `browseData` is the last level query; `detailCache` accumulates full
+  // subject resources across lookups so revisiting a page is instant.
+  property var browseData: ({})
+  property var detailCache: ({})
+  readonly property bool browseBusy: browseProcess.running
+  readonly property bool detailBusy: detailProcess.running
+  property string browseError: ""
+  property string detailError: ""
+
+  signal browseReady(int level)
+  signal detailReady(var ids)
+
   signal tokenRejected(string message)
 
   function setting(name, fallback) {
@@ -142,6 +156,61 @@ Item {
     tokenProcess.secret = ""
     tokenProcess.command = ["python3", helperPath, "clear-token"]
     tokenProcess.running = true
+  }
+
+  // Level browser: the slim subjects for one level, from the dashboard's
+  // subjects cache (no API call unless the cache is cold).
+  function loadBrowse(level) {
+    var n = parseInt(String(level), 10)
+    if (!ready || browseProcess.running || !isFinite(n)) return
+    browseError = ""
+    browseProcess.command = ["python3", helperPath, "browse", String(n)]
+    browseProcess.running = true
+  }
+
+  // Detail pages: full resources for one or more subject ids. The helper
+  // fetches /subjects?ids=... fresh and folds in study materials.
+  function loadDetail(ids) {
+    if (!ready || detailProcess.running) return
+    var list = (Array.isArray(ids) ? ids : [ids])
+      .map(function (x) { return parseInt(String(x), 10) })
+      .filter(function (x) { return isFinite(x) })
+    if (list.length === 0) return
+    detailError = ""
+    detailProcess.pending = list
+    detailProcess.command = ["python3", helperPath, "detail"].concat(
+      list.map(function (x) { return String(x) }))
+    detailProcess.running = true
+  }
+
+  function subjectDetail(id) {
+    var key = String(parseInt(String(id), 10))
+    return detailCache[key] || null
+  }
+
+  function applyBrowse(raw) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok === false) {
+      browseError = String(payload.error || "Could not load that level")
+      return
+    }
+    browseData = payload
+    browseReady(Number(payload.level) || 0)
+  }
+
+  function applyDetail(raw, requestedIds) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok === false) {
+      detailError = String(payload.error || "Could not load that subject")
+      return
+    }
+    var subjects = payload.subjects || {}
+    var merged = {}
+    var k
+    for (k in detailCache) merged[k] = detailCache[k]
+    for (k in subjects) merged[String(k)] = subjects[k]
+    detailCache = merged
+    detailReady(requestedIds || [])
   }
 
   // ---------------------------------------------------------------- payloads
@@ -243,6 +312,37 @@ Item {
         return
       }
       root.applyDashboard(dashOut.text)
+    }
+  }
+
+  Process {
+    id: browseProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: browseOut; waitForEnd: true }
+    stderr: StdioCollector { id: browseErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.browseError = root.helperFailure(browseErr.text, exitCode)
+        return
+      }
+      root.applyBrowse(browseOut.text)
+    }
+  }
+
+  Process {
+    id: detailProcess
+    property var pending: []
+    running: false
+    command: []
+    stdout: StdioCollector { id: detailOut; waitForEnd: true }
+    stderr: StdioCollector { id: detailErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.detailError = root.helperFailure(detailErr.text, exitCode)
+        return
+      }
+      root.applyDetail(detailOut.text, detailProcess.pending)
     }
   }
 
