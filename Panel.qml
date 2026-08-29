@@ -127,9 +127,12 @@ Panel {
 
   component Mark: Item {
     id: markRoot
+    // `size` is the mark's height; the alligator head is taller than it is wide,
+    // so the box it occupies is narrower and the bar keeps its neighbours close.
     property real size: Math.round(Style.bar.iconFont * 1.3)
+    readonly property real aspect: 0.78
     property color tint: root.foreground
-    implicitWidth: size
+    implicitWidth: Math.round(size * aspect)
     implicitHeight: size
 
     Image {
@@ -161,7 +164,7 @@ Panel {
     // is the child below, and labelVisible is off.
     text: "wanikani"
     labelVisible: false
-    fixedWidth: Math.round(Style.bar.iconFont * 1.3) + Style.space(17)
+    fixedWidth: Math.round(Style.bar.iconFont * 1.3 * 0.78) + Style.space(10)
     tooltipText: Model.barTooltip(wk.view, clock.date)
     onPressed: function(pressedButton) {
       if (pressedButton === Qt.MiddleButton) wk.refresh()

@@ -1,9 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 13 60 79">
   <!--
     The alligator head from WaniKani's wordmark, pared down to the silhouette and
     eyes so it still reads at bar size. Eyes are knock-outs via fill-rule, so the
-    bar can recolour the whole mark. WaniKani and the Crabigator are trademarks
-    of Tofugu LLC; used here only to identify the service this plugin talks to.
+    bar can recolour the whole mark. The viewBox hugs the head so it doesn't
+    carry its own padding into the bar. WaniKani and the Crabigator are
+    trademarks of Tofugu LLC; used here only to identify the service.
   -->
   <path fill="#ffffff" fill-rule="evenodd" d="
     M24,74 L24,36 C24,24 31,17 40,17 C46,17 49,22 50,24 C51,22 54,17 60,17 C69,17 76,24 76,36 L76,74 C76,83 66,88 50,88 C34,88 24,83 24,74 Z
