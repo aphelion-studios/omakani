@@ -7,9 +7,11 @@
   "license": "MIT",
   "description": "A WaniKani cockpit for the bar: reviews and lessons due at a glance, a 24-hour forecast, the next-review countdown, and where you stand in the current level. Full lesson and review sessions come in a later release.",
   "kinds": [
+    "service",
     "bar-widget"
   ],
   "entryPoints": {
+    "service": "Service.qml",
     "barWidget": "Panel.qml"
   },
   "barWidget": {
@@ -47,6 +49,34 @@
         "label": "Hide the mark when nothing is due",
         "defaultValue": false,
         "description": "The mark still appears while no API token is stored, so you can always reach the panel to connect one."
+      },
+      {
+        "key": "notifyReviewsThreshold",
+        "type": "integer",
+        "label": "Notify at N reviews",
+        "min": 0,
+        "max": 500,
+        "step": 5,
+        "defaultValue": 25,
+        "description": "Send a notification when your review count climbs past this. 0 turns it off. Notifications follow Do Not Disturb."
+      },
+      {
+        "key": "notifyLessons",
+        "type": "boolean",
+        "label": "Notify when new lessons unlock",
+        "defaultValue": true
+      },
+      {
+        "key": "notifyLevelUp",
+        "type": "boolean",
+        "label": "Notify on level-up",
+        "defaultValue": true
+      },
+      {
+        "key": "notifyBurns",
+        "type": "boolean",
+        "label": "Notify when items burn",
+        "defaultValue": true
       }
     ]
   }

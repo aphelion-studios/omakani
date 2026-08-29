@@ -19,11 +19,6 @@ Panel {
   ipcTarget: "io.github.aphelion-studios.omawanikani"
   manageIpc: false
 
-  // The helper lives next to this file. Resolving it off the component URL
-  // works for a bar widget, which the host hands `bar` / `settings` but no
-  // manifest to read `__sourceDir` from.
-  readonly property string helperPath: String(Qt.resolvedUrl("wanikani.py")).replace(/^file:\/\//, "")
-
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -264,13 +259,62 @@ Panel {
   // Which day the Upcoming Reviews section is drilled into; -1 is the day list.
   property int upcomingDrill: -1
 
-  Service {
-    id: wk
-    settings: root.settings
-    helperPath: root.helperPath
-    onTokenRejected: function(message) {
+  // The shared service instance. Null for a beat at startup before the shell
+  // mounts it, so every read below is guarded.
+  readonly property var svc: (bar && bar.shell && bar.shell.serviceFor)
+    ? bar.shell.serviceFor("io.github.aphelion-studios.omawanikani")
+    : null
+
+  // Push this bar-widget entry's settings into the shared service.
+  Binding {
+    target: root.svc
+    property: "settings"
+    value: root.settings
+    when: root.svc !== null
+  }
+
+  Connections {
+    target: root.svc
+    function onTokenRejected(message) {
       Qt.callLater(function() { tokenField.forceActiveFocus() })
     }
+  }
+
+  // Null-safe view of the service so the bindings below stay terse.
+  QtObject {
+    id: wk
+    readonly property var view: root.svc ? root.svc.view : ({ ok: true, configured: false })
+    readonly property var dash: root.svc ? root.svc.dash : ({})
+    readonly property bool configured: root.svc ? root.svc.configured : false
+    readonly property string lastError: root.svc ? root.svc.lastError : ""
+    readonly property string note: root.svc ? root.svc.note : ""
+    readonly property bool ready: root.svc ? root.svc.ready : false
+    readonly property bool refreshing: root.svc ? root.svc.refreshing : false
+    readonly property bool actionBusy: root.svc ? root.svc.actionBusy : false
+    readonly property int reviewsNow: root.svc ? root.svc.reviewsNow : 0
+    readonly property int lessonsNow: root.svc ? root.svc.lessonsNow : 0
+    readonly property string nextReviewsAt: root.svc ? root.svc.nextReviewsAt : ""
+    readonly property int level: root.svc ? root.svc.level : 0
+    readonly property string username: root.svc ? root.svc.username : ""
+    readonly property bool vacation: root.svc ? root.svc.vacation : false
+    readonly property bool dashboardLoaded: root.svc ? root.svc.dashboardLoaded : false
+    readonly property bool dashboardBusy: root.svc ? root.svc.dashboardBusy : false
+    readonly property bool coldStart: root.svc ? root.svc.coldStart : false
+    readonly property var itemSpread: root.svc ? root.svc.itemSpread : ({})
+    readonly property var levelProgress: root.svc ? root.svc.levelProgress : ({})
+    readonly property string projectedLevelUp: root.svc ? root.svc.projectedLevelUp : ""
+    readonly property var upcoming: root.svc ? root.svc.upcoming : []
+    readonly property int upcomingTotal: root.svc ? root.svc.upcomingTotal : 0
+    readonly property var recentlyUnlocked: root.svc ? root.svc.recentlyUnlocked : []
+    readonly property var recentlyBurned: root.svc ? root.svc.recentlyBurned : []
+    readonly property var criticalCondition: root.svc ? root.svc.criticalCondition : []
+    readonly property var extraStudy: root.svc ? root.svc.extraStudy : ({})
+
+    function refresh() { if (root.svc) root.svc.refresh() }
+    function refreshAll() { if (root.svc) root.svc.refreshAll() }
+    function refreshDashboard() { if (root.svc) root.svc.refreshDashboard() }
+    function saveToken(token) { if (root.svc) root.svc.saveToken(token) }
+    function clearToken() { if (root.svc) root.svc.clearToken() }
   }
 
   // Seconds only matter while the popup is open and counting down to the next

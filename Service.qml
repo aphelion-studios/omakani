@@ -2,18 +2,30 @@ import QtQuick
 import Quickshell.Io
 import "Model.js" as Model
 
-// Owns every piece of WaniKani state the widget and dashboard read, and is the
-// only thing here that talks to wanikani.py. Two processes: one for the periodic
-// refresh, one for user actions (connect / forget), so a slow refresh never
-// blocks the token form.
+// The `service` kind: one instance for the whole shell. Owns every piece of
+// WaniKani state, does the background polling (summary on the short interval,
+// dashboard on a longer one), and fires desktop notifications. The bar widget
+// reads it via `shell.serviceFor(...)` and pushes its settings in.
 //
-// Instantiated inline by Panel.qml for now; it becomes a real `service` kind
-// once the plugin grows a background poller and notifications.
+// Two worker processes: one for the periodic refresh, one for user actions
+// (connect / forget), so a slow refresh never blocks the token form.
 Item {
   id: root
 
+  // Injected by the shell for a service-kind plugin.
+  property var shell: null
+  property var manifest: null
+  property string omarchyPath: ""
+
+  // Pushed in by the bar widget (all bar-widget instances share one shell.json
+  // entry, so whichever writes last writes the same thing).
   property var settings: ({})
-  property string helperPath: ""
+
+  readonly property string sourceDir: manifest && manifest.__sourceDir
+    ? String(manifest.__sourceDir).replace(/\/$/, "") : ""
+  readonly property string helperPath: sourceDir !== ""
+    ? sourceDir + "/wanikani.py"
+    : String(Qt.resolvedUrl("wanikani.py")).replace(/^file:\/\//, "")
 
   // `view` is the cheap /summary snapshot (counts, countdown); `dash` is the
   // heavier /dashboard payload (caches synced, everything derived).
