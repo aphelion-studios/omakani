@@ -811,6 +811,95 @@ def cmd_clear_token(args):
     return unconfigured("API token removed")
 
 
+def cmd_browse(args):
+    """Every subject on one level, from the slim cache -- id, characters,
+    primary meaning, ordered radicals -> kanji -> vocabulary. For the level
+    browser; the full detail arrives lazily via `detail`."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    api = Api(token)
+    subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
+
+    level = int(args.level or 0)
+    order = {"radical": 0, "kanji": 1, "vocabulary": 2, "kana_vocabulary": 2}
+    rows = []
+    for subject in subjects.values():
+        data = data_of(subject)
+        if data.get("level") != level or data.get("hidden_at"):
+            continue
+        meanings = data.get("meanings") or []
+        primary = next((m.get("meaning") for m in meanings if m.get("primary")),
+                       meanings[0].get("meaning") if meanings else "")
+        rows.append({
+            "id": subject.get("id"),
+            "object": subject.get("object"),
+            "characters": data.get("characters") or "",
+            "meaning": primary or "",
+            "slug": data.get("slug") or "",
+        })
+    rows.sort(key=lambda row: (order.get(row["object"], 3), row["slug"]))
+    return {"ok": True, "configured": True, "error": "", "level": level,
+            "subjects": rows, "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
+def cmd_detail(args):
+    """Full subject records for the given ids -- mnemonics, readings, audio,
+    context sentences, the component graph -- plus the user's own notes and
+    synonyms. Cached to cache/detail.json; the requested set is always
+    re-fetched (subjects rarely change and a lesson batch is one request)."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    ids = [str(int(x)) for x in args.ids
+           if str(x).strip().lstrip("-").isdigit()]
+    if not ids:
+        payload = base_summary()
+        payload["ok"] = False
+        payload["error"] = "no subject ids given"
+        return payload
+
+    api = Api(token)
+    cache = load_cache("detail")
+    if cache.get("v") != CACHE_VERSION:
+        cache = {}
+    items = dict(cache.get("items") or {})
+
+    fresh, _ = api.collection("/subjects?ids=" + ",".join(ids))
+    for resource in fresh:
+        rid = resource.get("id")
+        if rid is not None:
+            items[str(rid)] = resource
+    save_cache("detail", {"v": CACHE_VERSION, "items": items})
+
+    notes = {}
+    try:
+        materials, _ = api.collection("/study_materials?subject_ids=" + ",".join(ids))
+        for material in materials:
+            data = data_of(material)
+            notes[str(data.get("subject_id"))] = {
+                "meaning_note": data.get("meaning_note"),
+                "reading_note": data.get("reading_note"),
+                "meaning_synonyms": data.get("meaning_synonyms") or [],
+            }
+    except ApiError:
+        pass
+
+    out = {}
+    for sid in ids:
+        subject = items.get(sid)
+        if not subject:
+            continue
+        entry = dict(subject)
+        entry["study_material"] = notes.get(sid) or {}
+        out[sid] = entry
+
+    return {"ok": True, "configured": True, "error": "", "subjects": out,
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="WaniKani bridge for the Omarchy shell")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -828,6 +917,14 @@ def build_parser():
 
     set_token = commands.add_parser("set-token", help="read an API token from stdin and store it")
     set_token.set_defaults(handler=cmd_set_token)
+
+    browse = commands.add_parser("browse", help="every subject on a level (slim)")
+    browse.add_argument("level", type=int)
+    browse.set_defaults(handler=cmd_browse)
+
+    detail = commands.add_parser("detail", help="full records for the given subject ids")
+    detail.add_argument("ids", nargs="+")
+    detail.set_defaults(handler=cmd_detail)
 
     clear_token = commands.add_parser("clear-token", help="forget the stored API token")
     clear_token.set_defaults(handler=cmd_clear_token)
