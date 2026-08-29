@@ -142,11 +142,77 @@ def save_cache(name, payload):
 
 def wipe_cache():
     directory = cache_dir()
-    for name in ("subjects", "assignments", "review_stats", "level_progressions"):
+    for name in ("subjects", "assignments", "review_stats", "level_progressions", "notify"):
         try:
             (directory / (name + ".json")).unlink()
         except OSError:
             pass
+
+
+# ------------------------------------------------------------ notifications
+
+def load_notify_state():
+    try:
+        with open(cache_dir() / "notify.json", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_notify_state(state):
+    directory = cache_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "notify.json"
+    temporary = path.with_name("notify.json.tmp")
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(state, handle)
+    os.replace(temporary, path)
+
+
+def detect_notifications(payload, args, scope):
+    """Compare the fresh figures against the last-seen snapshot and return the
+    events that just crossed. Silent until the first snapshot exists; silent
+    while on vacation (but the snapshot still tracks, so returning is quiet)."""
+    state = load_notify_state()
+    seeded = state.get("seeded") is True
+    quiet = (not seeded) or payload.get("vacation") is True
+    events = []
+
+    if scope == "summary":
+        reviews = int(payload.get("reviewsNow") or 0)
+        lessons = int(payload.get("lessonsNow") or 0)
+        level = int(payload.get("level") or 0)
+        if not quiet:
+            threshold = int(getattr(args, "notify_reviews", 0) or 0)
+            if threshold > 0 and int(state.get("reviewsNow") or 0) < threshold <= reviews:
+                events.append({"id": "reviews", "title": "WaniKani",
+                               "body": "%d reviews waiting" % reviews})
+            if getattr(args, "notify_lessons", False) \
+                    and int(state.get("lessonsNow") or 0) == 0 and lessons > 0:
+                events.append({"id": "lessons", "title": "WaniKani",
+                               "body": "%d new %s to learn"
+                               % (lessons, "lesson" if lessons == 1 else "lessons")})
+            if getattr(args, "notify_levelup", False) \
+                    and level > int(state.get("level") or 0) > 0:
+                events.append({"id": "levelup", "title": "WaniKani",
+                               "body": "You reached level %d" % level})
+        state["reviewsNow"] = reviews
+        state["lessonsNow"] = lessons
+        state["level"] = level
+
+    elif scope == "dashboard":
+        burned = int((payload.get("extraStudy") or {}).get("burnedItems") or 0)
+        if not quiet and getattr(args, "notify_burns", False):
+            gained = burned - int(state.get("burnedItems") or 0)
+            if gained > 0:
+                events.append({"id": "burns", "title": "WaniKani",
+                               "body": "%d %s burned" % (gained, "item" if gained == 1 else "items")})
+        state["burnedItems"] = burned
+
+    state["seeded"] = True
+    save_notify_state(state)
+    return events
 
 
 # -------------------------------------------------------------------- http
@@ -704,7 +770,9 @@ def cmd_summary(args):
     token = api_token(config)
     if not token:
         return unconfigured()
-    return summarize(config, Api(token))
+    payload = summarize(config, Api(token))
+    payload["notifications"] = detect_notifications(payload, args, "summary")
+    return payload
 
 
 def cmd_dashboard(args):
@@ -712,7 +780,9 @@ def cmd_dashboard(args):
     token = api_token(config)
     if not token:
         return unconfigured()
-    return build_dashboard(config, Api(token))
+    payload = build_dashboard(config, Api(token))
+    payload["notifications"] = detect_notifications(payload, args, "dashboard")
+    return payload
 
 
 def cmd_set_token(args):
@@ -748,9 +818,14 @@ def build_parser():
     commands = parser.add_subparsers(dest="command", required=True)
 
     summary = commands.add_parser("summary", help="review / lesson counts, next-review countdown")
+    summary.add_argument("--notify-reviews", type=int, default=0,
+                         help="notify when reviews climb past N (0 = off)")
+    summary.add_argument("--notify-lessons", action="store_true")
+    summary.add_argument("--notify-levelup", action="store_true")
     summary.set_defaults(handler=cmd_summary)
 
     dashboard = commands.add_parser("dashboard", help="sync caches and derive the full dashboard")
+    dashboard.add_argument("--notify-burns", action="store_true")
     dashboard.set_defaults(handler=cmd_dashboard)
 
     set_token = commands.add_parser("set-token", help="read an API token from stdin and store it")
