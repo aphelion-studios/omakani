@@ -46,31 +46,56 @@ function normReading(text) {
 
 // -------------------------------------------------------------- levenshtein
 
+// Optimal string alignment (restricted Damerau-Levenshtein): like plain edit
+// distance but an adjacent transposition ("yaer" -> "year") costs 1, not 2 --
+// which is how WaniKani treats that common typo.
 function levenshtein(a, b) {
   a = String(a); b = String(b);
   if (a === b) return 0;
   if (!a.length) return b.length;
   if (!b.length) return a.length;
-  var prev = [];
-  for (var j = 0; j <= b.length; j++) prev[j] = j;
-  for (var i = 1; i <= a.length; i++) {
-    var cur = [i];
-    for (var k = 1; k <= b.length; k++) {
-      var cost = a.charAt(i - 1) === b.charAt(k - 1) ? 0 : 1;
-      cur[k] = Math.min(prev[k] + 1, cur[k - 1] + 1, prev[k - 1] + cost);
+  var d = [];
+  for (var i = 0; i <= a.length; i++) { d[i] = [i]; }
+  for (var j = 0; j <= b.length; j++) { d[0][j] = j; }
+  for (i = 1; i <= a.length; i++) {
+    for (j = 1; j <= b.length; j++) {
+      var cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1
+          && a.charAt(i - 1) === b.charAt(j - 2)
+          && a.charAt(i - 2) === b.charAt(j - 1)) {
+        d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      }
     }
-    prev = cur;
   }
-  return prev[b.length];
+  return d[a.length][b.length];
 }
 
-// WaniKani's fuzzy tolerance: exact under 4 chars, then loosens with length.
-function closeEnough(correct, given) {
+// WaniKani's fuzzy tolerance for a single word: exact under 4 chars, then
+// one typo through 7, then ~one per 7 chars. Deliberately strict -- a false
+// "correct" moves real SRS state.
+function wordClose(correct, given) {
   if (correct === given) return true;
   if (correct.length <= 3) return false;
-  var allowed = correct.length <= 5 ? 1 : Math.floor(correct.length / 7) + 1;
+  var allowed = correct.length <= 7 ? 1 : Math.floor(correct.length / 7);
   if (Math.abs(correct.length - given.length) > allowed) return false;
   return levenshtein(correct, given) <= allowed;
+}
+
+// A multi-word answer has to match word-for-word, each word within its own
+// tolerance -- so "year eno" does NOT pass for "year end" (the 3-letter
+// "end" needs to be exact). Single-word targets fall back to a whole-string
+// compare.
+function closeEnough(correct, given) {
+  if (correct === given) return true;
+  var cw = correct.split(" ");
+  var gw = given.split(" ");
+  if (cw.length === 1) return wordClose(correct, given);
+  if (cw.length !== gw.length) return false;
+  for (var i = 0; i < cw.length; i++) {
+    if (!wordClose(cw[i], gw[i])) return false;
+  }
+  return true;
 }
 
 // -------------------------------------------------------------- collectors

@@ -52,6 +52,16 @@ const vocabDog = {
   },
 };
 
+const vocabYearEnd = {
+  object: "vocabulary",
+  data: {
+    meanings: [{ meaning: "Year End", primary: true, accepted_answer: true }],
+    auxiliary_meanings: [],
+    readings: [{ reading: "ねんまつ", primary: true, accepted_answer: true }],
+    parts_of_speech: ["noun"],
+  },
+};
+
 const vocabInternational = {
   object: "vocabulary",
   data: {
@@ -87,6 +97,13 @@ t("eating typo (len6)", Answer.check(vocabToEat, null, "meaning", "eatng"), "cor
 // "dog" is 3 chars -> no fuzz at all; strict is the safe failure for SRS
 t("dog vs dogs (short, strict)", Answer.check(vocabDog, null, "meaning", "dogs"), "incorrect");
 t("dog vs dig", Answer.check(vocabDog, null, "meaning", "dig"), "incorrect");
+
+// multi-word: each word within its own tolerance -- a butchered short word
+// fails even though the whole-string edit distance is only 1
+t("year end exact", Answer.check(vocabYearEnd, null, "meaning", "year end"), "correct");
+t("year eno (3-letter word off)", Answer.check(vocabYearEnd, null, "meaning", "year eno"), "incorrect");
+t("yaer end (typo in long word)", Answer.check(vocabYearEnd, null, "meaning", "yaer end"), "correct");
+t("year ed (missing letter, short word)", Answer.check(vocabYearEnd, null, "meaning", "year ed"), "incorrect");
 
 // meaning: blacklist "close" -> retry, not correct
 t("dog / cat blacklist", Answer.check(vocabDog, null, "meaning", "cat"), "retry");
