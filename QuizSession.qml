@@ -51,6 +51,7 @@ FocusScope {
     correctAnswers = 0
     missedIds = ({})
     built = false
+    _finished = false
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
       .filter(function (x) { return isFinite(x) })
     if (ids.length === 0) { phase = "empty"; return }
@@ -108,10 +109,21 @@ FocusScope {
     }
   }
 
+  // set by a wrapper (LessonFlow) that wants to show its own end screen
+  property bool suppressSummary: false
+  property bool _finished: false
+  signal completed(int total, int correct, int answers, var missed)
+
   function onAdvance() {
+    if (_finished) return
     if (pos + 1 >= queue.length) {
-      phase = "summary"
-      Qt.callLater(session.forceActiveFocus)
+      _finished = true
+      session.completed(totalQuestions, correctAnswers, totalAnswers,
+                        Object.keys(missedIds))
+      if (!suppressSummary) {
+        phase = "summary"
+        Qt.callLater(session.forceActiveFocus)
+      }
     } else {
       pos += 1
     }
