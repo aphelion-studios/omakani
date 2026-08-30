@@ -401,26 +401,49 @@ FocusScope {
     }
   }
 
-  // session counts, top-right: accuracy · done · remaining (like the website)
-  Text {
+  // session counts, top-right -- icon + value, like the website: accuracy,
+  // items completed, items remaining
+  Row {
+    id: countRow
     anchors.top: parent.top
     anchors.right: parent.right
     anchors.topMargin: Style.space(12)
     anchors.rightMargin: Style.space(16)
     visible: engine.phase === "review" && !card.infoOpen
+    spacing: Style.space(12)
     z: 6
-    text: {
-      var acc = engine.answerCount > 0
-        ? Math.round(100 * engine.correctCount / engine.answerCount) : 100
-      var left = Math.max(0, engine.totalSubjects - engine.submittedCount)
-      return acc + "%   ·   " + engine.submittedCount + " done   ·   " + left + " left"
+
+    readonly property int pctAcc: engine.answerCount > 0
+      ? Math.round(100 * engine.correctCount / engine.answerCount) : 100
+    readonly property int remain: Math.max(0, engine.totalSubjects - engine.submittedCount)
+
+    Repeater {
+      model: [
+        { g: "󰔓", v: countRow.pctAcc + "%" },
+        { g: "󰄬", v: String(engine.submittedCount) },
+        { g: "󰂺", v: String(countRow.remain) }
+      ]
+      delegate: Row {
+        spacing: Style.space(4)
+        Text {
+          text: modelData.g
+          color: Qt.rgba(1, 1, 1, 0.92)
+          style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.35)
+          font.family: engine.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          anchors.verticalCenter: parent.verticalCenter
+        }
+        Text {
+          text: modelData.v
+          color: "#ffffff"
+          style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.35)
+          font.family: engine.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+          anchors.verticalCenter: parent.verticalCenter
+        }
+      }
     }
-    color: "#ffffff"
-    style: Text.Outline
-    styleColor: Qt.rgba(0, 0, 0, 0.35)
-    font.family: engine.fontFamily
-    font.pixelSize: Style.font.bodySmall
-    font.bold: true
   }
 
   // ---- summary / error ----
