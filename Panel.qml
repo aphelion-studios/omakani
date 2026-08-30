@@ -472,8 +472,10 @@ Panel {
 
   component Mark: Item {
     id: markRoot
+    // `size` is the mark's height; the Crabigator (horn bumps up top, tail
+    // below) is a touch taller than it is wide.
     property real size: root.barMarkHeight
-    readonly property real aspect: 1.0
+    readonly property real aspect: 0.9
     property color tint: root.foreground
     implicitWidth: Math.round(size * aspect)
     implicitHeight: size
@@ -500,38 +502,40 @@ Panel {
   // The "WANI KANI" lockup for the top of the dashboard: pink wordmark with
   // WaniKani's blue Crabigator badge in the middle. Fixed brand colours on a
   // transparent ground, so it looks right on any theme.
+  // `h` is the letter size; the badge runs bigger than the caps, the way it
+  // does in WaniKani's own lockup.
   component Wordmark: Row {
     id: wm
-    property real h: Style.space(30)
-    spacing: Math.round(h * 0.16)
+    property real h: Style.space(21)
+    readonly property real badge: Math.round(h * 1.5)
+    spacing: Math.round(h * 0.28)
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
       text: "WANI"
       color: root.brandPink
       font.family: root.fontFamily
-      font.pixelSize: Math.round(wm.h * 0.64)
+      font.pixelSize: wm.h
       font.bold: true
     }
 
-    // A white disc fills the badge's ring so WaniKani's own (fairly dark) blue
-    // stays legible on dark themes -- the same white-circle lockup as their
-    // wordmark. The disc is the only non-transparent pixel.
+    // The badge on a white disc -- WaniKani's blue is dark, and their own
+    // lockup sets the Crabigator in a white circle, so this reads on any theme.
     Item {
-      width: wm.h
-      height: wm.h
+      width: wm.badge
+      height: wm.badge
       anchors.verticalCenter: parent.verticalCenter
 
       Rectangle {
         anchors.centerIn: parent
-        width: Math.round(wm.h * 0.8)
+        width: Math.round(wm.badge * 0.92)
         height: width
         radius: width / 2
         color: "#ffffff"
       }
       Mark {
         anchors.centerIn: parent
-        size: wm.h
+        size: wm.badge
         tint: root.brandBlue
       }
     }
@@ -541,7 +545,7 @@ Panel {
       text: "KANI"
       color: root.brandPink
       font.family: root.fontFamily
-      font.pixelSize: Math.round(wm.h * 0.64)
+      font.pixelSize: wm.h
       font.bold: true
     }
   }
@@ -623,7 +627,7 @@ Panel {
 
             Wordmark {
               anchors.horizontalCenter: parent.horizontalCenter
-              h: Style.space(30)
+              h: Style.space(22)
             }
 
             Text {
