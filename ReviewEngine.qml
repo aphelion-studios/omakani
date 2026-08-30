@@ -413,7 +413,7 @@ FocusScope {
       id: dryBadge
       anchors.centerIn: parent
       text: "DRY RUN"
-      color: "#ffffff"
+      color: "#fcfdfd"
       font.family: engine.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: true
@@ -453,7 +453,7 @@ FocusScope {
         }
         Text {
           text: modelData.v
-          color: "#ffffff"
+          color: "#fcfdfd"
           font.family: engine.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true

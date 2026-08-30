@@ -221,7 +221,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: parent.width * Math.max(0, Math.min(1, quiz.progress))
-        color: "#ffffff"
+        color: "#fcfdfd"
         Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
       }
     }
@@ -232,23 +232,24 @@ FocusScope {
       anchors.top: progressBar.bottom
       anchors.left: parent.left
       anchors.right: parent.right
-      height: Math.round(parent.height * 0.34)
+      // WaniKani's review header is fairly shallow -- match it
+      height: Math.round(parent.height * 0.26)
       color: quiz.typeColor
 
       // just the character -- no "Kanji · Level 7" line: the level leaks which
       // of two look-alike subjects (矢 lv3 vs 失 lv7) you're being asked.
-      // Sits a little above centre to leave room for the SRS chip below.
+      // Nudged up a touch so the SRS chip has room in the gap below.
       Text {
         id: charText
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: -Style.space(8)
+        anchors.verticalCenterOffset: -Style.space(6)
         text: quiz.d.characters || ""
-        color: "white"
+        color: "#fcfdfd"
         // WaniKani sets its subject characters at a regular weight (Noto
         // Sans JP); match that rather than bolding.
         font.family: quiz.jpFamily
-        font.pixelSize: Math.min(header.height * 0.52, Style.font.displayLarge * 3)
+        font.pixelSize: Math.min(header.height * 0.62, Style.font.displayLarge * 3)
         font.weight: Font.Normal
       }
     }
@@ -275,14 +276,14 @@ FocusScope {
         spacing: Style.space(5)
         Text {
           text: (quiz.srsPill && quiz.srsPill.up) ? "↑" : "↓"
-          color: "#ffffff"
+          color: "#fcfdfd"
           font.family: quiz.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true
         }
         Text {
           text: quiz.srsPill ? quiz.srsPill.text : ""
-          color: "#ffffff"
+          color: "#fcfdfd"
           font.family: quiz.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true
@@ -307,14 +308,14 @@ FocusScope {
         spacing: Style.space(6)
         Text {
           text: quiz.typeWord
-          color: quiz.readingPrompt ? "#ffffff" : "#1a1a1a"
+          color: quiz.readingPrompt ? "#fcfdfd" : "#1a1a1a"
           font.family: quiz.fontFamily
           font.pixelSize: Style.font.subtitle
           font.weight: Font.Normal
         }
         Text {
           text: quiz.promptWord
-          color: quiz.readingPrompt ? "#ffffff" : "#1a1a1a"
+          color: quiz.readingPrompt ? "#fcfdfd" : "#1a1a1a"
           font.family: quiz.fontFamily
           font.pixelSize: Style.font.subtitle
           font.bold: true
@@ -339,7 +340,7 @@ FocusScope {
         radius: Style.space(6)
         color: quiz.phase === "correct" ? quiz.okColor
           : quiz.phase === "wrong" ? quiz.noColor
-          : "#ffffff"
+          : "#fcfdfd"
         Behavior on color { ColorAnimation { duration: 140 } }
 
         TextField {
@@ -351,7 +352,7 @@ FocusScope {
           anchors.rightMargin: Style.space(46)
           focus: quiz.phase === "input"
           background: Rectangle { color: "transparent" }
-          color: quiz.phase === "input" ? "#141414" : "#ffffff"
+          color: quiz.phase === "input" ? "#141414" : "#fcfdfd"
           font.family: quiz.readingPrompt ? quiz.jpFamily : quiz.fontFamily
           font.pixelSize: Style.font.title
           horizontalAlignment: TextInput.AlignHCenter
@@ -389,7 +390,7 @@ FocusScope {
           Text {
             anchors.centerIn: parent
             text: "›"
-            color: quiz.phase === "input" ? "#141414" : "#ffffff"
+            color: quiz.phase === "input" ? "#141414" : "#fcfdfd"
             font.family: quiz.fontFamily
             font.pixelSize: Style.font.heading
             font.bold: true
@@ -452,9 +453,9 @@ FocusScope {
         model: [
           { g: "󰅐", act: "wrap",  show: true,        on: true },
           { g: "󰈈", act: "info",  show: true,        on: quiz.phase !== "input" },
+          // the glyph alone (quiet vs loud speaker) signals playback
           { g: (quiz.service && quiz.service.audioPlaying) ? "󰕾" : "󰕿",
-            act: "audio", show: quiz.isVocab, on: quiz.canAudio,
-            live: !!(quiz.service && quiz.service.audioPlaying) }
+            act: "audio", show: quiz.isVocab, on: quiz.canAudio }
         ]
         delegate: Rectangle {
           visible: modelData.show
@@ -470,8 +471,7 @@ FocusScope {
           Text {
             anchors.centerIn: parent
             text: modelData.g
-            color: modelData.live ? quiz.okColor
-              : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, on ? 0.9 : 0.3)
+            color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, on ? 0.9 : 0.3)
             font.family: quiz.fontFamily
             font.pixelSize: Style.font.body
           }
@@ -528,21 +528,12 @@ FocusScope {
         radicalColor: quiz.radicalColor
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
+        navHint: quiz._infoStack.length > 0
+          ? "j / k  section   ·   h / l  chip   ·   Enter  open   ·   Esc  back"
+          : "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  close"
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
         onNavigate: function (id) { quiz._infoDrill(id) }
         onCloseRequested: quiz._infoBack()
-      }
-
-      Text {
-        anchors.top: parent.top
-        anchors.right: parent.right
-        anchors.margins: Style.space(12)
-        text: quiz._infoStack.length > 0
-          ? "j / k  section   ·   h / l  chip   ·   Enter  open   ·   Esc  back"
-          : "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  close"
-        color: "#ffffff"
-        font.family: quiz.fontFamily
-        font.pixelSize: Style.font.caption
       }
     }
   }

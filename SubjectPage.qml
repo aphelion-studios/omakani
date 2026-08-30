@@ -27,6 +27,9 @@ Item {
 
   // when true (used as the quiz's item-info overlay), f / Esc ask to close
   property bool overlayMode: false
+  // keyboard section/chip navigation (j/k ring, h/l chips, Enter fold/open,
+  // Esc back) -- on in the overlay and in the standalone browser page
+  property bool keyNav: overlayMode
   // hearing the word is a peek if you haven't cleared its reading yet
   property bool audioAllowed: true
   // apply the review's default folds (context folded); off when drilled into
@@ -46,6 +49,11 @@ Item {
   // which section the focus ring should land on when the overlay opens --
   // "" | "meaning" | "reading" (set to the tested half on a wrong answer)
   property string focusSection: ""
+
+  // key-hint line shown in the (scrolling) header when keyNav is on
+  property string navHint: keyNav
+    ? "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  back"
+    : ""
 
   signal navigate(int subjectId)
   signal closeRequested()
@@ -124,7 +132,7 @@ Item {
   // text sections (Meaning / Reading / Context) fold in the overlay; a plain
   // page only folds the anti-cheat half during a review. Chip sections don't
   // fold -- h/l navigate their chips instead.
-  function cardCollapsible() { return overlayMode || collapse !== "" }
+  function cardCollapsible() { return keyNav || collapse !== "" }
   function startFolded(key) {
     if (collapse === key) return true          // anti-cheat: tested half
     if (reviewFolds && key === "context") return true
@@ -138,7 +146,7 @@ Item {
   onNavCardsChanged: Qt.callLater(syncFocusToSection)
   onVisibleChanged: if (visible) Qt.callLater(syncFocusToSection)
   function syncFocusToSection() {
-    if (!overlayMode || focusSection === "" || focusSection === _syncedSection) return
+    if (!keyNav || focusSection === "" || focusSection === _syncedSection) return
     var v = visibleNav()
     for (var i = 0; i < v.length; i++) {
       if (String(v[i].navKey) === focusSection) {
@@ -253,10 +261,10 @@ Item {
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)
-      // item-info overlay: j/k move the section ring, Enter toggles a fold
-      // (or opens the highlighted chip on a chip section), h/l step the chip
-      // cursor, Esc / f go back a page or close
-      if (page.overlayMode) {
+      // j/k move the section ring, Enter toggles a fold (or opens the
+      // highlighted chip on a chip section), h/l step the chip cursor,
+      // Esc / f go back a page or close
+      if (page.keyNav) {
         if (e.text === "j") { page.moveFocus(1); e.accepted = true; return }
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
         else if (e.text === "l") { page.moveChip(1); e.accepted = true; return }
@@ -264,7 +272,7 @@ Item {
         else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
           page.activateFocused(); e.accepted = true; return
         }
-        else if (e.text === "f" || e.key === Qt.Key_Escape) {
+        else if ((e.text === "f" && page.overlayMode) || e.key === Qt.Key_Escape) {
           page.closeRequested(); e.accepted = true; return
         }
       } else {
@@ -301,6 +309,19 @@ Item {
         implicitHeight: header.implicitHeight + Style.space(44)
         color: page.typeColor
 
+        // key hint -- lives in the (scrolling) header so it doesn't sit over
+        // the content when you scroll down
+        Text {
+          visible: page.keyNav && page.navHint !== ""
+          anchors.top: parent.top
+          anchors.right: parent.right
+          anchors.margins: Style.space(12)
+          text: page.navHint
+          color: "#fcfdfd"
+          font.family: page.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+
         Column {
           id: header
           anchors.centerIn: parent
@@ -311,7 +332,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             // in the review overlay never fall back to the meaning
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
-            color: "white"
+            color: "#fcfdfd"
             font.family: page.jpFamily
             font.pixelSize: Style.font.displayLarge * 2.4
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
@@ -323,7 +344,7 @@ Item {
             // the header of the review overlay
             visible: !page.overlayMode
             text: page.primaryMeaning()
-            color: "white"
+            color: "#fcfdfd"
             font.family: page.fontFamily
             font.pixelSize: Style.font.display
             font.bold: true
@@ -358,7 +379,7 @@ Item {
           collapsible: page.cardCollapsible()
           defaultCollapsed: page.startFolded("meaning")
           resetToken: page.resetToken
-          navFocused: page.overlayMode && page.focusedKey === navKey
+          navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Name" : "Meaning"
           bg: page.cardBg
@@ -458,7 +479,7 @@ Item {
           collapsible: page.cardCollapsible()
           defaultCollapsed: page.startFolded("reading")
           resetToken: page.resetToken
-          navFocused: page.overlayMode && page.focusedKey === navKey
+          navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: "Reading"
           bg: page.cardBg
@@ -595,7 +616,7 @@ Item {
           collapsible: page.cardCollapsible()
           defaultCollapsed: page.startFolded("context")
           resetToken: page.resetToken
-          navFocused: page.overlayMode && page.focusedKey === navKey
+          navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: "Context"
           bg: page.cardBg
@@ -636,7 +657,7 @@ Item {
           width: parent.width
           visible: (page.sd.component_subject_ids || []).length > 0
           collapsible: false   // chip section: h/l navigate, no fold
-          navFocused: page.overlayMode && page.focusedKey === navKey
+          navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "kanji" ? "Radical Combination" : "Kanji Composition"
           bg: page.cardBg
@@ -656,7 +677,7 @@ Item {
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
-                cursored: page.overlayMode && page.chipIndex === index
+                cursored: page.keyNav && page.chipIndex === index
                   && page.focusedKey === "composition"
                 onActivated: page.navigate(modelData)
               }
@@ -670,7 +691,7 @@ Item {
           width: parent.width
           visible: (page.sd.amalgamation_subject_ids || []).length > 0
           collapsible: false   // chip section: h/l navigate, no fold
-          navFocused: page.overlayMode && page.focusedKey === navKey
+          navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Found In Kanji" : "Found In Vocabulary"
           bg: page.cardBg
@@ -690,7 +711,7 @@ Item {
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
-                cursored: page.overlayMode && page.chipIndex === index
+                cursored: page.keyNav && page.chipIndex === index
                   && page.focusedKey === "foundin"
                 onActivated: page.navigate(modelData)
               }
@@ -704,7 +725,7 @@ Item {
           width: parent.width
           visible: (page.sd.visually_similar_subject_ids || []).length > 0
           collapsible: false   // chip section: h/l navigate, no fold
-          navFocused: page.overlayMode && page.focusedKey === navKey
+          navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: "Visually Similar Kanji"
           bg: page.cardBg
@@ -724,7 +745,7 @@ Item {
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
-                cursored: page.overlayMode && page.chipIndex === index
+                cursored: page.keyNav && page.chipIndex === index
                   && page.focusedKey === "similar"
                 onActivated: page.navigate(modelData)
               }
