@@ -238,6 +238,17 @@ FocusScope {
     spacing: Style.space(16)
     width: Math.min(parent.width - Style.space(80), Style.space(440))
 
+    Image {
+      anchors.horizontalCenter: parent.horizontalCenter
+      source: Qt.resolvedUrl("wordmark.svg")
+      height: Style.space(48)
+      fillMode: Image.PreserveAspectFit
+      sourceSize.width: 1893
+      smooth: true
+      mipmap: true
+      width: Math.min(implicitWidth, parent.width)
+    }
+
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
       text: engine.totalSubjects + " reviews"
@@ -407,6 +418,17 @@ FocusScope {
     visible: engine.phase === "summary" || engine.phase === "error"
     spacing: Style.space(12)
     width: Math.min(parent.width - Style.space(80), Style.space(460))
+
+    Image {
+      anchors.horizontalCenter: parent.horizontalCenter
+      source: Qt.resolvedUrl("wordmark.svg")
+      height: Style.space(44)
+      fillMode: Image.PreserveAspectFit
+      sourceSize.width: 1893
+      smooth: true
+      mipmap: true
+      width: Math.min(implicitWidth, parent.width)
+    }
 
     Text {
       anchors.horizontalCenter: parent.horizontalCenter
