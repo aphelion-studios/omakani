@@ -504,16 +504,16 @@ Panel {
   }
 
   // The "WANI KANI" lockup for the top of the dashboard -- the plugin
-  // author's artwork (wordmark.png), pink text + blue Crabigator on a
-  // transparent ground so it sits on any theme. `h` is the render height.
+  // author's artwork (wordmark.svg), pink text + blue Crabigator on a
+  // transparent ground so it sits on any theme. `h` is the render height;
+  // the SVG is rasterised at 3x for crispness on HiDPI.
   component Wordmark: Image {
     property real h: Style.space(44)
     height: h
     fillMode: Image.PreserveAspectFit
-    source: Qt.resolvedUrl("wordmark.png")
+    source: Qt.resolvedUrl("wordmark.svg")
     sourceSize.height: Math.round(h * 3)
     smooth: true
-    mipmap: true
   }
 
   // ---- bar button ---------------------------------------------------------
