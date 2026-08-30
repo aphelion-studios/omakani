@@ -31,7 +31,11 @@ Item {
   readonly property color fg: Color.foreground
   readonly property color accent: Color.accent
   readonly property string fontFamily: Style.font.family
-  readonly property string jpFamily: "Noto Sans CJK JP"
+  // WaniKani's web app sets subject characters in "Noto Sans JP" (the Google
+  // webfont). Use it when the user has installed it; otherwise fall back to
+  // "Noto Sans CJK JP", the same Source Han Sans design shipped with the OS.
+  readonly property string jpFamily: Qt.fontFamilies().indexOf("Noto Sans JP") >= 0
+    ? "Noto Sans JP" : "Noto Sans CJK JP"
 
   readonly property bool startLessons: !!service && service.configured
     && !service.vacation && service.lessonsNow > 0

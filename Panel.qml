@@ -43,9 +43,12 @@ Panel {
   }
 
   // Japanese characters (item chips) need CJK coverage the bar's monospace
-  // font lacks. Nearly every WaniKani learner already has this installed; a
-  // machine without it falls back to whatever the OS offers.
-  readonly property string jpFamily: "Noto Sans CJK JP"
+  // font lacks. Match WaniKani's web app ("Noto Sans JP") when that Google
+  // webfont is installed; otherwise "Noto Sans CJK JP", the same Source Han
+  // Sans design that ships with the OS. A machine without either falls back
+  // to whatever it offers.
+  readonly property string jpFamily: Qt.fontFamilies().indexOf("Noto Sans JP") >= 0
+    ? "Noto Sans JP" : "Noto Sans CJK JP"
 
   readonly property bool showLessons: setting("showLessons", true) === true
   readonly property bool hideWhenZero: setting("hideWhenZero", false) === true
