@@ -249,6 +249,22 @@ Item {
       reviewEngine.startRun()
       return reviewEngine.phase
     }
+    function rtool(what: string): string {
+      var c = root.view === "review" ? reviewEngine.cardItem : null
+      if (!c) return "not in review"
+      if (what === "check") c.markCorrect()
+      else if (what === "undo") c.retry()
+      else if (what === "drill") {
+        var ip = c.infoPageItem
+        var comp = (ip && ip.subject && ip.subject.data
+          && (ip.subject.data.component_subject_ids || [])[0]) || 0
+        if (ip && comp) ip.navigate(comp)
+        return "drilled to " + comp + "; showing " + (ip && ip.subject ? ip.subject.id : "?")
+      }
+      else if (what === "back") { c.infoPageItem.closeRequested() }
+      return "phase=" + c.phase + " acc=" + reviewEngine.correctCount + "/" + reviewEngine.answerCount
+        + " done=" + reviewEngine.submittedCount
+    }
     function rinfo(): string {
       var c = root.view === "review" ? reviewEngine.cardItem
         : root.view === "lesson" ? lessonFlow.cardItem : null
@@ -656,6 +672,8 @@ Item {
           anchors.fill: parent
           service: root.service
           subjectIds: root.reviewIds
+          // "ask" shows the dry-run start screen; "dry-run" / "live" skip it
+          mode: String(root.setting("reviewMode", "ask"))
           pageBg: root.bg
           fg: root.fg
           fontFamily: root.fontFamily

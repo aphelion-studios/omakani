@@ -26,7 +26,8 @@
       "refreshIntervalSec": 60,
       "showLessons": true,
       "hideWhenZero": false,
-      "lessonBatchSize": 5
+      "lessonBatchSize": 5,
+      "reviewMode": "ask"
     },
     "schema": [
       {
@@ -54,6 +55,14 @@
         "min": 3,
         "max": 20,
         "step": 1
+      },
+      {
+        "key": "reviewMode",
+        "type": "enum",
+        "label": "Review sessions",
+        "options": ["ask", "dry-run", "live"],
+        "defaultValue": "ask",
+        "description": "'ask' shows a start screen where you pick dry-run or live each time. 'dry-run' goes straight in without ever sending anything to WaniKani. 'live' goes straight in and records every review. Set this to 'live' once you've generated an API token with the assignments:start and reviews:create permissions."
       },
       {
         "key": "hideWhenZero",
