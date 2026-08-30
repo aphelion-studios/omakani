@@ -25,7 +25,8 @@
     "defaults": {
       "refreshIntervalSec": 60,
       "showLessons": true,
-      "hideWhenZero": false
+      "hideWhenZero": false,
+      "lessonBatchSize": 5
     },
     "schema": [
       {
@@ -44,6 +45,15 @@
         "label": "Light the mark for lessons too",
         "defaultValue": true,
         "description": "Give the mark the accent colour when lessons are waiting, not only reviews."
+      },
+      {
+        "key": "lessonBatchSize",
+        "type": "integer",
+        "label": "Lessons per batch",
+        "defaultValue": 5,
+        "min": 3,
+        "max": 20,
+        "step": 1
       },
       {
         "key": "hideWhenZero",

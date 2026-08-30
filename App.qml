@@ -59,6 +59,7 @@ Item {
     else if (view === "quiz") quizCard.forceActiveFocus()
     else if (view === "session") quizSession.forceActiveFocus()
     else if (view === "review") reviewEngine.forceActiveFocus()
+    else if (view === "lesson") lessonFlow.forceActiveFocus()
     else focusScope.forceActiveFocus()
   }
 
@@ -120,6 +121,23 @@ Item {
     pushPage({ view: "review" })
     if (service) service.loadReviews()
   }
+
+  // The lesson batch -- POSTs /assignments/{id}/start (dry-run guarded).
+  property var lessonIds: []
+  property int lessonTotal: 0
+  function goLesson() {
+    pushPage({ view: "lesson" })
+    if (service) service.loadLessons(lessonBatchSize())
+  }
+  function lessonBatchSize() {
+    var n = parseInt(String(setting("lessonBatchSize", 5)), 10)
+    return (isFinite(n) && n > 0) ? Math.min(n, 20) : 5
+  }
+  function setting(name, fallback) {
+    var v = root.service ? root.service.setting(name, fallback) : fallback
+    return v === undefined || v === null ? fallback : v
+  }
+
   Connections {
     target: root.service
     enabled: root.service !== null
@@ -127,6 +145,12 @@ Item {
       if (root.view !== "review") return
       root.reviewIds = ids || []
       Qt.callLater(function () { reviewEngine.begin() })
+    }
+    function onLessonsReady(ids, total) {
+      if (root.view !== "lesson") return
+      root.lessonIds = ids || []
+      root.lessonTotal = total || 0
+      Qt.callLater(function () { lessonFlow.begin() })
     }
   }
 
@@ -164,6 +188,8 @@ Item {
       Qt.callLater(function () { root.openSessionMode(String(payload.session)) })
     } else if (payload && payload.review) {
       Qt.callLater(function () { root.goReview() })
+    } else if (payload && payload.lesson) {
+      Qt.callLater(function () { root.goLesson() })
     } else {
       Qt.callLater(applyFocus)
     }
@@ -212,7 +238,8 @@ Item {
     function qanswer(text: string): string {
       var c = root.view === "quiz" ? quizCard
         : root.view === "session" ? quizSession.cardItem
-        : root.view === "review" ? reviewEngine.cardItem : null
+        : root.view === "review" ? reviewEngine.cardItem
+        : root.view === "lesson" ? lessonFlow.cardItem : null
       if (!c) return "not in a quiz"
       c.typeAndSubmit(text)
       var tail = ""
@@ -229,13 +256,25 @@ Item {
       reviewEngine.startRun()
       return reviewEngine.phase
     }
+    function lstep(what: string): string {
+      if (root.view !== "lesson") return "not in lesson"
+      if (what === "begin") lessonFlow.startInfo()
+      else if (what === "next") lessonFlow.infoNext()
+      else if (what === "prev") lessonFlow.infoPrev()
+      return lessonFlow.phase + " info=" + lessonFlow.infoIndex + "/" + lessonFlow.ids.length
+        + " started=" + lessonFlow.startedCount
+    }
     function rcur(): string {
-      if (root.view !== "review" || !reviewEngine.current) return "none"
-      var s = reviewEngine.currentSubject
-      var d = s && s.data ? s.data : ({})
+      var c = root.view === "review" ? reviewEngine.cardItem
+        : root.view === "lesson" ? lessonFlow.cardItem
+        : root.view === "session" ? quizSession.cardItem
+        : root.view === "quiz" ? quizCard : null
+      var s = c ? c.subject : null
+      if (!s) return "none"
+      var d = s.data || ({})
       return JSON.stringify({
-        id: reviewEngine.current.id,
-        type: reviewEngine.current.type,
+        id: s.id,
+        type: c.questionType,
         chars: d.characters || "",
         meanings: (d.meanings || []).map(function (m) { return m.meaning }),
         readings: (d.readings || []).filter(function (r) { return r.accepted_answer !== false })
@@ -252,6 +291,23 @@ Item {
       root.open("")
       root.resetNav()
       root.goReview()
+    }
+    function lesson(): void {
+      root.open("")
+      root.resetNav()
+      root.goLesson()
+    }
+    // testing: run the lesson flow over an explicit id list (0 real lessons)
+    function lessonTest(idsCsv: string): void {
+      root.open("")
+      root.resetNav()
+      var ids = String(idsCsv || "").split(",")
+        .map(function (x) { return parseInt(x.trim(), 10) })
+        .filter(function (x) { return isFinite(x) })
+      root.lessonIds = ids
+      root.lessonTotal = ids.length
+      root.pushPage({ view: "lesson" })
+      Qt.callLater(function () { lessonFlow.begin() })
     }
     function state(): string {
       return JSON.stringify({
@@ -605,6 +661,25 @@ Item {
           anchors.fill: parent
           service: root.service
           subjectIds: root.reviewIds
+          pageBg: root.bg
+          fg: root.fg
+          fontFamily: root.fontFamily
+          jpFamily: root.jpFamily
+          radicalColor: root.radicalColor
+          kanjiColor: root.kanjiColor
+          vocabColor: root.vocabColor
+          onExit: root.popPage()
+          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+        }
+
+        // -------------------------------------------------- LESSON (POSTs)
+        LessonFlow {
+          id: lessonFlow
+          visible: root.view === "lesson"
+          anchors.fill: parent
+          service: root.service
+          subjectIds: root.lessonIds
+          totalWaiting: root.lessonTotal
           pageBg: root.bg
           fg: root.fg
           fontFamily: root.fontFamily

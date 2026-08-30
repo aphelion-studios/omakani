@@ -56,13 +56,12 @@ Panel {
   // The two count cards (Lessons / Reviews), mirroring the website. The
   // Lessons card is dropped when the showLessons setting is off. `active`
   // means that queue has something waiting now (drives the loud button
-  // style). Reviews run in the shell now (via a summon payload); lessons
-  // still open on wanikani.com until the lesson flow lands.
+  // style). Both run in the shell now, via a summon payload.
   readonly property var startActions: {
     var out = []
     if (showLessons)
       out.push({ kind: "lessons", label: "Lessons", text: "Start Lessons",
-                 url: "https://www.wanikani.com/subjects/lesson",
+                 payload: { lesson: true },
                  count: wk.lessonsNow,
                  active: wk.lessonsNow > 0 && !wk.vacation })
     out.push({ kind: "reviews", label: "Reviews", text: "Start Reviews",

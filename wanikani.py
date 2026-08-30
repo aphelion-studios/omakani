@@ -1150,6 +1150,99 @@ def cmd_submit_review(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def cmd_lessons(args):
+    """The subject ids waiting in the lesson queue, capped to --batch (the
+    website's default is 5). The app pulls detail, walks the info cards and
+    the quiz, then starts each subject through `start-lesson`."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    api = Api(token)
+    summary = data_of(api.get("/summary"))
+    now = now_utc()
+    ids = []
+    for bucket in summary.get("lessons") or []:
+        at = parse_stamp(bucket.get("available_at"))
+        if at is None or at <= now:
+            ids.extend(bucket.get("subject_ids") or [])
+    ids = list(dict.fromkeys(ids))
+    total = len(ids)
+    batch = getattr(args, "batch", 0) or 0
+    if batch > 0:
+        ids = ids[:batch]
+    return {"ok": True, "configured": True, "error": "",
+            "subjectIds": ids, "count": len(ids), "total": total,
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
+def assignment_id_for(api, subject_id):
+    """Resolve a subject id to its assignment id -- from the dashboard's
+    assignments cache first, then a fresh lookup."""
+    cache = load_cache("assignments")
+    if cache.get("v") == CACHE_VERSION:
+        for key, resource in (cache.get("items") or {}).items():
+            if data_of(resource).get("subject_id") == subject_id:
+                return resource.get("id")
+    fresh, _ = api.collection("/assignments?subject_ids=" + str(subject_id))
+    for resource in fresh:
+        if data_of(resource).get("subject_id") == subject_id:
+            return resource.get("id")
+    return None
+
+
+def cmd_start_lesson(args):
+    """Mark one lesson done. `POST /assignments/{id}/start` moves the subject
+    from the lesson queue into reviews (SRS stage 1). --dry-run sends nothing."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    try:
+        subject_id = int(args.subject)
+    except (TypeError, ValueError):
+        payload = base_summary()
+        payload["ok"] = False
+        payload["error"] = "start-lesson needs a numeric subject id"
+        return payload
+
+    api = Api(token)
+    assignment_id = assignment_id_for(api, subject_id)
+    if assignment_id is None:
+        payload = base_summary()
+        payload["ok"] = False
+        payload["configured"] = True
+        payload["error"] = "no lesson assignment for subject %d" % subject_id
+        return payload
+
+    if args.dry_run:
+        return {"ok": True, "configured": True, "error": "", "dryRun": True,
+                "wouldSend": {"path": "/assignments/%d/start" % assignment_id,
+                              "subjectId": subject_id},
+                "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+    try:
+        result = api.post("/assignments/%d/start" % assignment_id, {}) or {}
+    except ApiError as error:
+        if error.code in (401, 403):
+            payload = base_summary()
+            payload["ok"] = False
+            payload["configured"] = True
+            payload["error"] = (
+                "This API token can't start lessons -- it's read-only. Make a "
+                "new one at wanikani.com/settings/personal_access_tokens with "
+                "the 'assignments:start' and 'reviews:create' permissions "
+                "checked, then paste it in again.")
+            return payload
+        raise
+    assignment = data_of(result.get("data"))
+    return {"ok": True, "configured": True, "error": "", "dryRun": False,
+            "subjectId": subject_id, "assignmentId": assignment_id,
+            "srsStage": assignment.get("srs_stage"),
+            "availableAt": assignment.get("available_at"),
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="WaniKani bridge for the Omarchy shell")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1191,6 +1284,16 @@ def build_parser():
     submit_review.add_argument("--dry-run", action="store_true",
                                help="show what would be sent, don't POST")
     submit_review.set_defaults(handler=cmd_submit_review)
+
+    lessons = commands.add_parser("lessons", help="subject ids in the lesson queue")
+    lessons.add_argument("--batch", type=int, default=0, help="cap to N (0 = all)")
+    lessons.set_defaults(handler=cmd_lessons)
+
+    start_lesson = commands.add_parser("start-lesson", help="mark one lesson done (POST /assignments/{id}/start)")
+    start_lesson.add_argument("subject", type=int)
+    start_lesson.add_argument("--dry-run", action="store_true",
+                              help="show what would be sent, don't POST")
+    start_lesson.set_defaults(handler=cmd_start_lesson)
 
     clear_token = commands.add_parser("clear-token", help="forget the stored API token")
     clear_token.set_defaults(handler=cmd_clear_token)

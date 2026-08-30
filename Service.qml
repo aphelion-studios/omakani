@@ -93,12 +93,22 @@ Item {
   readonly property bool reviewSubmitBusy: reviewSubmitProcess.running
   property string reviewSubmitError: ""
 
+  // Lesson flow -- same serialised-submit shape as reviews.
+  readonly property bool lessonQueueBusy: lessonQueueProcess.running
+  property string lessonQueueError: ""
+  property var lessonStartQueue: []
+  readonly property bool lessonStartBusy: lessonStartProcess.running
+  property string lessonStartError: ""
+
   signal browseReady(int level)
   signal detailReady(var ids)
   signal audioPlayed(string voiceActor)
   signal reviewsReady(var ids)
   signal reviewSubmitted(var result)
   signal reviewSubmitFailed(int subjectId, string message)
+  signal lessonsReady(var ids, int total)
+  signal lessonStarted(var result)
+  signal lessonStartFailed(int subjectId, string message)
 
   signal tokenRejected(string message)
 
@@ -300,6 +310,60 @@ Item {
     drainReviewSubmits()
   }
 
+  // ---- lesson flow (same shape as the review engine) ----
+
+  function loadLessons(batch) {
+    if (!ready || lessonQueueProcess.running) return
+    lessonQueueError = ""
+    var cmd = ["python3", helperPath, "lessons"]
+    var n = parseInt(String(batch), 10)
+    if (isFinite(n) && n > 0) cmd.push("--batch", String(n))
+    lessonQueueProcess.command = cmd
+    lessonQueueProcess.running = true
+  }
+
+  function applyLessons(raw) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok !== true) {
+      lessonQueueError = String(payload.error || "Could not load the lesson queue")
+      return
+    }
+    lessonsReady(payload.subjectIds || [], Number(payload.total) || 0)
+  }
+
+  function startLesson(id, dryRun) {
+    var n = parseInt(String(id), 10)
+    if (!isFinite(n)) return
+    var next = lessonStartQueue.slice()
+    next.push({ id: n, dry: dryRun === true })
+    lessonStartQueue = next
+    drainLessonStarts()
+  }
+
+  function drainLessonStarts() {
+    if (!ready || lessonStartProcess.running || lessonStartQueue.length === 0) return
+    var job = lessonStartQueue[0]
+    var cmd = ["python3", helperPath, "start-lesson", String(job.id)]
+    if (job.dry) cmd.push("--dry-run")
+    lessonStartProcess.pendingId = job.id
+    lessonStartProcess.command = cmd
+    lessonStartProcess.running = true
+  }
+
+  function applyLessonStart(raw) {
+    var payload = Model.parsePayload(raw)
+    var job = lessonStartQueue.length > 0 ? lessonStartQueue[0] : null
+    if (payload.ok !== true) {
+      lessonStartError = String(payload.error || "Starting the lesson failed")
+      lessonStartFailed(job ? job.id : 0, lessonStartError)
+      return
+    }
+    lessonStartError = ""
+    lessonStartQueue = lessonStartQueue.slice(1)
+    lessonStarted(payload)
+    drainLessonStarts()
+  }
+
   function applyDetail(raw, requestedIds) {
     var payload = Model.parsePayload(raw)
     if (payload.ok === false) {
@@ -492,6 +556,38 @@ Item {
         return
       }
       root.applyReviewSubmit(rsOut.text)
+    }
+  }
+
+  Process {
+    id: lessonQueueProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: lqOut; waitForEnd: true }
+    stderr: StdioCollector { id: lqErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.lessonQueueError = root.helperFailure(lqErr.text, exitCode)
+        return
+      }
+      root.applyLessons(lqOut.text)
+    }
+  }
+
+  Process {
+    id: lessonStartProcess
+    property int pendingId: 0
+    running: false
+    command: []
+    stdout: StdioCollector { id: lsOut; waitForEnd: true }
+    stderr: StdioCollector { id: lsErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.lessonStartError = root.helperFailure(lsErr.text, exitCode)
+        root.lessonStartFailed(lessonStartProcess.pendingId, root.lessonStartError)
+        return
+      }
+      root.applyLessonStart(lsOut.text)
     }
   }
 
