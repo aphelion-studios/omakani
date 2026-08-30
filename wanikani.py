@@ -925,21 +925,52 @@ def cmd_browse(args):
 def fetch_file(url, dest):
     """Download a public file (a pronunciation-audio clip) straight to `dest`.
     files.wanikani.com is a plain CloudFront/S3 origin -- no auth, no redirects,
-    so a single GET is enough. Written atomically."""
+    so a single GET is enough. Written atomically.
+
+    Resolves the host and prefers IPv4: http.client tries a stalled AAAA for
+    ~8s before falling back on this box, which made the first play of each
+    clip feel broken (curl, which does happy-eyeballs, is instant)."""
     parsed = urllib.parse.urlparse(url)
-    context = ssl.create_default_context()
-    connection = http.client.HTTPSConnection(
-        parsed.netloc, 443, timeout=TIMEOUT, context=context)
+    host = parsed.hostname
+    port = parsed.port or 443
     try:
-        target = parsed.path + (("?" + parsed.query) if parsed.query else "")
-        connection.request("GET", target, headers={"User-Agent": USER_AGENT})
-        response = connection.getresponse()
-        blob = response.read()
-        if response.status != 200:
-            raise ApiError("audio download failed (HTTP %d)" % response.status,
-                           response.status)
-    finally:
-        connection.close()
+        infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except OSError as error:
+        raise ApiError("could not resolve %s: %s" % (host, error)) from error
+    # IPv4 first, then anything else
+    infos.sort(key=lambda i: 0 if i[0] == socket.AF_INET else 1)
+
+    blob = None
+    last = None
+    for family, _, _, _, sockaddr in infos:
+        raw = socket.socket(family, socket.SOCK_STREAM)
+        raw.settimeout(TIMEOUT)
+        try:
+            raw.connect(sockaddr)
+            secure = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+            connection = http.client.HTTPSConnection(host, port, timeout=TIMEOUT)
+            connection.sock = secure
+            try:
+                target = parsed.path + (("?" + parsed.query) if parsed.query else "")
+                connection.request("GET", target, headers={"User-Agent": USER_AGENT})
+                response = connection.getresponse()
+                body = response.read()
+                if response.status != 200:
+                    raise ApiError("audio download failed (HTTP %d)" % response.status,
+                                   response.status)
+                blob = body
+                break
+            finally:
+                connection.close()
+        except (OSError, ssl.SSLError) as error:
+            last = error
+            try:
+                raw.close()
+            except OSError:
+                pass
+    if blob is None:
+        raise ApiError("audio download failed: %s" % (last or "no route"))
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     temporary = dest.with_name(dest.name + ".tmp")
     with open(temporary, "wb") as handle:
@@ -1049,26 +1080,41 @@ def cmd_preload_audio(args):
         except ApiError:
             pass
 
-    fetched = cached = skipped = 0
+    # collect the clips playback might actually use: mp3 only (audio_pool
+    # ranks mp3 ahead of webm), both voice actors, one file each
+    wanted = []           # (url, dest)
+    cached = 0
     for sid in ids:
-        audios = data_of(items.get(sid)).get("pronunciation_audios") or []
-        if not audios:
-            continue
-        for clip in audios:
+        for clip in data_of(items.get(sid)).get("pronunciation_audios") or []:
+            if clip.get("content_type") != "audio/mpeg":
+                continue
             url = clip.get("url")
             if not url:
                 continue
-            extension = ".mp3" if clip.get("content_type") == "audio/mpeg" else ".webm"
             dest = (cache_dir() / "audio"
-                    / (hashlib.sha1(url.encode("utf-8")).hexdigest() + extension))
+                    / (hashlib.sha1(url.encode("utf-8")).hexdigest() + ".mp3"))
             if dest.exists() and dest.stat().st_size > 0:
                 cached += 1
-                continue
+            else:
+                wanted.append((url, dest))
+
+    fetched = skipped = 0
+    if wanted:
+        from concurrent.futures import ThreadPoolExecutor
+
+        def grab(pair):
             try:
-                fetch_file(url, dest)
-                fetched += 1
+                fetch_file(pair[0], pair[1])
+                return True
             except (ApiError, OSError, socket.error):
-                skipped += 1
+                return False
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for ok in pool.map(grab, wanted):
+                if ok:
+                    fetched += 1
+                else:
+                    skipped += 1
 
     return {"ok": True, "configured": True, "error": "",
             "fetched": fetched, "cached": cached, "skipped": skipped,
