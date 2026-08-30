@@ -1255,6 +1255,18 @@ def cmd_submit_review(args):
                 "the 'assignments:start' and 'reviews:create' permissions "
                 "checked, then paste it in again.")
             return payload
+        # A 422 about the time range / an assignment that is no longer
+        # available means this subject has ALREADY been reviewed (its
+        # available_at jumped to the future) -- the earlier POST landed. Don't
+        # treat that as a session-stopping failure.
+        text = str(error).lower()
+        if error.code == 422 and (
+                "time range" in text or "created_at" in text
+                or "not available" in text or "already" in text):
+            return {"ok": True, "configured": True, "error": "",
+                    "dryRun": False, "alreadyRecorded": True,
+                    "review": review, "requests": api.requests,
+                    "fetchedAt": iso(now_utc())}
         raise
     data = result.get("data") or {}
     updated = (result.get("resources_updated") or {})

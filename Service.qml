@@ -92,6 +92,11 @@ Item {
   readonly property bool reviewQueueBusy: reviewQueueProcess.running
   property string reviewQueueError: ""
   property var reviewSubmitQueue: []
+  // subject ids already sent this session -- a POST /reviews for an item
+  // that's already been reviewed makes its assignment un-available again and
+  // WK 422s the retry with "created_at must be in the acceptable time range"
+  property var reviewSubmittedIds: ({})
+  function resetReviewSubmits() { reviewSubmittedIds = ({}); reviewSubmitQueue = [] }
   readonly property bool reviewSubmitBusy: reviewSubmitProcess.running
   property string reviewSubmitError: ""
 
@@ -296,6 +301,12 @@ Item {
   function submitReview(id, incorrectMeaning, incorrectReading, dryRun) {
     var n = parseInt(String(id), 10)
     if (!isFinite(n)) return
+    var key = String(n)
+    // never send the same subject twice in one session, dry or live
+    if (reviewSubmittedIds[key] || reviewSubmitQueue.some(function (j) { return j.id === n })) {
+      console.warn("omakani: ignoring duplicate submitReview for", n)
+      return
+    }
     var next = reviewSubmitQueue.slice()
     next.push({ id: n,
                 im: Math.max(0, parseInt(String(incorrectMeaning), 10) || 0),
@@ -327,6 +338,11 @@ Item {
       return
     }
     reviewSubmitError = ""
+    if (job) {
+      var m = reviewSubmittedIds
+      m[String(job.id)] = true
+      reviewSubmittedIds = m
+    }
     reviewSubmitQueue = reviewSubmitQueue.slice(1)
     reviewSubmitted(payload)
     drainReviewSubmits()
