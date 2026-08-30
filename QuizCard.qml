@@ -235,26 +235,17 @@ FocusScope {
       height: Math.round(parent.height * 0.34)
       color: quiz.typeColor
 
-      Column {
+      // just the character -- no "Kanji · Level 7" line: the level leaks which
+      // of two look-alike subjects (矢 lv3 vs 失 lv7) you're being asked
+      Text {
         anchors.centerIn: parent
-        spacing: Style.space(6)
-        Text {
-          anchors.horizontalCenter: parent.horizontalCenter
-          text: quiz.d.characters || ""
-          color: "white"
-          // WaniKani sets its subject characters at a regular weight (Noto
-          // Sans JP); match that rather than bolding.
-          font.family: quiz.jpFamily
-          font.pixelSize: Math.min(header.height * 0.6, Style.font.displayLarge * 3)
-          font.weight: Font.Normal
-        }
-        Text {
-          anchors.horizontalCenter: parent.horizontalCenter
-          text: quiz.typeWord + "  ·  Level " + (quiz.d.level || "?")
-          color: Qt.rgba(1, 1, 1, 0.82)
-          font.family: quiz.fontFamily
-          font.pixelSize: Style.font.bodySmall
-        }
+        text: quiz.d.characters || ""
+        color: "white"
+        // WaniKani sets its subject characters at a regular weight (Noto
+        // Sans JP); match that rather than bolding.
+        font.family: quiz.jpFamily
+        font.pixelSize: Math.min(header.height * 0.6, Style.font.displayLarge * 3)
+        font.weight: Font.Normal
       }
     }
 
@@ -263,7 +254,8 @@ FocusScope {
     Rectangle {
       id: srsChip
       anchors.horizontalCenter: parent.horizontalCenter
-      anchors.verticalCenter: promptBar.top
+      anchors.bottom: promptBar.top
+      anchors.bottomMargin: Style.space(4)
       z: 15
       visible: !!quiz.srsPill && quiz.phase === "correct"
       width: pillRow.implicitWidth + Style.space(20)
@@ -432,10 +424,11 @@ FocusScope {
       anchors.topMargin: Style.space(10)
       anchors.horizontalCenter: parent.horizontalCenter
       visible: quiz.phase !== "input" && quiz.nudge === ""
+      // same order as the toolbar buttons below: wrap, info, audio
       text: quiz.phase === "correct"
-        ? ("Enter to continue   ·   f  item info"
-           + (quiz.canAudio ? "   ·   p  audio" : "") + "   ·   w  wrap up")
-        : "Enter to continue   ·   f  see why   ·   w  wrap up"
+        ? ("Enter to continue   ·   w  wrap up   ·   f  item info"
+           + (quiz.canAudio ? "   ·   p  audio" : ""))
+        : "Enter to continue   ·   w  wrap up   ·   f  see why"
       color: Qt.darker(quiz.fg, 1.5)
       font.family: quiz.fontFamily
       font.pixelSize: Style.font.caption
@@ -452,7 +445,9 @@ FocusScope {
         model: [
           { g: "󰅐", act: "wrap",  show: true,        on: true },
           { g: "󰈈", act: "info",  show: true,        on: quiz.phase !== "input" },
-          { g: "󰕾", act: "audio", show: quiz.isVocab, on: quiz.canAudio }
+          { g: (quiz.service && quiz.service.audioPlaying) ? "󰕾" : "󰕿",
+            act: "audio", show: quiz.isVocab, on: quiz.canAudio,
+            live: !!(quiz.service && quiz.service.audioPlaying) }
         ]
         delegate: Rectangle {
           visible: modelData.show
@@ -468,7 +463,8 @@ FocusScope {
           Text {
             anchors.centerIn: parent
             text: modelData.g
-            color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, on ? 0.9 : 0.3)
+            color: modelData.live ? quiz.okColor
+              : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, on ? 0.9 : 0.3)
             font.family: quiz.fontFamily
             font.pixelSize: Style.font.body
           }
@@ -509,6 +505,7 @@ FocusScope {
         // (you still haven't done the other half). The half you were just
         // tested on is shown, with the ring on it if you missed.
         reviewFolds: quiz.restrictInfo && !drilled
+        hideLevel: quiz.restrictInfo
         collapse: (!quiz.restrictInfo || drilled) ? ""
           : quiz.effectiveType === "reading" ? (quiz.meaningDone ? "" : "meaning")
           : quiz.effectiveType === "meaning" ? (quiz.readingDone ? "" : "reading")
@@ -534,8 +531,8 @@ FocusScope {
         anchors.right: parent.right
         anchors.margins: Style.space(12)
         text: quiz._infoStack.length > 0
-          ? "Esc  back   ·   j / k  move   ·   l  open   ·   h  back"
-          : "j / k  move   ·   l  open   ·   h  fold   ·   f / Esc  close"
+          ? "j / k  section   ·   h / l  chip   ·   Enter  open   ·   Esc  back"
+          : "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  close"
         // sits over the colour header -- white with a dark edge reads on any
         color: "#ffffff"
         style: Text.Outline
