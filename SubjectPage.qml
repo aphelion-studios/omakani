@@ -32,6 +32,9 @@ Item {
   // apply the review's default folds (context folded); off when drilled into
   // a linked subject
   property bool reviewFolds: false
+  // hide the "· Level N" everywhere in a live review (drilled pages too) --
+  // the level leaks which look-alike you're being asked
+  property bool hideLevel: false
 
   // a review's item info collapses the half you're being tested on (like the
   // website) -- present but folded, so f can't hand you the answer at a
@@ -48,12 +51,14 @@ Item {
   signal closeRequested()
 
   // ---- section navigation (item-info overlay) --------
-  //   section level : j/k move the ring, l opens a fold / drops into chips,
-  //                   h folds / (from chips) pops back out, Enter toggles
-  //   chip level     : j/k move between chips, l/Enter opens one, h exits
+  //   j/k        move the section ring
+  //   Enter      toggle fold on a text section; open the highlighted chip
+  //              on a chip section (Composition / Found In / Visually Similar)
+  //   h/l        step the highlighted chip backward / forward
+  //   Esc        go back a page (drilled) or close
   property var navCards: []
   property int focusIndex: 0
-  property int chipIndex: -1          // -1 = section level, >=0 = in the chips
+  property int chipIndex: 0           // highlighted chip in the focused section
   // bumped on every subject change so cards drop any manual fold and go back
   // to their default state
   property int resetToken: 0
@@ -62,13 +67,6 @@ Item {
     var c = focusedCard()
     return (c && c.chipIds) ? c.chipIds : []
   }
-  function enterChips() {
-    var c = focusedCard()
-    if (!c) return
-    if (c.collapsible && c.collapsed) { c.expand(); return }  // first l: open it
-    if (focusedChipIds().length > 0) { chipIndex = 0; Qt.callLater(scrollToFocused) }
-  }
-  function exitChips() { chipIndex = -1; Qt.callLater(scrollToFocused) }
   function moveChip(delta) {
     var ids = focusedChipIds()
     if (!ids.length) return
@@ -78,6 +76,11 @@ Item {
   function openChip() {
     var ids = focusedChipIds()
     if (chipIndex >= 0 && chipIndex < ids.length) page.navigate(ids[chipIndex])
+  }
+  function activateFocused() {
+    if (focusedChipIds().length > 0) { openChip(); return }
+    var c = focusedCard()
+    if (c) c.toggle()
   }
   function registerCard(c) { var a = navCards.slice(); a.push(c); navCards = a }
   // visible section cards, top-to-bottom (Component.onCompleted fires
@@ -114,18 +117,13 @@ Item {
   function moveFocus(delta) {
     var v = visibleNav()
     if (!v.length) return
-    chipIndex = -1     // leaving the section drops you out of its chips
+    chipIndex = 0      // new section -> highlight its first chip
     focusIndex = Math.max(0, Math.min(focusIndex + delta, v.length - 1))
     Qt.callLater(scrollToFocused)
   }
-  function foldFocused(open) {
-    var c = focusedCard()
-    if (!c) return
-    if (open) c.expand(); else c.collapse()
-    Qt.callLater(scrollToFocused)
-  }
-  // every section is foldable in the overlay; a plain page only folds the
-  // anti-cheat half during a review
+  // text sections (Meaning / Reading / Context) fold in the overlay; a plain
+  // page only folds the anti-cheat half during a review. Chip sections don't
+  // fold -- h/l navigate their chips instead.
   function cardCollapsible() { return overlayMode || collapse !== "" }
   function startFolded(key) {
     if (collapse === key) return true          // anti-cheat: tested half
@@ -155,7 +153,7 @@ Item {
   onSubjectChanged: {
     flick.contentY = 0
     focusIndex = 0
-    chipIndex = -1
+    chipIndex = 0
     _syncedSection = ""
     resetToken += 1     // cards drop manual folds, back to their defaults
     Qt.callLater(hydrateLinks)
@@ -255,27 +253,16 @@ Item {
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)
-      // in the item-info overlay j/k walk the section ring and l/h fold the
-      // focused one; once inside a section's chips, j/k move between them and
-      // l / Enter opens the highlighted chip, h steps back out
+      // item-info overlay: j/k move the section ring, Enter toggles a fold
+      // (or opens the highlighted chip on a chip section), h/l step the chip
+      // cursor, Esc / f go back a page or close
       if (page.overlayMode) {
-        if (page.chipIndex >= 0) {
-          if (e.text === "j") { page.moveChip(1); e.accepted = true; return }
-          else if (e.text === "k") { page.moveChip(-1); e.accepted = true; return }
-          else if (e.text === "l" || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
-            page.openChip(); e.accepted = true; return
-          }
-          else if (e.text === "h" || e.key === Qt.Key_Escape) {
-            page.exitChips(); e.accepted = true; return
-          }
-          e.accepted = true; return
-        }
         if (e.text === "j") { page.moveFocus(1); e.accepted = true; return }
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
-        else if (e.text === "l") { page.enterChips(); e.accepted = true; return }
-        else if (e.text === "h") { page.foldFocused(false); e.accepted = true; return }
+        else if (e.text === "l") { page.moveChip(1); e.accepted = true; return }
+        else if (e.text === "h") { page.moveChip(-1); e.accepted = true; return }
         else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
-          var c = page.focusedCard(); if (c) c.toggle(); e.accepted = true; return
+          page.activateFocused(); e.accepted = true; return
         }
         else if (e.text === "f" || e.key === Qt.Key_Escape) {
           page.closeRequested(); e.accepted = true; return
@@ -344,7 +331,11 @@ Item {
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: page.typeLabel + "  ·  Level " + (page.sd.level || "?")
+            // hide the level in a live review -- it leaks which of two
+            // look-alikes you're being asked (browsing keeps it)
+            text: (page.overlayMode && page.hideLevel)
+              ? page.typeLabel
+              : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
             color: Qt.rgba(1, 1, 1, 0.82)
             font.family: page.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -644,9 +635,7 @@ Item {
           readonly property string navKey: "composition"
           width: parent.width
           visible: (page.sd.component_subject_ids || []).length > 0
-          collapsible: page.cardCollapsible()
-          defaultCollapsed: page.startFolded("composition")
-          resetToken: page.resetToken
+          collapsible: false   // chip section: h/l navigate, no fold
           navFocused: page.overlayMode && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "kanji" ? "Radical Combination" : "Kanji Composition"
@@ -680,9 +669,7 @@ Item {
           readonly property string navKey: "foundin"
           width: parent.width
           visible: (page.sd.amalgamation_subject_ids || []).length > 0
-          collapsible: page.cardCollapsible()
-          defaultCollapsed: page.startFolded("foundin")
-          resetToken: page.resetToken
+          collapsible: false   // chip section: h/l navigate, no fold
           navFocused: page.overlayMode && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Found In Kanji" : "Found In Vocabulary"
@@ -716,9 +703,7 @@ Item {
           readonly property string navKey: "similar"
           width: parent.width
           visible: (page.sd.visually_similar_subject_ids || []).length > 0
-          collapsible: page.cardCollapsible()
-          defaultCollapsed: page.startFolded("similar")
-          resetToken: page.resetToken
+          collapsible: false   // chip section: h/l navigate, no fold
           navFocused: page.overlayMode && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
           title: "Visually Similar Kanji"

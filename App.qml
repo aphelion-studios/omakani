@@ -262,11 +262,12 @@ Item {
       else if (what === "back") { if (ip) ip.closeRequested() }
       else if (what === "down") { if (ip) ip.moveFocus(1) }
       else if (what === "up") { if (ip) ip.moveFocus(-1) }
-      else if (what === "chipenter") { if (ip) ip.enterChips() }
       else if (what === "chipnext") { if (ip) ip.moveChip(1) }
-      else if (what === "chipopen") { if (ip) ip.openChip() }
+      else if (what === "chipprev") { if (ip) ip.moveChip(-1) }
+      else if (what === "enter") { if (ip) ip.activateFocused() }
       return "phase=" + c.phase + " chipIndex=" + (ip ? ip.chipIndex : "?")
         + " focusedKey=" + (ip ? ip.focusedKey : "?")
+        + " subj=" + (ip && ip.subject ? ip.subject.id : "?")
     }
     function rinfo(): string {
       var c = root.view === "review" ? reviewEngine.cardItem
