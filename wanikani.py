@@ -647,7 +647,9 @@ def extra_study(assignments, review_stats, assignment_by_subject, subjects_by_id
         "recentLessonIds": recent_lessons,
         "recentMistakes": len(mistakes),
         "recentMistakeItems": mistakes[:RECENT_LIST_CAP],
+        "recentMistakeIds": [m.get("id") for m in mistakes if m.get("id")],
         "burnedItems": len(burned),
+        "burnedItemIds": burned,
     }
 
 

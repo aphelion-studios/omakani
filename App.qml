@@ -57,6 +57,7 @@ Item {
     if (view === "browse") levelBrowser.focusGrid()
     else if (view === "subject") subjectPage.focusPage()
     else if (view === "quiz") quizCard.forceActiveFocus()
+    else if (view === "session") quizSession.forceActiveFocus()
     else focusScope.forceActiveFocus()
   }
 
@@ -101,6 +102,16 @@ Item {
     if (root.service) root.service.loadDetail([n])
   }
 
+  // An Extra Study session over a batch of subjects (no server sync).
+  property var sessionIds: []
+  property string sessionTitle: "Extra Study"
+  function goSession(ids, title) {
+    root.sessionIds = (Array.isArray(ids) ? ids : []).slice(0, 100)
+    root.sessionTitle = title || "Extra Study"
+    pushPage({ view: "session" })
+    Qt.callLater(function () { quizSession.start() })
+  }
+
   // After a subject's detail lands, pull in any linked subjects (components,
   // amalgamations, look-alikes) we don't have yet so their chips show real
   // characters -- one extra request, capped.
@@ -126,7 +137,23 @@ Item {
     opened = true
     resetNav()
     if (service) service.refreshAll()
-    Qt.callLater(applyFocus)
+
+    // a summon payload can route straight to a view, e.g. the dashboard's
+    // Extra Study buttons: {"session":"recent-lessons"|"mistakes"|"burned"}
+    var payload = null
+    try { payload = payloadJson ? JSON.parse(payloadJson) : null } catch (e) { payload = null }
+    if (payload && payload.session) {
+      Qt.callLater(function () { root.openSessionMode(String(payload.session)) })
+    } else {
+      Qt.callLater(applyFocus)
+    }
+  }
+
+  function openSessionMode(which) {
+    var dash = service ? service.extraStudy : ({})
+    if (which === "burned") goSession(dash.burnedItemIds || [], "Burned Items")
+    else if (which === "mistakes") goSession(dash.recentMistakeIds || [], "Recent Mistakes")
+    else goSession(dash.recentLessonIds || [], "Recent Lessons")
   }
 
   function close() {
@@ -163,9 +190,20 @@ Item {
       root.goQuiz(parseInt(id, 10), type)
     }
     function qanswer(text: string): string {
-      if (root.view !== "quiz") return "not in a quiz"
-      quizCard.typeAndSubmit(text)
-      return quizCard.phase + (quizCard.nudge ? " (" + quizCard.nudge + ")" : "")
+      var c = root.view === "quiz" ? quizCard
+        : root.view === "session" ? quizSession.cardItem : null
+      if (!c) return "not in a quiz"
+      c.typeAndSubmit(text)
+      return c.phase + (c.nudge ? " (" + c.nudge + ")" : "")
+        + (root.view === "session"
+           ? "  [" + quizSession.phase + " " + quizSession.clearedQuestions
+             + "/" + quizSession.totalQuestions + "]" : "")
+    }
+    // extra-study session over the dashboard's recent-lessons / burned batch
+    function session(which: string): void {
+      root.open("")
+      root.resetNav()
+      root.openSessionMode(String(which || "recent-lessons"))
     }
     function state(): string {
       return JSON.stringify({
@@ -491,6 +529,25 @@ Item {
           color: Qt.darker(root.fg, 1.5)
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
+        }
+
+        // -------------------------------------------------- SESSION (extra study)
+        QuizSession {
+          id: quizSession
+          visible: root.view === "session"
+          anchors.fill: parent
+          service: root.service
+          subjectIds: root.sessionIds
+          title: root.sessionTitle
+          pageBg: root.bg
+          fg: root.fg
+          fontFamily: root.fontFamily
+          jpFamily: root.jpFamily
+          radicalColor: root.radicalColor
+          kanjiColor: root.kanjiColor
+          vocabColor: root.vocabColor
+          onExit: root.popPage()
+          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
         }
       }
     }

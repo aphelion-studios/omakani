@@ -238,11 +238,14 @@ Panel {
   }
   function openExtraStudy(index) {
     var es = wk.extraStudy
-    var queues = ["recent_lessons", "recent_mistakes", "burned"]
+    var modes = ["recent-lessons", "mistakes", "burned"]
     var counts = [Number(es.recentLessons), Number(es.recentMistakes), Number(es.burnedItems)]
     if (index < 0 || index > 2 || !(counts[index] > 0)) return
-    Quickshell.execDetached(["xdg-open",
-      "https://www.wanikani.com/subjects/extra_study?queue_type=" + queues[index]])
+    // run it in the full app (no server sync -- WaniKani doesn't track Extra
+    // Study). summon carries a payload so it works whether the app is open.
+    Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
+      "io.github.aphelion-studios.omakani",
+      JSON.stringify({ session: modes[index] })])
   }
 
   Timer {
