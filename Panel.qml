@@ -482,7 +482,7 @@ Panel {
     // `size` is the mark's height; the Crabigator head is much taller than
     // it is wide (243 x 399 in the source).
     property real size: root.barMarkHeight
-    readonly property real aspect: 243 / 399
+    readonly property real aspect: 1.0
     property color tint: root.foreground
     implicitWidth: Math.round(size * aspect)
     implicitHeight: size
@@ -531,7 +531,7 @@ Panel {
     // is the child below, and labelVisible is off.
     text: "wanikani"
     labelVisible: false
-    fixedWidth: Math.round(root.barMarkHeight * (243 / 399)) + Style.space(10)
+    fixedWidth: root.barMarkHeight + Style.space(12)
     tooltipText: Model.barTooltip(wk.view, clock.date)
     onPressed: function(pressedButton) {
       if (pressedButton === Qt.MiddleButton) wk.refresh()
@@ -1498,7 +1498,7 @@ Panel {
     Text {
       anchors.centerIn: parent
       text: String(parent.value)
-      color: parent.filled ? "#ffffff" : root.dim
+      color: parent.filled ? "#fcfdfd" : root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: true
@@ -1564,7 +1564,7 @@ Panel {
       id: chipLabel
       anchors.centerIn: parent
       text: parent.glyph
-      color: "#ffffff"
+      color: "#fcfdfd"
       font.family: root.jpFamily
       font.pixelSize: Style.font.bodySmall
       font.bold: true
