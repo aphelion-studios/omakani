@@ -123,9 +123,9 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       visible: chip.glyph !== "" && chip.label !== ""
       text: chip.label
-      color: Qt.darker(chip.fg, 1.5)
+      color: chip.fg
       font.family: chip.fontFamily
-      font.pixelSize: Style.font.caption
+      font.pixelSize: Style.font.bodySmall
     }
   }
 
