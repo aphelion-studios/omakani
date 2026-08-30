@@ -167,6 +167,20 @@ FocusScope {
     Qt.callLater(function () { if (card.visible) card.forceActiveFocus() })
   }
 
+  // Shortcuts fire window-wide, so d / Enter work on the start screen even
+  // when the nested focus chain hasn't settled on this FocusScope.
+  Shortcut {
+    sequences: ["d"]
+    enabled: engine.visible && engine.phase === "ready"
+    onActivated: engine.dryRun = !engine.dryRun
+  }
+  Shortcut {
+    sequences: ["Return", "Enter"]
+    enabled: engine.visible && (engine.phase === "ready"
+      || engine.phase === "summary" || engine.phase === "error")
+    onActivated: engine.phase === "ready" ? engine.startRun() : engine.exit()
+  }
+
   Rectangle { anchors.fill: parent; color: engine.pageBg }
 
   // ---- loading ----
@@ -281,6 +295,12 @@ FocusScope {
     studyMaterial: subject && subject.study_material ? subject.study_material : null
     questionType: engine.current ? engine.current.type : "meaning"
     progress: engine.progress
+    // a review must not let f peek the half you haven't answered yet
+    restrictInfo: true
+    meaningDone: engine.current && engine.items[engine.current.id]
+      ? engine.items[engine.current.id].mOK === true : false
+    readingDone: engine.current && engine.items[engine.current.id]
+      ? engine.items[engine.current.id].rOK === true : false
     pageBg: engine.pageBg
     fg: engine.fg
     fontFamily: engine.fontFamily

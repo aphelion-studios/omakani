@@ -27,10 +27,37 @@ Item {
   // when true (used as the quiz's item-info overlay), f / Esc ask to close
   property bool overlayMode: false
 
+  // a review's item-info hides the component you haven't answered yet, so
+  // f can't be used to peek the other half's answer
+  property bool showMeaning: true
+  property bool showReading: true
+
   signal navigate(int subjectId)
   signal closeRequested()
 
-  onSubjectChanged: flick.contentY = 0
+  onSubjectChanged: { flick.contentY = 0; Qt.callLater(hydrateLinks) }
+
+  property bool _hydrating: false
+  function hydrateLinks() {
+    if (_hydrating || !service || !subject || !subject.data) return
+    var d = subject.data
+    var ids = []
+      .concat(d.component_subject_ids || [])
+      .concat((d.amalgamation_subject_ids || []).slice(0, 60))
+      .concat(d.visually_similar_subject_ids || [])
+    var missing = ids.filter(function (x) { return !service.subjectDetail(x) })
+    if (missing.length === 0) return
+    _hydrating = true
+    service.loadDetail(missing.slice(0, 100))
+  }
+
+  Connections {
+    target: page.service
+    enabled: page.service !== null
+    function onDetailReady(ids) {
+      if (page._hydrating) { page._hydrating = false; return }
+    }
+  }
 
   function resolve(id) {
     return service && typeof service.subjectDetail === "function"
@@ -146,7 +173,8 @@ Item {
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: page.sd.characters || page.primaryMeaning()
+            // never fall back to the meaning when it's being withheld
+            text: page.sd.characters || (page.showMeaning ? page.primaryMeaning() : "")
             color: "white"
             font.family: page.jpFamily
             font.pixelSize: Style.font.displayLarge * 2.4
@@ -155,6 +183,7 @@ Item {
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
+            visible: page.showMeaning
             text: page.primaryMeaning()
             color: "white"
             font.family: page.fontFamily
@@ -183,6 +212,7 @@ Item {
         // ---- Meaning ---------------------------------------------------
         SubjectCard {
           width: parent.width
+          visible: page.showMeaning
           title: page.kind === "radical" ? "Name" : "Meaning"
           bg: page.cardBg
 
@@ -275,8 +305,8 @@ Item {
         // ---- Reading -------------------------------------------------
         SubjectCard {
           width: parent.width
-          visible: page.kind === "kanji" || page.kind === "vocabulary"
-            || page.kind === "kana_vocabulary"
+          visible: page.showReading && (page.kind === "kanji" || page.kind === "vocabulary"
+            || page.kind === "kana_vocabulary")
           title: "Reading"
           bg: page.cardBg
 
@@ -405,9 +435,12 @@ Item {
         }
 
         // ---- Context ------------------------------------------------
+        // withheld entirely in a review until you've cleared both halves --
+        // the sentence gives the reading away and the translation the meaning
         SubjectCard {
           width: parent.width
-          visible: (page.sd.context_sentences || []).length > 0
+          visible: page.showMeaning && page.showReading
+            && (page.sd.context_sentences || []).length > 0
           title: "Context"
           bg: page.cardBg
 

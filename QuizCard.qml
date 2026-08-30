@@ -32,6 +32,11 @@ FocusScope {
   readonly property color okColor: "#93c01f"
   readonly property color noColor: "#e64a3b"
 
+  // when set (reviews), item info hides the half you haven't answered yet
+  property bool restrictInfo: false
+  property bool meaningDone: false
+  property bool readingDone: false
+
   // "input" -> "correct" | "wrong" ; Enter from a settled phase advances
   property string phase: "input"
   property string nudge: ""
@@ -226,6 +231,9 @@ FocusScope {
         TextField {
           id: field
           anchors.fill: parent
+          // symmetric so the text centres in the whole bar (the chevron
+          // floats over the right margin), matching the website
+          anchors.leftMargin: Style.space(46)
           anchors.rightMargin: Style.space(46)
           focus: quiz.phase === "input"
           background: Rectangle { color: "transparent" }
@@ -373,6 +381,9 @@ FocusScope {
         anchors.fill: parent
         anchors.topMargin: Style.space(6)
         overlayMode: true
+        // in a review, don't reveal the half you haven't answered yet
+        showMeaning: !quiz.restrictInfo || quiz.effectiveType === "meaning" || quiz.meaningDone
+        showReading: !quiz.restrictInfo || quiz.effectiveType === "reading" || quiz.readingDone
         subject: quiz.subject
         service: quiz.service
         pageBg: quiz.pageBg
