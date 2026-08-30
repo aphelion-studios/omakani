@@ -312,6 +312,58 @@ class Api:
 
         raise ApiError("WaniKani did not answer (%s)" % describe(failure))
 
+    def post(self, path, body, _retry=True):
+        """POST JSON to a path under /v2 -- only /reviews uses this. Fails over
+        while the request has NOT gone out yet; once it's on the wire we never
+        retry (a review that might have landed must not be sent twice) -- the
+        caller re-checks the assignment instead."""
+        payload = json.dumps(body).encode("utf-8")
+        headers = {
+            "Authorization": "Bearer " + self.token,
+            "Wanikani-Revision": API_REVISION,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        }
+        candidates = []
+        if self.address is not None:
+            candidates.append(self.address)
+        candidates.extend(a for a in self.addresses if a != self.address)
+
+        failure = None
+        while candidates:
+            candidate = candidates.pop(0)
+            try:
+                self._close()
+                self.connection = self._open(*candidate)
+                self.address = candidate
+                self.connection.request("POST", API_BASE + path, payload, headers)
+            except (OSError, http.client.HTTPException) as error:
+                self._close()
+                failure = error
+                continue  # request never left -- safe to try the next address
+
+            try:
+                response = self.connection.getresponse()
+                raw = response.read().decode("utf-8", "replace")
+            except (OSError, http.client.HTTPException) as error:
+                self._close()
+                raise ApiError("the review was sent but WaniKani did not answer "
+                               "(%s); re-check before retrying" % describe(error)) from error
+
+            self.requests += 1
+            if response.status == 429 and _retry:
+                delay = response.getheader("Retry-After")
+                try:
+                    delay = max(1, min(15, int(delay)))
+                except (TypeError, ValueError):
+                    delay = 2
+                time.sleep(delay)
+                return self.post(path, body, _retry=False)
+            return decode(response.status, raw)
+
+        raise ApiError("WaniKani did not answer (%s)" % describe(failure))
+
     def collection(self, path):
         """Follow pages.next_url and return (items, data_updated_at)."""
         items = []
@@ -1024,6 +1076,67 @@ def cmd_detail(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def cmd_reviews(args):
+    """The subject ids that are due for review right now, in queue order.
+    The app pulls the detail it needs and runs the session; each finished
+    item is sent back through `submit-review`."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    api = Api(token)
+    summary = data_of(api.get("/summary"))
+    now = now_utc()
+    ids = []
+    for bucket in summary.get("reviews") or []:
+        at = parse_stamp(bucket.get("available_at"))
+        if at is None or at <= now:
+            ids.extend(bucket.get("subject_ids") or [])
+    ids = list(dict.fromkeys(ids))
+    return {"ok": True, "configured": True, "error": "",
+            "subjectIds": ids, "count": len(ids),
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
+def cmd_submit_review(args):
+    """Record one finished review. `POST /reviews` moves real SRS state, so
+    --dry-run returns exactly what WOULD be sent without touching the API.
+    The engine passes the tallied wrong-answer counts for each component."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    try:
+        review = {
+            "subject_id": int(args.subject),
+            "incorrect_meaning_answers": max(0, int(args.incorrect_meaning)),
+            "incorrect_reading_answers": max(0, int(args.incorrect_reading)),
+        }
+    except (TypeError, ValueError):
+        payload = base_summary()
+        payload["ok"] = False
+        payload["error"] = "submit-review needs numeric subject / counts"
+        return payload
+
+    if args.dry_run:
+        return {"ok": True, "configured": True, "error": "", "dryRun": True,
+                "wouldSend": {"review": review}, "requests": 0,
+                "fetchedAt": iso(now_utc())}
+
+    api = Api(token)
+    result = api.post("/reviews", {"review": review}) or {}
+    data = result.get("data") or {}
+    updated = (result.get("resources_updated") or {})
+    assignment = data_of(updated.get("assignment"))
+    return {"ok": True, "configured": True, "error": "", "dryRun": False,
+            "review": review,
+            "startingSrsStage": data.get("starting_srs_stage"),
+            "endingSrsStage": data.get("ending_srs_stage"),
+            "srsStage": assignment.get("srs_stage"),
+            "availableAt": assignment.get("available_at"),
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
 def build_parser():
     parser = argparse.ArgumentParser(description="WaniKani bridge for the Omarchy shell")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1054,6 +1167,17 @@ def build_parser():
     audio.add_argument("subject", type=int)
     audio.add_argument("--voice", choices=["kyoko", "kenichi", "random"], default="")
     audio.set_defaults(handler=cmd_audio)
+
+    reviews = commands.add_parser("reviews", help="subject ids due for review right now")
+    reviews.set_defaults(handler=cmd_reviews)
+
+    submit_review = commands.add_parser("submit-review", help="record one finished review (POST /reviews)")
+    submit_review.add_argument("subject", type=int)
+    submit_review.add_argument("--incorrect-meaning", type=int, default=0)
+    submit_review.add_argument("--incorrect-reading", type=int, default=0)
+    submit_review.add_argument("--dry-run", action="store_true",
+                               help="show what would be sent, don't POST")
+    submit_review.set_defaults(handler=cmd_submit_review)
 
     clear_token = commands.add_parser("clear-token", help="forget the stored API token")
     clear_token.set_defaults(handler=cmd_clear_token)

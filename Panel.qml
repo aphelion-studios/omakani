@@ -56,8 +56,8 @@ Panel {
   // The two count cards (Lessons / Reviews), mirroring the website. The
   // Lessons card is dropped when the showLessons setting is off. `active`
   // means that queue has something waiting now (drives the loud button
-  // style). Until the in-shell flow lands (Phase 4g/5) the buttons open the
-  // session on wanikani.com.
+  // style). Reviews run in the shell now (via a summon payload); lessons
+  // still open on wanikani.com until the lesson flow lands.
   readonly property var startActions: {
     var out = []
     if (showLessons)
@@ -66,14 +66,19 @@ Panel {
                  count: wk.lessonsNow,
                  active: wk.lessonsNow > 0 && !wk.vacation })
     out.push({ kind: "reviews", label: "Reviews", text: "Start Reviews",
-               url: "https://www.wanikani.com/subjects/review",
+               payload: { review: true },
                count: wk.reviewsNow,
                active: wk.reviewsNow > 0 && !wk.vacation })
     return out
   }
   function openStart(index) {
     var a = startActions[index]
-    if (a && a.url) Quickshell.execDetached(["xdg-open", String(a.url)])
+    if (!a) return
+    if (a.payload)
+      Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
+        "io.github.aphelion-studios.omakani", JSON.stringify(a.payload)])
+    else if (a.url)
+      Quickshell.execDetached(["xdg-open", String(a.url)])
   }
 
   // The mark always shows while unconnected (so the panel stays reachable to

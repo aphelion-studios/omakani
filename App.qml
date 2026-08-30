@@ -58,6 +58,7 @@ Item {
     else if (view === "subject") subjectPage.focusPage()
     else if (view === "quiz") quizCard.forceActiveFocus()
     else if (view === "session") quizSession.forceActiveFocus()
+    else if (view === "review") reviewEngine.forceActiveFocus()
     else focusScope.forceActiveFocus()
   }
 
@@ -112,6 +113,23 @@ Item {
     Qt.callLater(function () { quizSession.start() })
   }
 
+  // The review session -- POSTs to /reviews (guarded by the dry-run start
+  // screen). Pulls the due queue from the helper first.
+  property var reviewIds: []
+  function goReview() {
+    pushPage({ view: "review" })
+    if (service) service.loadReviews()
+  }
+  Connections {
+    target: root.service
+    enabled: root.service !== null
+    function onReviewsReady(ids) {
+      if (root.view !== "review") return
+      root.reviewIds = ids || []
+      Qt.callLater(function () { reviewEngine.begin() })
+    }
+  }
+
   // After a subject's detail lands, pull in any linked subjects (components,
   // amalgamations, look-alikes) we don't have yet so their chips show real
   // characters -- one extra request, capped.
@@ -144,6 +162,8 @@ Item {
     try { payload = payloadJson ? JSON.parse(payloadJson) : null } catch (e) { payload = null }
     if (payload && payload.session) {
       Qt.callLater(function () { root.openSessionMode(String(payload.session)) })
+    } else if (payload && payload.review) {
+      Qt.callLater(function () { root.goReview() })
     } else {
       Qt.callLater(applyFocus)
     }
@@ -191,19 +211,47 @@ Item {
     }
     function qanswer(text: string): string {
       var c = root.view === "quiz" ? quizCard
-        : root.view === "session" ? quizSession.cardItem : null
+        : root.view === "session" ? quizSession.cardItem
+        : root.view === "review" ? reviewEngine.cardItem : null
       if (!c) return "not in a quiz"
       c.typeAndSubmit(text)
-      return c.phase + (c.nudge ? " (" + c.nudge + ")" : "")
-        + (root.view === "session"
-           ? "  [" + quizSession.phase + " " + quizSession.clearedQuestions
-             + "/" + quizSession.totalQuestions + "]" : "")
+      var tail = ""
+      if (root.view === "session")
+        tail = "  [" + quizSession.phase + " " + quizSession.clearedQuestions
+          + "/" + quizSession.totalQuestions + "]"
+      else if (root.view === "review")
+        tail = "  [" + reviewEngine.phase + " submitted " + reviewEngine.submittedCount
+          + "/" + reviewEngine.totalSubjects + (reviewEngine.dryRun ? " DRY" : " LIVE") + "]"
+      return c.phase + (c.nudge ? " (" + c.nudge + ")" : "") + tail
+    }
+    function rstart(): string {
+      if (root.view !== "review") return "not in review"
+      reviewEngine.startRun()
+      return reviewEngine.phase
+    }
+    function rcur(): string {
+      if (root.view !== "review" || !reviewEngine.current) return "none"
+      var s = reviewEngine.currentSubject
+      var d = s && s.data ? s.data : ({})
+      return JSON.stringify({
+        id: reviewEngine.current.id,
+        type: reviewEngine.current.type,
+        chars: d.characters || "",
+        meanings: (d.meanings || []).map(function (m) { return m.meaning }),
+        readings: (d.readings || []).filter(function (r) { return r.accepted_answer !== false })
+          .map(function (r) { return r.reading })
+      })
     }
     // extra-study session over the dashboard's recent-lessons / burned batch
     function session(which: string): void {
       root.open("")
       root.resetNav()
       root.openSessionMode(String(which || "recent-lessons"))
+    }
+    function review(): void {
+      root.open("")
+      root.resetNav()
+      root.goReview()
     }
     function state(): string {
       return JSON.stringify({
@@ -539,6 +587,24 @@ Item {
           service: root.service
           subjectIds: root.sessionIds
           title: root.sessionTitle
+          pageBg: root.bg
+          fg: root.fg
+          fontFamily: root.fontFamily
+          jpFamily: root.jpFamily
+          radicalColor: root.radicalColor
+          kanjiColor: root.kanjiColor
+          vocabColor: root.vocabColor
+          onExit: root.popPage()
+          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+        }
+
+        // -------------------------------------------------- REVIEW (POSTs)
+        ReviewEngine {
+          id: reviewEngine
+          visible: root.view === "review"
+          anchors.fill: parent
+          service: root.service
+          subjectIds: root.reviewIds
           pageBg: root.bg
           fg: root.fg
           fontFamily: root.fontFamily

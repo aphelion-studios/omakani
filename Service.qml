@@ -84,9 +84,21 @@ Item {
   property string audioError: ""
   property string lastVoiceActor: ""
 
+  // Review engine: the due-queue and the submit backlog. Submits are
+  // serialised (each is a POST) and a failure stops the drain so nothing
+  // is double-sent -- the engine re-checks and can resume.
+  readonly property bool reviewQueueBusy: reviewQueueProcess.running
+  property string reviewQueueError: ""
+  property var reviewSubmitQueue: []
+  readonly property bool reviewSubmitBusy: reviewSubmitProcess.running
+  property string reviewSubmitError: ""
+
   signal browseReady(int level)
   signal detailReady(var ids)
   signal audioPlayed(string voiceActor)
+  signal reviewsReady(var ids)
+  signal reviewSubmitted(var result)
+  signal reviewSubmitFailed(int subjectId, string message)
 
   signal tokenRejected(string message)
 
@@ -227,6 +239,65 @@ Item {
     }
     browseData = payload
     browseReady(Number(payload.level) || 0)
+  }
+
+  // ---- review engine ----
+
+  function loadReviews() {
+    if (!ready || reviewQueueProcess.running) return
+    reviewQueueError = ""
+    reviewQueueProcess.command = ["python3", helperPath, "reviews"]
+    reviewQueueProcess.running = true
+  }
+
+  function applyReviews(raw) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok !== true) {
+      reviewQueueError = String(payload.error || "Could not load the review queue")
+      return
+    }
+    reviewsReady(payload.subjectIds || [])
+  }
+
+  // Queue one finished review. `dryRun` true = no POST, the helper just echoes
+  // what it would send. Submits drain one at a time.
+  function submitReview(id, incorrectMeaning, incorrectReading, dryRun) {
+    var n = parseInt(String(id), 10)
+    if (!isFinite(n)) return
+    var next = reviewSubmitQueue.slice()
+    next.push({ id: n,
+                im: Math.max(0, parseInt(String(incorrectMeaning), 10) || 0),
+                ir: Math.max(0, parseInt(String(incorrectReading), 10) || 0),
+                dry: dryRun === true })
+    reviewSubmitQueue = next
+    drainReviewSubmits()
+  }
+
+  function drainReviewSubmits() {
+    if (!ready || reviewSubmitProcess.running || reviewSubmitQueue.length === 0) return
+    var job = reviewSubmitQueue[0]
+    var cmd = ["python3", helperPath, "submit-review", String(job.id),
+               "--incorrect-meaning", String(job.im),
+               "--incorrect-reading", String(job.ir)]
+    if (job.dry) cmd.push("--dry-run")
+    reviewSubmitProcess.pendingId = job.id
+    reviewSubmitProcess.command = cmd
+    reviewSubmitProcess.running = true
+  }
+
+  function applyReviewSubmit(raw) {
+    var payload = Model.parsePayload(raw)
+    var job = reviewSubmitQueue.length > 0 ? reviewSubmitQueue[0] : null
+    if (payload.ok !== true) {
+      // stop the drain -- do not move on, the engine re-checks and resumes
+      reviewSubmitError = String(payload.error || "Review submit failed")
+      reviewSubmitFailed(job ? job.id : 0, reviewSubmitError)
+      return
+    }
+    reviewSubmitError = ""
+    reviewSubmitQueue = reviewSubmitQueue.slice(1)
+    reviewSubmitted(payload)
+    drainReviewSubmits()
   }
 
   function applyDetail(raw, requestedIds) {
@@ -389,6 +460,38 @@ Item {
         return
       }
       root.applyAudio(audioOut.text)
+    }
+  }
+
+  Process {
+    id: reviewQueueProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: rqOut; waitForEnd: true }
+    stderr: StdioCollector { id: rqErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.reviewQueueError = root.helperFailure(rqErr.text, exitCode)
+        return
+      }
+      root.applyReviews(rqOut.text)
+    }
+  }
+
+  Process {
+    id: reviewSubmitProcess
+    property int pendingId: 0
+    running: false
+    command: []
+    stdout: StdioCollector { id: rsOut; waitForEnd: true }
+    stderr: StdioCollector { id: rsErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.reviewSubmitError = root.helperFailure(rsErr.text, exitCode)
+        root.reviewSubmitFailed(reviewSubmitProcess.pendingId, root.reviewSubmitError)
+        return
+      }
+      root.applyReviewSubmit(rsOut.text)
     }
   }
 
