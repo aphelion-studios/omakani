@@ -238,31 +238,35 @@ FocusScope {
 
       // just the character -- no "Kanji · Level 7" line: the level leaks which
       // of two look-alike subjects (矢 lv3 vs 失 lv7) you're being asked.
-      // Nudged up a touch so the SRS chip has room in the gap below.
+      // Nudged up so the SRS chip has room in the gap below.
       Text {
         id: charText
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: -Style.space(6)
+        anchors.verticalCenterOffset: -Style.space(4)
         text: quiz.d.characters || ""
         color: "#fcfdfd"
         // WaniKani sets its subject characters at a regular weight (Noto
         // Sans JP); match that rather than bolding.
         font.family: quiz.jpFamily
-        font.pixelSize: Math.min(header.height * 0.62, Style.font.displayLarge * 3)
+        font.pixelSize: Math.min(header.height * 0.56, Style.font.displayLarge * 3)
         font.weight: Font.Normal
       }
     }
 
     // SRS-transition chip as a subject finishes (reviews) -- centred in the
-    // gap between the character and the prompt bar, floating so it never
-    // nudges the layout
+    // gap between the character's visual bottom and the prompt bar; floats,
+    // so it never nudges the layout
     Rectangle {
       id: srsChip
       anchors.horizontalCenter: parent.horizontalCenter
       y: {
-        var charBottom = header.y + charText.y + charText.height
-        return charBottom + (promptBar.y - charBottom - height) / 2
+        // glyph bottom ~= text centre + ~0.42 of the font size (CJK fills
+        // most of the em); centre the chip between that and the prompt bar
+        var glyphBottom = header.y + charText.y + charText.height / 2
+                          + charText.font.pixelSize * 0.32
+        var barTop = header.y + header.height
+        return (glyphBottom + barTop) / 2 - height / 2
       }
       z: 15
       visible: !!quiz.srsPill && quiz.phase === "correct"
@@ -300,7 +304,7 @@ FocusScope {
       height: Style.space(40)
       color: quiz.readingPrompt
         ? Qt.rgba(0, 0, 0, 0.55)
-        : Qt.rgba(1, 1, 1, 0.92)
+        : "#ebedef"
       // "<Type> <Meaning|Reading>" -- the type in a regular weight, the part
       // you're being tested on in bold, matching the website
       Row {
@@ -340,7 +344,7 @@ FocusScope {
         radius: Style.space(6)
         color: quiz.phase === "correct" ? quiz.okColor
           : quiz.phase === "wrong" ? quiz.noColor
-          : "#fcfdfd"
+          : "#ebedef"   // a touch dimmer than the white text -- less blinding
         Behavior on color { ColorAnimation { duration: 140 } }
 
         TextField {
