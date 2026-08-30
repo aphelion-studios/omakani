@@ -430,13 +430,15 @@ Item {
           spacing: Style.space(18)
           width: Math.min(parent.width - Style.space(80), Style.space(520))
 
-          Text {
+          Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "OmaKani"
-            color: root.fg
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.displayLarge
-            font.bold: true
+            source: Qt.resolvedUrl("wordmark.svg")
+            height: Style.space(64)
+            fillMode: Image.PreserveAspectFit
+            sourceSize.width: 1893
+            smooth: true
+            mipmap: true
+            width: Math.min(implicitWidth, parent.width)
           }
 
           Text {
