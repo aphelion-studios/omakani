@@ -1020,6 +1020,61 @@ def cmd_audio(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def cmd_preload_audio(args):
+    """Download every pronunciation clip for a batch of subjects into the
+    audio cache, so the first `p` in a session plays instantly. Best-effort:
+    a clip that won't download is skipped. Resolves URLs from the local
+    subject cache, hitting /subjects only for anything not already there."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    ids = [str(int(x)) for x in args.ids
+           if str(x).strip().lstrip("-").isdigit()]
+    if not ids:
+        return {"ok": True, "configured": True, "error": "",
+                "fetched": 0, "cached": 0, "skipped": 0}
+
+    api = Api(token)
+    cache = load_cache("detail")
+    items = dict(cache.get("items") or {}) if cache.get("v") == CACHE_VERSION else {}
+    missing = [i for i in ids if i not in items]
+    if missing:
+        try:
+            fresh, _ = api.collection("/subjects?ids=" + ",".join(missing))
+            for resource in fresh:
+                if resource.get("id") is not None:
+                    items[str(resource["id"])] = resource
+            save_cache("detail", {"v": CACHE_VERSION, "items": items})
+        except ApiError:
+            pass
+
+    fetched = cached = skipped = 0
+    for sid in ids:
+        audios = data_of(items.get(sid)).get("pronunciation_audios") or []
+        if not audios:
+            continue
+        for clip in audios:
+            url = clip.get("url")
+            if not url:
+                continue
+            extension = ".mp3" if clip.get("content_type") == "audio/mpeg" else ".webm"
+            dest = (cache_dir() / "audio"
+                    / (hashlib.sha1(url.encode("utf-8")).hexdigest() + extension))
+            if dest.exists() and dest.stat().st_size > 0:
+                cached += 1
+                continue
+            try:
+                fetch_file(url, dest)
+                fetched += 1
+            except (ApiError, OSError, socket.error):
+                skipped += 1
+
+    return {"ok": True, "configured": True, "error": "",
+            "fetched": fetched, "cached": cached, "skipped": skipped,
+            "requests": api.requests}
+
+
 def cmd_detail(args):
     """Full subject records for the given ids -- mnemonics, readings, audio,
     context sentences, the component graph -- plus the user's own notes and
@@ -1063,6 +1118,22 @@ def cmd_detail(args):
     except ApiError:
         pass
 
+    # the assignment carries the current SRS stage, which the review session
+    # needs to show the "you moved to Guru" transition
+    assignments = {}
+    try:
+        rows, _ = api.collection("/assignments?subject_ids=" + ",".join(ids))
+        for row in rows:
+            data = data_of(row)
+            assignments[str(data.get("subject_id"))] = {
+                "id": row.get("id"),
+                "srs_stage": data.get("srs_stage"),
+                "passed_at": data.get("passed_at"),
+                "burned_at": data.get("burned_at"),
+            }
+    except ApiError:
+        pass
+
     out = {}
     for sid in ids:
         subject = items.get(sid)
@@ -1070,6 +1141,7 @@ def cmd_detail(args):
             continue
         entry = dict(subject)
         entry["study_material"] = notes.get(sid) or {}
+        entry["assignment"] = assignments.get(sid) or {}
         out[sid] = entry
 
     return {"ok": True, "configured": True, "error": "", "subjects": out,
@@ -1273,6 +1345,11 @@ def build_parser():
     audio.add_argument("subject", type=int)
     audio.add_argument("--voice", choices=["kyoko", "kenichi", "random"], default="")
     audio.set_defaults(handler=cmd_audio)
+
+    preload_audio = commands.add_parser(
+        "preload-audio", help="download every clip for a batch of subjects into the cache")
+    preload_audio.add_argument("ids", nargs="+")
+    preload_audio.set_defaults(handler=cmd_preload_audio)
 
     reviews = commands.add_parser("reviews", help="subject ids due for review right now")
     reviews.set_defaults(handler=cmd_reviews)

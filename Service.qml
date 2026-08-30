@@ -229,6 +229,18 @@ Item {
     audioProcess.running = true
   }
 
+  // Warm the audio cache for a whole review / lesson batch so the first p
+  // in the session is instant. Fire-and-forget -- we don't care about output.
+  function preloadAudio(ids) {
+    if (!ready) return
+    var list = (Array.isArray(ids) ? ids : [ids])
+      .map(function (x) { return parseInt(String(x), 10) })
+      .filter(function (x) { return isFinite(x) })
+      .map(function (x) { return String(x) })
+    if (list.length === 0) return
+    Quickshell.execDetached(["python3", helperPath, "preload-audio"].concat(list))
+  }
+
   function applyAudio(raw) {
     var payload = Model.parsePayload(raw)
     if (payload.ok !== true || !payload.path) {

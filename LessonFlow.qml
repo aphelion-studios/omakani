@@ -44,7 +44,10 @@ FocusScope {
     errorText = ids.length === 0 ? "No lessons are waiting right now." : ""
     infoIndex = 0
     startedCount = 0
-    if (service && ids.length > 0) service.loadDetail(ids)
+    if (service && ids.length > 0) {
+      service.loadDetail(ids)
+      service.preloadAudio(ids)   // warm the audio cache for the batch
+    }
     checkReady()
   }
 
