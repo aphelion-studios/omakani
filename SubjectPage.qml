@@ -24,7 +24,11 @@ Item {
   property color kanjiColor: "#f100a1"
   property color vocabColor: "#a100f1"
 
+  // when true (used as the quiz's item-info overlay), f / Esc ask to close
+  property bool overlayMode: false
+
   signal navigate(int subjectId)
+  signal closeRequested()
 
   onSubjectChanged: flick.contentY = 0
 
@@ -110,6 +114,9 @@ Item {
         e.accepted = true
       }
       else if (e.text === "p") { page.playAudio("random"); e.accepted = true }
+      else if (page.overlayMode && (e.text === "f" || e.key === Qt.Key_Escape)) {
+        page.closeRequested(); e.accepted = true
+      }
     }
 
   Flickable {

@@ -300,7 +300,7 @@ FocusScope {
     anchors.right: parent.right
     anchors.topMargin: Style.space(10)
     anchors.rightMargin: Style.space(12)
-    visible: engine.phase === "review" && engine.dryRun
+    visible: engine.phase === "review" && engine.dryRun && !card.infoOpen
     width: dryBadge.implicitWidth + Style.space(16)
     height: Style.space(22)
     radius: Style.space(4)

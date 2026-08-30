@@ -112,9 +112,21 @@ FocusScope {
 
   Keys.onPressed: function (e) {
     if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { submit(); e.accepted = true }
-    else if (phase !== "input" && e.text === "f") { infoOpen = !infoOpen; quiz.infoRequested(); e.accepted = true }
-    else if (phase !== "input" && e.text === "p") { playAudio(); e.accepted = true }
     else if (e.key === Qt.Key_Escape && infoOpen) { infoOpen = false; e.accepted = true }
+  }
+
+  // f / p work once the answer is in -- as window shortcuts so they fire
+  // regardless of which child holds focus. Disabled during input (you're
+  // typing) so they don't eat a literal f / p.
+  Shortcut {
+    sequences: ["f"]
+    enabled: quiz.visible && quiz.phase !== "input" && !quiz.infoOpen
+    onActivated: { quiz.infoOpen = true; quiz.infoRequested() }
+  }
+  Shortcut {
+    sequences: ["p"]
+    enabled: quiz.visible && quiz.phase !== "input"
+    onActivated: quiz.playAudio()
   }
 
   Timer { id: nudgeTimer; interval: 1600; onTriggered: quiz.nudge = "" }
@@ -348,5 +360,43 @@ FocusScope {
         }
       }
     }
+
+    // ---- item info (f) ----
+    Rectangle {
+      anchors.fill: parent
+      visible: quiz.infoOpen
+      color: quiz.pageBg
+      z: 20
+
+      SubjectPage {
+        id: infoPage
+        anchors.fill: parent
+        anchors.topMargin: Style.space(6)
+        overlayMode: true
+        subject: quiz.subject
+        service: quiz.service
+        pageBg: quiz.pageBg
+        fg: quiz.fg
+        fontFamily: quiz.fontFamily
+        jpFamily: quiz.jpFamily
+        radicalColor: quiz.radicalColor
+        kanjiColor: quiz.kanjiColor
+        vocabColor: quiz.vocabColor
+        onVisibleChanged: if (visible) Qt.callLater(focusPage)
+        onCloseRequested: quiz.infoOpen = false
+      }
+
+      Text {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: Style.space(12)
+        text: "f / Esc  close"
+        color: Qt.darker(quiz.fg, 1.5)
+        font.family: quiz.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
   }
+
+  onInfoOpenChanged: if (!infoOpen) Qt.callLater(quiz.forceActiveFocus)
 }
