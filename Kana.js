@@ -85,12 +85,19 @@ function toKana(input) {
     }
 
     // standalone ん -- before end, an apostrophe, another "n", or any
-    // consonant except "y". "nn" consumes just the first n, so "konnichiwa"
-    // -> こんにちわ and "onna" -> おんな.
+    // consonant except "y".
     if (c === "n") {
       var next = i + 1 < s.length ? s.charAt(i + 1) : "";
       if (next === "'") { out += TABLE["n"]; i += 2; continue; }
-      if (next === "" || next === "n" || (!isVowel(next) && next !== "y")) {
+      if (next === "n") {
+        // "nn" is one ん; consume both only if nothing follows (so "onna"
+        // -> おんな keeps the second n for the な-row, but "nn" -> ん).
+        var after = i + 2 < s.length ? s.charAt(i + 2) : "";
+        out += TABLE["n"];
+        i += (after === "") ? 2 : 1;
+        continue;
+      }
+      if (next === "" || (!isVowel(next) && next !== "y")) {
         out += TABLE["n"]; i += 1; continue;
       }
     }
