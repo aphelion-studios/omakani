@@ -27,6 +27,11 @@ Item {
 
   // when true (used as the quiz's item-info overlay), f / Esc ask to close
   property bool overlayMode: false
+  // hearing the word is a peek if you haven't cleared its reading yet
+  property bool audioAllowed: true
+  // apply the review's default folds (context folded); off when drilled into
+  // a linked subject
+  property bool reviewFolds: false
 
   // a review's item info collapses the half you're being tested on (like the
   // website) -- present but folded, so f can't hand you the answer at a
@@ -97,7 +102,7 @@ Item {
   function cardCollapsible() { return overlayMode || collapse !== "" }
   function startFolded(key) {
     if (collapse === key) return true          // anti-cheat: tested half
-    if (overlayMode && key === "context") return true
+    if (reviewFolds && key === "context") return true
     return false
   }
 
@@ -461,7 +466,7 @@ Item {
 
             // audio (vocab only) -- KYOKO / KENICHI, or press p for a random one
             Row {
-              visible: page.hasAudio
+              visible: page.hasAudio && page.audioAllowed
               spacing: Style.space(8)
 
               Repeater {

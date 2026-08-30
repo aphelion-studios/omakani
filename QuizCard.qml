@@ -55,8 +55,40 @@ FocusScope {
   signal advance()
   signal wrapUp()
   signal infoRequested()
+  signal markedCorrect()   // "my answer was actually right" (reviews)
+  signal retried()         // "let me answer that again" (reviews)
+
+  // reviews light up the check / undo tools; lessons don't
+  property bool reviewMode: false
 
   property alias infoPageItem: infoPage
+
+  // drilling into a linked subject (a kanji chip in Composition, etc.) from
+  // the item-info overlay -- a small back stack; Esc pops one, then closes
+  property var _infoStack: []
+  property int _infoPending: 0
+  readonly property var _infoSubject: _infoStack.length > 0
+    ? _infoStack[_infoStack.length - 1] : quiz.subject
+  function _infoDrill(id) {
+    if (!service) return
+    var res = service.subjectDetail(id)
+    if (res) { _infoStack = _infoStack.concat([res]); return }
+    _infoPending = parseInt(String(id), 10)
+    service.loadDetail([id])
+  }
+  function _infoBack() {
+    if (_infoStack.length > 0) _infoStack = _infoStack.slice(0, -1)
+    else infoOpen = false
+  }
+  Connections {
+    target: quiz.service
+    enabled: quiz.service !== null && quiz._infoPending > 0
+    function onDetailReady(ids) {
+      var res = quiz.service.subjectDetail(quiz._infoPending)
+      quiz._infoPending = 0
+      if (res) quiz._infoStack = quiz._infoStack.concat([res])
+    }
+  }
 
   Component.onCompleted: Answer.useKana(Kana)
   onSubjectChanged: reset()
@@ -81,6 +113,7 @@ FocusScope {
     phase = "input"
     nudge = ""
     infoOpen = false
+    _infoStack = []
     field.text = ""
     Qt.callLater(field.forceActiveFocus)
   }
@@ -127,6 +160,27 @@ FocusScope {
       service.playAudio(subject.id, "random")
   }
 
+  function openInfo() {
+    if (phase === "input") return   // no peeking before you answer
+    infoOpen = true
+    infoRequested()
+  }
+  function markCorrect() {
+    if (phase !== "wrong") return
+    phase = "correct"
+    nudge = ""
+    markedCorrect()
+    Qt.callLater(quiz.forceActiveFocus)
+  }
+  function retry() {
+    if (phase === "input") return
+    phase = "input"
+    nudge = ""
+    field.text = ""
+    retried()
+    Qt.callLater(field.forceActiveFocus)
+  }
+
   Keys.onPressed: function (e) {
     if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { submit(); e.accepted = true }
     else if (e.key === Qt.Key_Escape && infoOpen) { infoOpen = false; e.accepted = true }
@@ -138,7 +192,7 @@ FocusScope {
   Shortcut {
     sequences: ["f"]
     enabled: quiz.visible && quiz.phase !== "input" && !quiz.infoOpen
-    onActivated: { quiz.infoOpen = true; quiz.infoRequested() }
+    onActivated: quiz.openInfo()
   }
   Shortcut {
     sequences: ["p"]
@@ -390,43 +444,50 @@ FocusScope {
       font.pixelSize: Style.font.caption
     }
 
-    // ---- toolbar ----
+    // ---- toolbar: grey button row, like the website's ----
     Row {
       anchors.bottom: parent.bottom
       anchors.bottomMargin: Style.space(18)
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(14)
+      spacing: Style.space(2)
 
       Repeater {
         model: [
-          { g: "󰔟", act: "wrap", tip: "Wrap up" },
-          { g: "󰋼", act: "info", tip: "Item info (f)" },
-          { g: "󰕾", act: "audio", tip: "Audio (p)", audio: true }
+          { g: "󰔟", act: "wrap",  show: true,             on: true },
+          { g: "󰄬", act: "check", show: quiz.reviewMode,   on: quiz.phase === "wrong" },
+          { g: "󰈈", act: "info",  show: true,             on: quiz.phase !== "input" },
+          { g: "󰕌", act: "undo",  show: quiz.reviewMode,   on: quiz.phase !== "input" },
+          { g: "󰕾", act: "audio", show: quiz.isVocab,      on: quiz.canAudio }
         ]
         delegate: Rectangle {
-          visible: !modelData.audio || quiz.canAudio
-          width: Style.space(38)
-          height: Style.space(38)
-          radius: width / 2
-          color: tbHover.containsMouse
-            ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.14) : "transparent"
+          visible: modelData.show
+          width: Style.space(58)
+          height: Style.space(34)
+          radius: Style.space(4)
+          readonly property bool on: modelData.on
+          color: !on ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.05)
+            : tbHover.containsMouse ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
+            : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.09)
           border.width: 1
-          border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.2)
+          border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, on ? 0.22 : 0.1)
           Text {
             anchors.centerIn: parent
             text: modelData.g
-            color: quiz.fg
-            font.family: Style.bar.iconFont ? quiz.fontFamily : quiz.fontFamily
+            color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, on ? 0.9 : 0.3)
+            font.family: quiz.fontFamily
             font.pixelSize: Style.font.body
           }
           MouseArea {
             id: tbHover
             anchors.fill: parent
             hoverEnabled: true
+            enabled: parent.on
             cursorShape: Qt.PointingHandCursor
             onClicked: {
               if (modelData.act === "wrap") quiz.wrapUp()
-              else if (modelData.act === "info") { quiz.infoOpen = !quiz.infoOpen; quiz.infoRequested() }
+              else if (modelData.act === "check") quiz.markCorrect()
+              else if (modelData.act === "info") quiz.infoOpen ? quiz.infoOpen = false : quiz.openInfo()
+              else if (modelData.act === "undo") quiz.retry()
               else if (modelData.act === "audio") quiz.playAudio()
             }
           }
@@ -446,17 +507,22 @@ FocusScope {
         anchors.fill: parent
         anchors.topMargin: Style.space(6)
         overlayMode: true
+        // while drilled into a linked subject (a kanji chip, etc.) show it
+        // fully -- the review folds only apply to the item you're on
+        readonly property bool drilled: quiz._infoStack.length > 0
         // in a review, keep the half you're not being tested on folded (like
         // the website: reading review -> meaning folded, meaning review ->
         // reading folded). On a miss, unfold everything and ring the half you
         // got wrong.
-        collapse: !quiz.restrictInfo ? ""
+        reviewFolds: quiz.restrictInfo && !drilled
+        collapse: (!quiz.restrictInfo || drilled) ? ""
           : quiz.phase === "wrong" ? ""
           : quiz.effectiveType === "reading" && !quiz.meaningDone ? "meaning"
           : quiz.effectiveType === "meaning" && !quiz.readingDone ? "reading"
           : ""
-        focusSection: quiz.phase === "wrong" ? quiz.effectiveType : ""
-        subject: quiz.subject
+        focusSection: (quiz.phase === "wrong" && !drilled) ? quiz.effectiveType : ""
+        audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
+        subject: quiz._infoSubject
         service: quiz.service
         pageBg: quiz.pageBg
         fg: quiz.fg
@@ -466,14 +532,17 @@ FocusScope {
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
-        onCloseRequested: quiz.infoOpen = false
+        onNavigate: function (id) { quiz._infoDrill(id) }
+        onCloseRequested: quiz._infoBack()
       }
 
       Text {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: Style.space(12)
-        text: "j / k  section   ·   l / h  open · close   ·   f / Esc  close"
+        text: quiz._infoStack.length > 0
+          ? "Esc  back   ·   j / k  section   ·   l / h  open · close"
+          : "j / k  section   ·   l / h  open · close   ·   f / Esc  close"
         color: Qt.darker(quiz.fg, 1.5)
         font.family: quiz.fontFamily
         font.pixelSize: Style.font.caption
@@ -481,5 +550,7 @@ FocusScope {
     }
   }
 
-  onInfoOpenChanged: if (!infoOpen) Qt.callLater(quiz.forceActiveFocus)
+  onInfoOpenChanged: {
+    if (!infoOpen) { _infoStack = []; Qt.callLater(quiz.forceActiveFocus) }
+  }
 }
