@@ -17,9 +17,9 @@ FocusScope {
   property color fg: Color.foreground
   property string fontFamily: Style.font.family
   property string jpFamily: "Noto Sans CJK JP"
-  property color radicalColor: "#00a1f1"
-  property color kanjiColor: "#f100a1"
-  property color vocabColor: "#a100f1"
+  property color radicalColor: "#01a9fd"
+  property color kanjiColor: "#fc02a9"
+  property color vocabColor: "#a802fd"
   readonly property color okColor: "#93c01f"
 
   signal exit()
@@ -59,6 +59,7 @@ FocusScope {
     correctCount = 0
     built = false
     errorText = ""
+    if (service) service.resetReviewSubmits()
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
       .filter(function (x) { return isFinite(x) })
     if (ids.length === 0) { phase = "error"; errorText = "No reviews are due right now."; return }
@@ -194,7 +195,11 @@ FocusScope {
     if (phase === "ready" || phase === "loading"
         || phase === "summary" || phase === "error")
       Qt.callLater(engine.forceActiveFocus)
+    if (phase === "ready") readyIndex = 1
   }
+
+  // start screen: 0 = the dry-run toggle, 1 = the Start button
+  property int readyIndex: 1
 
   Keys.onPressed: function (e) {
     if ((phase === "summary" || phase === "error")
@@ -203,8 +208,15 @@ FocusScope {
       e.accepted = true
     } else if (phase === "ready") {
       if (e.text === "d" || e.text === "D") { engine.dryRun = !engine.dryRun; e.accepted = true }
-      else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { engine.startRun(); e.accepted = true }
-      else if (e.key === Qt.Key_Escape) { engine.exit(); e.accepted = true }
+      else if (e.key === Qt.Key_Up || e.key === Qt.Key_Left || e.text === "k" || e.text === "h") {
+        engine.readyIndex = 0; e.accepted = true
+      } else if (e.key === Qt.Key_Down || e.key === Qt.Key_Right || e.text === "j" || e.text === "l") {
+        engine.readyIndex = 1; e.accepted = true
+      } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+        if (engine.readyIndex === 0) engine.dryRun = !engine.dryRun
+        else engine.startRun()
+        e.accepted = true
+      } else if (e.key === Qt.Key_Escape) { engine.exit(); e.accepted = true }
       else e.accepted = true   // don't let stray keys leak into the quiz card
     }
   }
@@ -226,7 +238,11 @@ FocusScope {
     sequences: ["Return", "Enter"]
     enabled: engine.visible && (engine.phase === "ready"
       || engine.phase === "summary" || engine.phase === "error")
-    onActivated: engine.phase === "ready" ? engine.startRun() : engine.exit()
+    onActivated: {
+      if (engine.phase !== "ready") { engine.exit(); return }
+      if (engine.readyIndex === 0) engine.dryRun = !engine.dryRun
+      else engine.startRun()
+    }
   }
 
   Rectangle { anchors.fill: parent; color: engine.pageBg }
@@ -276,10 +292,11 @@ FocusScope {
       color: engine.dryRun
         ? Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b, 0.1)
         : Qt.rgba(engine.okColor.r, engine.okColor.g, engine.okColor.b, 0.22)
-      border.width: 1
-      border.color: engine.dryRun
-        ? Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b, 0.28)
-        : engine.okColor
+      border.width: engine.readyIndex === 0 ? 2 : 1
+      border.color: engine.readyIndex === 0 ? engine.fg
+        : engine.dryRun
+          ? Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b, 0.28)
+          : engine.okColor
 
       Row {
         id: dryRow
@@ -311,9 +328,11 @@ FocusScope {
       width: startLbl.implicitWidth + Style.space(44)
       height: Style.space(44)
       radius: Style.space(6)
-      color: Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b, startHover.containsMouse ? 0.2 : 0.12)
-      border.width: 1
-      border.color: Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b, 0.3)
+      color: Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b,
+        (startHover.containsMouse || engine.readyIndex === 1) ? 0.2 : 0.12)
+      border.width: engine.readyIndex === 1 ? 2 : 1
+      border.color: engine.readyIndex === 1
+        ? engine.fg : Qt.rgba(engine.fg.r, engine.fg.g, engine.fg.b, 0.3)
       Text {
         id: startLbl
         anchors.centerIn: parent
@@ -337,7 +356,7 @@ FocusScope {
       width: parent.width
       horizontalAlignment: Text.AlignHCenter
       wrapMode: Text.WordWrap
-      text: "Enter to start   ·   Esc to go back"
+      text: "j / k  move   ·   Enter  select   ·   Esc  go back"
       color: Qt.darker(engine.fg, 1.9)
       font.family: engine.fontFamily
       font.pixelSize: Style.font.caption
@@ -428,7 +447,6 @@ FocusScope {
         Text {
           text: modelData.g
           color: Qt.rgba(1, 1, 1, 0.92)
-          style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.35)
           font.family: engine.fontFamily
           font.pixelSize: Style.font.bodySmall
           anchors.verticalCenter: parent.verticalCenter
@@ -436,7 +454,6 @@ FocusScope {
         Text {
           text: modelData.v
           color: "#ffffff"
-          style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.35)
           font.family: engine.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true
