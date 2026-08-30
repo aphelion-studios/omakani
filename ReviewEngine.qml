@@ -149,15 +149,24 @@ FocusScope {
     }
   }
 
+  // keep keyboard focus on the engine whenever the quiz card isn't the thing
+  // being driven, so the start / summary / error screens catch keys directly
+  onPhaseChanged: {
+    if (phase === "ready" || phase === "loading"
+        || phase === "summary" || phase === "error")
+      Qt.callLater(engine.forceActiveFocus)
+  }
+
   Keys.onPressed: function (e) {
     if ((phase === "summary" || phase === "error")
         && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Escape)) {
       engine.exit()
       e.accepted = true
     } else if (phase === "ready") {
-      if (e.text === "d") { engine.dryRun = !engine.dryRun; e.accepted = true }
+      if (e.text === "d" || e.text === "D") { engine.dryRun = !engine.dryRun; e.accepted = true }
       else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { engine.startRun(); e.accepted = true }
       else if (e.key === Qt.Key_Escape) { engine.exit(); e.accepted = true }
+      else e.accepted = true   // don't let stray keys leak into the quiz card
     }
   }
 
@@ -290,6 +299,9 @@ FocusScope {
     id: card
     anchors.fill: parent
     visible: engine.phase === "review" && engine.currentSubject !== null
+    // never let the (hidden) quiz field hold focus on the start screen --
+    // that's how stray "d" presses ended up typed into the first review
+    enabled: engine.phase === "review"
     service: engine.service
     subject: engine.currentSubject
     studyMaterial: subject && subject.study_material ? subject.study_material : null
