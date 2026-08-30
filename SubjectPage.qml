@@ -35,10 +35,99 @@ Item {
   readonly property bool meaningFolded: collapse === "meaning"
   readonly property bool readingFolded: collapse === "reading"
 
+  // which section the focus ring should land on when the overlay opens --
+  // "" | "meaning" | "reading" (set to the tested half on a wrong answer)
+  property string focusSection: ""
+
   signal navigate(int subjectId)
   signal closeRequested()
 
-  onSubjectChanged: { flick.contentY = 0; Qt.callLater(hydrateLinks) }
+  // ---- section navigation (item-info overlay: j/k move, l/h fold) --------
+  property var navCards: []
+  property int focusIndex: 0
+  // bumped on every subject change so cards drop any manual fold and go back
+  // to their default state
+  property int resetToken: 0
+  function registerCard(c) { var a = navCards.slice(); a.push(c); navCards = a }
+  // visible section cards, top-to-bottom (Component.onCompleted fires
+  // bottom-up, so sort by on-screen position)
+  function visibleNav() {
+    var v = navCards.filter(function (c) { return c && c.visible })
+    v.sort(function (a, b) {
+      return a.mapToItem(body, 0, 0).y - b.mapToItem(body, 0, 0).y
+    })
+    return v
+  }
+  function focusedCard() {
+    var v = visibleNav()
+    if (!v.length) return null
+    return v[Math.max(0, Math.min(focusIndex, v.length - 1))]
+  }
+  // reactive key of the focused section, for the cards' focus-ring binding
+  readonly property string focusedKey: {
+    var _dep = navCards.length + focusIndex + resetToken   // keep it reactive
+    var c = focusedCard()
+    return c ? String(c.navKey) : ""
+  }
+  function scrollToFocused() {
+    var c = focusedCard()
+    if (!c) return
+    var top = c.mapToItem(body, 0, 0).y
+    var bot = top + c.height
+    var pad = Style.space(16)
+    if (top < flick.contentY + pad)
+      flick.contentY = Math.max(0, top - pad)
+    else if (bot > flick.contentY + flick.height - pad)
+      flick.contentY = bot - flick.height + pad
+  }
+  function moveFocus(delta) {
+    var v = visibleNav()
+    if (!v.length) return
+    focusIndex = Math.max(0, Math.min(focusIndex + delta, v.length - 1))
+    Qt.callLater(scrollToFocused)
+  }
+  function foldFocused(open) {
+    var c = focusedCard()
+    if (!c) return
+    if (open) c.expand(); else c.collapse()
+    Qt.callLater(scrollToFocused)
+  }
+  // every section is foldable in the overlay; a plain page only folds the
+  // anti-cheat half during a review
+  function cardCollapsible() { return overlayMode || collapse !== "" }
+  function startFolded(key) {
+    if (collapse === key) return true          // anti-cheat: tested half
+    if (overlayMode && key === "context") return true
+    return false
+  }
+
+  // land the ring on the tested half when the overlay opens after a miss --
+  // once per focusSection value, so j/k can move away afterwards
+  property string _syncedSection: ""
+  onFocusSectionChanged: Qt.callLater(syncFocusToSection)
+  onNavCardsChanged: Qt.callLater(syncFocusToSection)
+  onVisibleChanged: if (visible) Qt.callLater(syncFocusToSection)
+  function syncFocusToSection() {
+    if (!overlayMode || focusSection === "" || focusSection === _syncedSection) return
+    var v = visibleNav()
+    for (var i = 0; i < v.length; i++) {
+      if (String(v[i].navKey) === focusSection) {
+        focusIndex = i
+        _syncedSection = focusSection
+        Qt.callLater(scrollToFocused)
+        return
+      }
+    }
+  }
+
+  onSubjectChanged: {
+    flick.contentY = 0
+    focusIndex = 0
+    _syncedSection = ""
+    resetToken += 1     // cards drop manual folds, back to their defaults
+    Qt.callLater(hydrateLinks)
+    Qt.callLater(syncFocusToSection)
+  }
 
   property bool _hydrating: false
   function hydrateLinks() {
@@ -133,9 +222,24 @@ Item {
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)
-      if (e.text === "j") { page.scrollBy(step); e.accepted = true }
-      else if (e.text === "k") { page.scrollBy(-step); e.accepted = true }
-      else if (e.text === "d") { page.scrollBy(flick.height * 0.5); e.accepted = true }
+      // in the item-info overlay j/k walk the section ring and l/h fold the
+      // focused one; a plain page still scrolls with j/k
+      if (page.overlayMode) {
+        if (e.text === "j") { page.moveFocus(1); e.accepted = true; return }
+        else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
+        else if (e.text === "l") { page.foldFocused(true); e.accepted = true; return }
+        else if (e.text === "h") { page.foldFocused(false); e.accepted = true; return }
+        else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+          var c = page.focusedCard(); if (c) c.toggle(); e.accepted = true; return
+        }
+        else if (e.text === "f" || e.key === Qt.Key_Escape) {
+          page.closeRequested(); e.accepted = true; return
+        }
+      } else {
+        if (e.text === "j") { page.scrollBy(step); e.accepted = true; return }
+        else if (e.text === "k") { page.scrollBy(-step); e.accepted = true; return }
+      }
+      if (e.text === "d") { page.scrollBy(flick.height * 0.5); e.accepted = true }
       else if (e.text === "u") { page.scrollBy(-flick.height * 0.5); e.accepted = true }
       else if (e.text === "g") { flick.contentY = 0; e.accepted = true }
       else if (e.text === "G") { flick.contentY = Math.max(0, flick.contentHeight - flick.height); e.accepted = true }
@@ -143,10 +247,7 @@ Item {
         page.scrollBy((e.modifiers & Qt.ShiftModifier) ? -flick.height * 0.8 : flick.height * 0.8)
         e.accepted = true
       }
-      else if (e.text === "p") { page.playAudio("random"); e.accepted = true }
-      else if (page.overlayMode && (e.text === "f" || e.key === Qt.Key_Escape)) {
-        page.closeRequested(); e.accepted = true
-      }
+      else if (e.text === "p" && !page.overlayMode) { page.playAudio("random"); e.accepted = true }
     }
 
   Flickable {
@@ -216,9 +317,13 @@ Item {
 
         // ---- Meaning ---------------------------------------------------
         SubjectCard {
+          readonly property string navKey: "meaning"
           width: parent.width
-          collapsible: page.collapse !== ""
-          collapsed: page.meaningFolded
+          collapsible: page.cardCollapsible()
+          defaultCollapsed: page.startFolded("meaning")
+          resetToken: page.resetToken
+          navFocused: page.overlayMode && page.focusedKey === navKey
+          Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Name" : "Meaning"
           bg: page.cardBg
 
@@ -310,11 +415,15 @@ Item {
 
         // ---- Reading -------------------------------------------------
         SubjectCard {
+          readonly property string navKey: "reading"
           width: parent.width
           visible: page.kind === "kanji" || page.kind === "vocabulary"
             || page.kind === "kana_vocabulary"
-          collapsible: page.collapse !== ""
-          collapsed: page.readingFolded
+          collapsible: page.cardCollapsible()
+          defaultCollapsed: page.startFolded("reading")
+          resetToken: page.resetToken
+          navFocused: page.overlayMode && page.focusedKey === navKey
+          Component.onCompleted: page.registerCard(this)
           title: "Reading"
           bg: page.cardBg
 
@@ -444,10 +553,14 @@ Item {
 
         // ---- Context ------------------------------------------------
         SubjectCard {
+          readonly property string navKey: "context"
           width: parent.width
           visible: (page.sd.context_sentences || []).length > 0
-          collapsible: page.collapse !== ""
-          collapsed: page.collapse !== ""
+          collapsible: page.cardCollapsible()
+          defaultCollapsed: page.startFolded("context")
+          resetToken: page.resetToken
+          navFocused: page.overlayMode && page.focusedKey === navKey
+          Component.onCompleted: page.registerCard(this)
           title: "Context"
           bg: page.cardBg
 
@@ -483,8 +596,14 @@ Item {
 
         // ---- Composition ------------------------------------------
         SubjectCard {
+          readonly property string navKey: "composition"
           width: parent.width
           visible: (page.sd.component_subject_ids || []).length > 0
+          collapsible: page.cardCollapsible()
+          defaultCollapsed: page.startFolded("composition")
+          resetToken: page.resetToken
+          navFocused: page.overlayMode && page.focusedKey === navKey
+          Component.onCompleted: page.registerCard(this)
           title: page.kind === "kanji" ? "Radical Combination" : "Kanji Composition"
           bg: page.cardBg
 
@@ -510,8 +629,14 @@ Item {
 
         // ---- Found In --------------------------------------------
         SubjectCard {
+          readonly property string navKey: "foundin"
           width: parent.width
           visible: (page.sd.amalgamation_subject_ids || []).length > 0
+          collapsible: page.cardCollapsible()
+          defaultCollapsed: page.startFolded("foundin")
+          resetToken: page.resetToken
+          navFocused: page.overlayMode && page.focusedKey === navKey
+          Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Found In Kanji" : "Found In Vocabulary"
           bg: page.cardBg
 
@@ -537,8 +662,14 @@ Item {
 
         // ---- Visually Similar ------------------------------------
         SubjectCard {
+          readonly property string navKey: "similar"
           width: parent.width
           visible: (page.sd.visually_similar_subject_ids || []).length > 0
+          collapsible: page.cardCollapsible()
+          defaultCollapsed: page.startFolded("similar")
+          resetToken: page.resetToken
+          navFocused: page.overlayMode && page.focusedKey === navKey
+          Component.onCompleted: page.registerCard(this)
           title: "Visually Similar Kanji"
           bg: page.cardBg
 

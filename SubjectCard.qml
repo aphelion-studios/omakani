@@ -4,20 +4,35 @@ import qs.Commons
 // A titled card on a subject page: uppercase section label above whatever
 // content is nested inside it. When `collapsible`, the title row toggles the
 // content -- a review's item info folds the half you're being tested on so
-// it can't hand you the answer at a glance, but you can still open it.
+// it can't hand you the answer at a glance, but you can still open it. In the
+// item-info overlay j/k move a focus ring between cards and h/l fold them.
 Rectangle {
   id: card
 
   property string title: ""
   property color bg: Color.background
   property bool collapsible: false
-  property bool collapsed: false
-  default property alias content: contentHolder.children
+  property bool navFocused: false
 
+  // the parent's reactive default (anti-cheat, section type, ...); a user
+  // fold overrides it until `resetToken` changes (e.g. the next subject)
+  property bool defaultCollapsed: false
+  property int resetToken: 0
+  property var _userState: undefined
+  readonly property bool collapsed: _userState === undefined ? defaultCollapsed : _userState
+  onResetTokenChanged: _userState = undefined
+
+  default property alias content: contentHolder.children
   readonly property bool folded: collapsible && collapsed
+
+  function expand() { if (collapsible) _userState = false }
+  function collapse() { if (collapsible) _userState = true }
+  function toggle() { if (collapsible) _userState = !collapsed }
 
   color: bg
   radius: Style.space(6)
+  border.width: navFocused ? 2 : 0
+  border.color: navFocused ? Qt.rgba(1, 1, 1, 0.85) : "transparent"
   implicitHeight: folded
     ? headRow.implicitHeight + Style.space(28)
     : headRow.implicitHeight + Style.space(10) + inner.implicitHeight + Style.space(32)
@@ -53,14 +68,6 @@ Rectangle {
         font.bold: true
         font.letterSpacing: 1
       }
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        visible: card.folded
-        text: "— tap to reveal"
-        color: Qt.darker(Color.foreground, 2.1)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.caption
-      }
     }
 
     MouseArea {
@@ -68,7 +75,7 @@ Rectangle {
       anchors.margins: -Style.space(8)
       enabled: card.collapsible
       cursorShape: Qt.PointingHandCursor
-      onClicked: card.collapsed = !card.collapsed
+      onClicked: card.toggle()
     }
   }
 
