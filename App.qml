@@ -56,6 +56,7 @@ Item {
     if (!opened) return
     if (view === "browse") levelBrowser.focusGrid()
     else if (view === "subject") subjectPage.focusPage()
+    else if (view === "quiz") quizCard.forceActiveFocus()
     else focusScope.forceActiveFocus()
   }
 
@@ -88,6 +89,15 @@ Item {
     var n = parseInt(String(id), 10)
     if (!isFinite(n)) return
     pushPage({ view: "subject", id: n })
+    if (root.service) root.service.loadDetail([n])
+  }
+
+  // A single-prompt quiz for one subject -- the primitive the lesson flow
+  // and review engine drive. `type` is "meaning" | "reading".
+  function goQuiz(id, type) {
+    var n = parseInt(String(id), 10)
+    if (!isFinite(n)) return
+    pushPage({ view: "quiz", id: n, quizType: type === "reading" ? "reading" : "meaning" })
     if (root.service) root.service.loadDetail([n])
   }
 
@@ -146,6 +156,16 @@ Item {
       root.open("")
       root.resetNav()
       root.goSubject(parseInt(id, 10))
+    }
+    function quiz(id: string, type: string): void {
+      root.open("")
+      root.resetNav()
+      root.goQuiz(parseInt(id, 10), type)
+    }
+    function qanswer(text: string): string {
+      if (root.view !== "quiz") return "not in a quiz"
+      quizCard.typeAndSubmit(text)
+      return quizCard.phase + (quizCard.nudge ? " (" + quizCard.nudge + ")" : "")
     }
     function state(): string {
       return JSON.stringify({
@@ -436,6 +456,38 @@ Item {
           visible: root.view === "subject" && !subjectPage.subject
           text: (root.service && root.service.detailError)
             ? root.service.detailError : "Loading subject…"
+          color: Qt.darker(root.fg, 1.5)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+        }
+
+        // -------------------------------------------------- QUIZ (primitive)
+        QuizCard {
+          id: quizCard
+          visible: root.view === "quiz"
+          anchors.fill: parent
+          service: root.service
+          subject: (root.view === "quiz" && root.service)
+            ? root.service.subjectDetail(root.currentPage.id) : null
+          studyMaterial: subject && subject.study_material ? subject.study_material : null
+          questionType: root.view === "quiz" ? root.currentPage.quizType : "meaning"
+          pageBg: root.bg
+          fg: root.fg
+          fontFamily: root.fontFamily
+          jpFamily: root.jpFamily
+          radicalColor: root.radicalColor
+          kanjiColor: root.kanjiColor
+          vocabColor: root.vocabColor
+          onAdvance: root.popPage()
+          onWrapUp: root.popPage()
+          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+        }
+
+        Text {
+          anchors.centerIn: parent
+          visible: root.view === "quiz" && !quizCard.subject
+          text: (root.service && root.service.detailError)
+            ? root.service.detailError : "Loading…"
           color: Qt.darker(root.fg, 1.5)
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
