@@ -265,8 +265,9 @@ Panel {
   function scrollToCursor() {
     var it = cursorItem
     if (!it || !it.visible || !panelFlick) return
-    // At the very first target, show the whole header above it.
-    if (navSecAt(navSection) === 0 && navIndex === 0) {
+    // Anywhere in the first section (the Start buttons), show the whole
+    // header/wordmark above it.
+    if (navSecAt(navSection) === 0) {
       panelFlick.contentY = 0
       return
     }
@@ -1226,9 +1227,9 @@ Panel {
             ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
             : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08))
       // a clear ring on hover / keyboard focus, for both button styles
-      border.width: lit ? 2 : (cc.active ? 0 : 1)
+      border.width: lit ? 3 : (cc.active ? 0 : 1)
       border.color: lit
-        ? root.foreground
+        ? (cc.active ? "#fcfdfd" : root.foreground)
         : (cc.active
             ? "transparent"
             : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22))
