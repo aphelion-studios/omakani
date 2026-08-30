@@ -1,14 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 13 60 79">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 20 72 79">
   <!--
-    The alligator head from WaniKani's wordmark, pared down to the silhouette and
-    eyes so it still reads at bar size. Eyes are knock-outs via fill-rule, so the
-    bar can recolour the whole mark. The viewBox hugs the head so it doesn't
-    carry its own padding into the bar. WaniKani and the Crabigator are
-    trademarks of Tofugu LLC; used here only to identify the service.
+    The Crabigator's head from WaniKani's wordmark, pared down for bar size:
+    the domed head with its two horn bumps, round eyes, the barred mouth, and a
+    hint of the tentacles dripping off the jaw. Eyes and mouth are knock-outs
+    (fill-rule evenodd) so the bar recolours the whole mark to the theme.
+    WaniKani and the Crabigator are trademarks of Tofugu LLC; used here only to
+    identify the service.
   -->
   <path fill="#ffffff" fill-rule="evenodd" d="
-    M24,74 L24,36 C24,24 31,17 40,17 C46,17 49,22 50,24 C51,22 54,17 60,17 C69,17 76,24 76,36 L76,74 C76,83 66,88 50,88 C34,88 24,83 24,74 Z
-    M35,42 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
-    M51,42 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 Z
+    M 26 40
+    C 26 26 33 20 41 22
+    C 46 23 49 28 51 32
+    C 53 26 56 22 60 22
+    C 64 22 67 26 69 32
+    C 71 28 74 23 79 22
+    C 87 20 94 26 94 40
+    L 94 60
+    C 94 69 89 76 80 79
+    C 85 84 87 91 83 96
+    C 81 99 77 98 76 94
+    C 74 88 76 82 79 78
+    C 73 81 67 82 60 82
+    C 53 82 47 81 41 78
+    C 44 82 46 88 44 94
+    C 43 98 39 99 37 96
+    C 33 91 35 84 40 79
+    C 31 76 26 69 26 60
+    Z
+    M 39 46 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z
+    M 65 46 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0 Z
+    M 45 60 h 30 v 4.5 h -30 Z
+    M 45 68 h 30 v 4.5 h -30 Z
   "/>
 </svg>

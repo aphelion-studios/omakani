@@ -36,6 +36,11 @@ Panel {
   // WaniKani's review-forecast green, for the Upcoming Reviews bars and deltas.
   readonly property color forecastColor: "#93c01f"
 
+  // The wordmark's own brand colours -- used only for the "WANI KANI" lockup at
+  // the top of the dashboard, which keeps its identity on every theme.
+  readonly property color brandPink: "#eb187f"
+  readonly property color brandBlue: "#2668e4"
+
   function typeColor(type) {
     if (type === "radical" || type === "radicals") return radicalColor
     if (type === "kanji") return kanjiColor
@@ -470,7 +475,7 @@ Panel {
     // `size` is the mark's height; the alligator head is taller than it is wide,
     // so the box it occupies is narrower and the bar keeps its neighbours close.
     property real size: root.barMarkHeight
-    readonly property real aspect: 0.78
+    readonly property real aspect: 0.92
     property color tint: root.foreground
     implicitWidth: Math.round(size * aspect)
     implicitHeight: size
@@ -494,6 +499,52 @@ Panel {
     }
   }
 
+  // The "WANI KANI" lockup for the top of the dashboard: pink wordmark with
+  // the blue Crabigator head, ringed, in the middle. Fixed brand colours on a
+  // transparent ground, so it looks right on any theme.
+  component Wordmark: Row {
+    id: wm
+    property real h: Style.space(30)
+    spacing: Math.round(h * 0.14)
+
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      text: "WANI"
+      color: root.brandPink
+      font.family: root.fontFamily
+      font.pixelSize: Math.round(wm.h * 0.64)
+      font.bold: true
+    }
+
+    Item {
+      width: wm.h
+      height: wm.h
+      anchors.verticalCenter: parent.verticalCenter
+
+      Rectangle {
+        anchors.fill: parent
+        radius: width / 2
+        color: "transparent"
+        border.width: Math.max(1, Math.round(wm.h * 0.055))
+        border.color: root.brandBlue
+      }
+      Mark {
+        anchors.centerIn: parent
+        size: Math.round(wm.h * 0.6)
+        tint: root.brandBlue
+      }
+    }
+
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      text: "KANI"
+      color: root.brandPink
+      font.family: root.fontFamily
+      font.pixelSize: Math.round(wm.h * 0.64)
+      font.bold: true
+    }
+  }
+
   // ---- bar button ---------------------------------------------------------
 
   WidgetButton {
@@ -504,7 +555,7 @@ Panel {
     // is the child below, and labelVisible is off.
     text: "wanikani"
     labelVisible: false
-    fixedWidth: Math.round(root.barMarkHeight * 0.78) + Style.space(10)
+    fixedWidth: Math.round(root.barMarkHeight * 0.92) + Style.space(10)
     tooltipText: Model.barTooltip(wk.view, clock.date)
     onPressed: function(pressedButton) {
       if (pressedButton === Qt.MiddleButton) wk.refresh()
@@ -564,30 +615,29 @@ Panel {
           width: panelFlick.width
           spacing: Style.space(12)
 
-          PanelHero {
-            id: hero
+          Column {
             width: parent.width
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            title: wk.configured
-              ? Model.plural(wk.reviewsNow, "review", "reviews")
-              : "Connect WaniKani"
-            meta: {
-              if (!wk.configured) return "read-only API token"
-              if (wk.vacation) return "vacation mode"
-              if (wk.reviewsNow > 0)
-                return wk.lessonsNow > 0
-                  ? "ready now  ·  " + Model.plural(wk.lessonsNow, "lesson", "lessons")
-                  : "ready now"
-              var rel = Model.relativeTime(wk.nextReviewsAt, clock.date)
-              return rel === "" ? "all caught up" : "next review " + rel
+            spacing: Style.space(4)
+            topPadding: Style.space(2)
+
+            Wordmark {
+              anchors.horizontalCenter: parent.horizontalCenter
+              h: Style.space(30)
             }
-            iconOpacity: wk.configured && !root.anythingDue ? 0.5 : 1.0
-            iconComponent: Component {
-              Mark {
-                size: Style.font.displayLarge
-                tint: root.markActive ? root.accent : root.foreground
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              visible: text !== ""
+              text: {
+                if (!wk.configured) return "paste a read-only API token below"
+                if (wk.vacation) return "vacation mode"
+                if (root.anythingDue) return ""
+                var rel = Model.relativeTime(wk.nextReviewsAt, clock.date)
+                return rel === "" ? "all caught up" : "next review " + rel
               }
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
           }
 

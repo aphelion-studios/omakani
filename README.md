@@ -2,11 +2,12 @@
 
 A [WaniKani](https://www.wanikani.com/) cockpit for the [Omarchy](https://omarchy.org/) bar.
 
-A quiet alligator-head mark sits in the bar and takes the accent colour when
+A quiet Crabigator-head mark sits in the bar and takes the accent colour when
 reviews (or lessons) are waiting. Click it for a dashboard drop-down that
-mirrors the website: reviews and lessons due, an Upcoming Reviews forecast you
-can drill into hour by hour, Level Progress, Item Spread, Critical Condition,
-recent unlocks and burns, and the Extra Study counts. Fully keyboard-driven.
+mirrors the website: the Lessons / Reviews counts with Start buttons, an
+Upcoming Reviews forecast you can drill into hour by hour, Level Progress, Item
+Spread, Critical Condition, recent unlocks and burns, and the Extra Study
+counts. Fully keyboard-driven.
 
 Desktop notifications for reviews piling up, new lessons, level-ups and burns.
 
