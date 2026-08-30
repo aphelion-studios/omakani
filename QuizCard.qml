@@ -145,6 +145,13 @@ FocusScope {
     enabled: quiz.visible && quiz.phase !== "input" && quiz.canAudio
     onActivated: quiz.playAudio()
   }
+  // Enter advances from a settled card even if focus drifted (e.g. just
+  // closed item info); during input the field's own Enter handles submit
+  Shortcut {
+    sequences: ["Return", "Enter"]
+    enabled: quiz.visible && quiz.phase !== "input" && !quiz.infoOpen
+    onActivated: quiz.submit()
+  }
 
   Timer { id: nudgeTimer; interval: 1600; onTriggered: quiz.nudge = "" }
 
@@ -439,10 +446,12 @@ FocusScope {
         anchors.fill: parent
         anchors.topMargin: Style.space(6)
         overlayMode: true
-        // before you answer, fold the half you're being tested on so f can't
-        // hand it to you; once you've answered (right or wrong) nothing hides,
-        // and on a miss the ring lands on the half you got wrong, opened
-        collapse: (!quiz.restrictInfo || quiz.phase !== "input") ? ""
+        // in a review, keep the half you're not being tested on folded (like
+        // the website: reading review -> meaning folded, meaning review ->
+        // reading folded). On a miss, unfold everything and ring the half you
+        // got wrong.
+        collapse: !quiz.restrictInfo ? ""
+          : quiz.phase === "wrong" ? ""
           : quiz.effectiveType === "reading" && !quiz.meaningDone ? "meaning"
           : quiz.effectiveType === "meaning" && !quiz.readingDone ? "reading"
           : ""
