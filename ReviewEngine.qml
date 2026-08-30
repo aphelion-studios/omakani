@@ -62,7 +62,10 @@ FocusScope {
     if (ids.length === 0) { phase = "error"; errorText = "No reviews are due right now."; return }
     totalSubjects = ids.length
     phase = "loading"
-    if (service) service.loadDetail(ids.slice(0, 100))
+    if (service) {
+      service.loadDetail(ids.slice(0, 100))
+      service.preloadAudio(ids)   // warm the audio cache for the whole batch
+    }
     tryBuild()
   }
 
@@ -97,6 +100,25 @@ FocusScope {
     return rec && rec.mOK && (!rec.needsR || rec.rOK)
   }
 
+  // the "→ Guru" / "↓ Apprentice" chip shown as a subject finishes. In a dry
+  // run WaniKani isn't consulted, so the new stage is computed the same way
+  // it does: pass -> +1, miss -> current - ceil(misses/2) * (2 at Guru+, else 1)
+  property var pill: null
+  function srsName(stage) {
+    if (stage <= 0) return "Lesson"
+    if (stage <= 4) return "Apprentice"
+    if (stage <= 6) return "Guru"
+    if (stage === 7) return "Master"
+    if (stage === 8) return "Enlightened"
+    return "Burned"
+  }
+  function nextStage(cur, misses) {
+    if (misses <= 0) return Math.min(9, cur + 1)
+    var adj = Math.ceil(misses / 2)
+    var penalty = cur >= 5 ? 2 : 1
+    return Math.max(1, cur - adj * penalty)
+  }
+
   function onAnswered(correct) {
     if (!current) return
     var id = current.id
@@ -111,6 +133,12 @@ FocusScope {
       if (subjectComplete(rec) && !rec.sent) {
         rec.sent = true
         submittedCount += 1
+        var s = engine.currentSubject
+        var cur = (s && s.assignment && isFinite(s.assignment.srs_stage))
+          ? s.assignment.srs_stage : 0
+        var misses = (rec.mWrong || 0) + (rec.rWrong || 0)
+        var ns = engine.nextStage(cur, misses)
+        engine.pill = { text: engine.srsName(ns), pass: misses === 0, up: ns > cur }
         if (service)
           service.submitReview(id, rec.mWrong, rec.rWrong, engine.dryRun)
       }
@@ -127,6 +155,7 @@ FocusScope {
   }
 
   function onAdvance() {
+    engine.pill = null
     // skip any queued questions for a subject that's already complete
     var next = pos + 1
     while (next < queue.length && subjectComplete(items[queue[next].id])) next += 1
@@ -313,6 +342,7 @@ FocusScope {
       ? engine.items[engine.current.id].mOK === true : false
     readingDone: engine.current && engine.items[engine.current.id]
       ? engine.items[engine.current.id].rOK === true : false
+    srsPill: engine.pill
     pageBg: engine.pageBg
     fg: engine.fg
     fontFamily: engine.fontFamily
@@ -326,18 +356,18 @@ FocusScope {
     onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
   }
 
-  // dry-run badge over the quiz
+  // dry-run badge over the quiz (top-left, out of the way of the counts)
   Rectangle {
     anchors.top: parent.top
-    anchors.right: parent.right
+    anchors.left: parent.left
     anchors.topMargin: Style.space(10)
-    anchors.rightMargin: Style.space(12)
+    anchors.leftMargin: Style.space(12)
     visible: engine.phase === "review" && engine.dryRun && !card.infoOpen
     width: dryBadge.implicitWidth + Style.space(16)
     height: Style.space(22)
     radius: Style.space(4)
     color: Qt.rgba(0, 0, 0, 0.5)
-    z: 5
+    z: 6
     Text {
       id: dryBadge
       anchors.centerIn: parent
@@ -347,6 +377,28 @@ FocusScope {
       font.pixelSize: Style.font.caption
       font.bold: true
     }
+  }
+
+  // session counts, top-right: accuracy · done · remaining (like the website)
+  Text {
+    anchors.top: parent.top
+    anchors.right: parent.right
+    anchors.topMargin: Style.space(12)
+    anchors.rightMargin: Style.space(16)
+    visible: engine.phase === "review" && !card.infoOpen
+    z: 6
+    text: {
+      var acc = engine.answerCount > 0
+        ? Math.round(100 * engine.correctCount / engine.answerCount) : 100
+      var left = Math.max(0, engine.totalSubjects - engine.submittedCount)
+      return acc + "%   ·   " + engine.submittedCount + " done   ·   " + left + " left"
+    }
+    color: "#ffffff"
+    style: Text.Outline
+    styleColor: Qt.rgba(0, 0, 0, 0.35)
+    font.family: engine.fontFamily
+    font.pixelSize: Style.font.bodySmall
+    font.bold: true
   }
 
   // ---- summary / error ----
