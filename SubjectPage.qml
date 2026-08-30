@@ -82,6 +82,12 @@ Item {
 
   function focusPage() { keys.forceActiveFocus() }
 
+  readonly property bool hasAudio: kind === "vocabulary" || kind === "kana_vocabulary"
+  function playAudio(voice) {
+    if (service && hasAudio && subject && subject.id)
+      service.playAudio(subject.id, voice || "random")
+  }
+
   function scrollBy(dy) {
     var max = Math.max(0, flick.contentHeight - flick.height)
     flick.contentY = Math.max(0, Math.min(max, flick.contentY + dy))
@@ -103,6 +109,7 @@ Item {
         page.scrollBy((e.modifiers & Qt.ShiftModifier) ? -flick.height * 0.8 : flick.height * 0.8)
         e.accepted = true
       }
+      else if (e.text === "p") { page.playAudio("random"); e.accepted = true }
     }
 
   Flickable {
@@ -262,6 +269,7 @@ Item {
         SubjectCard {
           width: parent.width
           visible: page.kind === "kanji" || page.kind === "vocabulary"
+            || page.kind === "kana_vocabulary"
           title: "Reading"
           bg: page.cardBg
 
@@ -294,6 +302,54 @@ Item {
                     font.pixelSize: Style.font.caption
                   }
                 }
+              }
+            }
+
+            // audio (vocab only) -- KYOKO / KENICHI, or press p for a random one
+            Row {
+              visible: page.hasAudio
+              spacing: Style.space(8)
+
+              Repeater {
+                model: [
+                  { label: "▶  KYOKO", voice: "kyoko" },
+                  { label: "▶  KENICHI", voice: "kenichi" }
+                ]
+                delegate: Rectangle {
+                  width: audioLabel.implicitWidth + Style.space(20)
+                  height: Style.space(30)
+                  radius: Style.space(5)
+                  color: Qt.rgba(page.vocabColor.r, page.vocabColor.g, page.vocabColor.b,
+                    audioHover.containsMouse ? 0.3 : 0.16)
+                  border.width: 1
+                  border.color: Qt.rgba(page.vocabColor.r, page.vocabColor.g, page.vocabColor.b, 0.45)
+
+                  Text {
+                    id: audioLabel
+                    anchors.centerIn: parent
+                    text: modelData.label
+                    color: page.fg
+                    font.family: page.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+                  MouseArea {
+                    id: audioHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: page.playAudio(modelData.voice)
+                  }
+                }
+              }
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: (page.service && page.service.audioError !== "")
+                  ? page.service.audioError : "or press  p"
+                color: page.faint
+                font.family: page.fontFamily
+                font.pixelSize: Style.font.caption
               }
             }
 

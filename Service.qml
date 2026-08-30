@@ -78,8 +78,15 @@ Item {
   property string browseError: ""
   property string detailError: ""
 
+  // Pronunciation audio: the helper caches the clip and hands back a path,
+  // then we hand that to mpv. `audioError` surfaces "no audio for this one".
+  readonly property bool audioBusy: audioProcess.running
+  property string audioError: ""
+  property string lastVoiceActor: ""
+
   signal browseReady(int level)
   signal detailReady(var ids)
+  signal audioPlayed(string voiceActor)
 
   signal tokenRejected(string message)
 
@@ -186,6 +193,30 @@ Item {
   function subjectDetail(id) {
     var key = String(parseInt(String(id), 10))
     return detailCache[key] || null
+  }
+
+  // Play a subject's pronunciation. `voice` is "kyoko" | "kenichi" | "random"
+  // | "" (any). The helper downloads + caches the clip; we play it with mpv.
+  function playAudio(id, voice) {
+    var n = parseInt(String(id), 10)
+    if (!ready || audioProcess.running || !isFinite(n)) return
+    audioError = ""
+    var cmd = ["python3", helperPath, "audio", String(n)]
+    if (voice && voice !== "") cmd.push("--voice", String(voice))
+    audioProcess.command = cmd
+    audioProcess.running = true
+  }
+
+  function applyAudio(raw) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok !== true || !payload.path) {
+      audioError = String(payload.error || "No audio for that subject")
+      return
+    }
+    lastVoiceActor = String(payload.voiceActor || "")
+    Quickshell.execDetached(["mpv", "--no-video", "--no-terminal",
+                             "--really-quiet", String(payload.path)])
+    audioPlayed(lastVoiceActor)
   }
 
   function applyBrowse(raw) {
@@ -343,6 +374,21 @@ Item {
         return
       }
       root.applyDetail(detailOut.text, detailProcess.pending)
+    }
+  }
+
+  Process {
+    id: audioProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: audioOut; waitForEnd: true }
+    stderr: StdioCollector { id: audioErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.audioError = root.helperFailure(audioErr.text, exitCode)
+        return
+      }
+      root.applyAudio(audioOut.text)
     }
   }
 

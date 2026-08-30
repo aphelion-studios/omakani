@@ -28,6 +28,7 @@ Usable by hand while developing the plugin::
 from __future__ import annotations
 
 import argparse
+import hashlib
 import http.client
 import json
 import math
@@ -867,6 +868,104 @@ def cmd_browse(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def fetch_file(url, dest):
+    """Download a public file (a pronunciation-audio clip) straight to `dest`.
+    files.wanikani.com is a plain CloudFront/S3 origin -- no auth, no redirects,
+    so a single GET is enough. Written atomically."""
+    parsed = urllib.parse.urlparse(url)
+    context = ssl.create_default_context()
+    connection = http.client.HTTPSConnection(
+        parsed.netloc, 443, timeout=TIMEOUT, context=context)
+    try:
+        target = parsed.path + (("?" + parsed.query) if parsed.query else "")
+        connection.request("GET", target, headers={"User-Agent": USER_AGENT})
+        response = connection.getresponse()
+        blob = response.read()
+        if response.status != 200:
+            raise ApiError("audio download failed (HTTP %d)" % response.status,
+                           response.status)
+    finally:
+        connection.close()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    temporary = dest.with_name(dest.name + ".tmp")
+    with open(temporary, "wb") as handle:
+        handle.write(blob)
+    os.replace(temporary, dest)
+
+
+def audio_pool(audios, voice):
+    """A subject's `pronunciation_audios`, ordered best-first for `voice`
+    ('kyoko' / 'kenichi' / 'random' / '' = any), mp3 ahead of webm."""
+    want = (voice or "").lower()
+    named = [a for a in audios if (a.get("metadata") or {}).get("voice_actor_name")]
+    if want == "random" and named:
+        import random
+        actors = sorted({(a["metadata"]["voice_actor_name"]) for a in named})
+        want = random.choice(actors).lower()
+
+    def score(clip):
+        meta = clip.get("metadata") or {}
+        actor = str(meta.get("voice_actor_name") or "").lower()
+        voice_miss = 0 if (not want or actor == want) else 1
+        format_rank = 0 if clip.get("content_type") == "audio/mpeg" else 1
+        return (voice_miss, format_rank)
+
+    return sorted(audios, key=score)
+
+
+def cmd_audio(args):
+    """Local file path for a subject's pronunciation audio, downloading and
+    caching it under cache/audio/ (keyed by URL) on first use. Vocabulary
+    only -- radicals and kanji carry no audio."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    try:
+        sid = str(int(args.subject))
+    except (TypeError, ValueError):
+        payload = base_summary()
+        payload["ok"] = False
+        payload["error"] = "audio needs a numeric subject id"
+        return payload
+
+    api = Api(token)
+    cache = load_cache("detail")
+    items = dict(cache.get("items") or {}) if cache.get("v") == CACHE_VERSION else {}
+    subject = items.get(sid)
+    if not subject:
+        fresh, _ = api.collection("/subjects?ids=" + sid)
+        for resource in fresh:
+            if resource.get("id") is not None:
+                items[str(resource["id"])] = resource
+        save_cache("detail", {"v": CACHE_VERSION, "items": items})
+        subject = items.get(sid)
+
+    audios = data_of(subject).get("pronunciation_audios") or []
+    if not audios:
+        payload = base_summary()
+        payload["ok"] = False
+        payload["configured"] = True
+        payload["error"] = "no pronunciation audio for that subject"
+        return payload
+
+    chosen = audio_pool(audios, getattr(args, "voice", ""))[0]
+    url = chosen["url"]
+    extension = ".mp3" if chosen.get("content_type") == "audio/mpeg" else ".webm"
+    dest = (cache_dir() / "audio"
+            / (hashlib.sha1(url.encode("utf-8")).hexdigest() + extension))
+    if not dest.exists() or dest.stat().st_size == 0:
+        fetch_file(url, dest)
+
+    meta = chosen.get("metadata") or {}
+    return {"ok": True, "configured": True, "error": "",
+            "path": str(dest), "url": url,
+            "voiceActor": meta.get("voice_actor_name") or "",
+            "gender": meta.get("gender") or "",
+            "contentType": chosen.get("content_type") or "",
+            "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
 def cmd_detail(args):
     """Full subject records for the given ids -- mnemonics, readings, audio,
     context sentences, the component graph -- plus the user's own notes and
@@ -948,6 +1047,11 @@ def build_parser():
     detail = commands.add_parser("detail", help="full records for the given subject ids")
     detail.add_argument("ids", nargs="+")
     detail.set_defaults(handler=cmd_detail)
+
+    audio = commands.add_parser("audio", help="cache a subject's pronunciation audio, print its path")
+    audio.add_argument("subject", type=int)
+    audio.add_argument("--voice", choices=["kyoko", "kenichi", "random"], default="")
+    audio.set_defaults(handler=cmd_audio)
 
     clear_token = commands.add_parser("clear-token", help="forget the stored API token")
     clear_token.set_defaults(handler=cmd_clear_token)
