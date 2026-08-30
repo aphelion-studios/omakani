@@ -88,7 +88,12 @@ Item {
     else if (view === "session") quizSession.forceActiveFocus()
     else if (view === "review") reviewEngine.forceActiveFocus()
     else if (view === "lesson") lessonFlow.forceActiveFocus()
-    else focusScope.forceActiveFocus()
+    else {
+      // home -- a just-hidden child FocusScope can still be holding it, so
+      // reclaim on the next tick too
+      focusScope.forceActiveFocus()
+      Qt.callLater(function () { if (root.view === "home") focusScope.forceActiveFocus() })
+    }
   }
 
   function pushPage(page) {
@@ -509,7 +514,9 @@ Item {
           }
 
           // Start Lessons / Start Reviews (when waiting) + Browse subjects.
-          // j/k/h/l or arrows move the cursor, Enter activates.
+          // j/k/h/l or arrows move the cursor, Enter activates. The "loud"
+          // ones are styled like the dashboard's Start buttons -- accent
+          // fill, focus ring, breathing pulse.
           Column {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: Style.space(10)
@@ -518,29 +525,46 @@ Item {
             Repeater {
               model: root.homeActions
               delegate: Rectangle {
+                id: homeBtn
                 anchors.horizontalCenter: parent.horizontalCenter
                 readonly property bool current: index === root.homeIndex
                 readonly property bool lit: current || homeHover.containsMouse
-                width: homeLabel.implicitWidth + Style.space(48)
+                readonly property bool loud: modelData.loud
+                width: homeLabel.implicitWidth + Style.space(52)
                 height: Style.space(42)
                 radius: Style.space(6)
-                color: modelData.loud
-                  ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, lit ? 0.28 : 0.14)
+                clip: true
+                color: loud
+                  ? (lit ? Qt.lighter(root.accent, 1.3) : root.accent)
                   : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.16 : 0.08)
-                border.width: current ? 2 : 1
-                border.color: current ? root.fg
-                  : modelData.loud
-                    ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.4)
-                    : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.25)
+                border.width: lit ? 2 : (loud ? 0 : 1)
+                border.color: lit ? root.fg
+                  : (loud ? "transparent"
+                          : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22))
+                Behavior on color { ColorAnimation { duration: 110 } }
+
+                Rectangle {
+                  anchors.fill: parent
+                  radius: parent.radius
+                  color: Qt.lighter(root.accent, 1.35)
+                  visible: homeBtn.loud && !homeBtn.lit
+                  opacity: 0
+                  SequentialAnimation on opacity {
+                    running: homeBtn.loud && homeBtn.visible && !homeBtn.lit
+                    loops: Animation.Infinite
+                    NumberAnimation { from: 0.0; to: 0.4; duration: 950; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: 0.4; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
+                  }
+                }
 
                 Text {
                   id: homeLabel
                   anchors.centerIn: parent
-                  text: modelData.text + (modelData.loud ? "  ›" : "")
-                  color: root.fg
+                  text: modelData.text + (homeBtn.loud ? "  ›" : "")
+                  color: homeBtn.loud ? root.bg : root.fg
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
-                  font.bold: modelData.loud
+                  font.bold: homeBtn.loud
                 }
                 MouseArea {
                   id: homeHover
@@ -603,7 +627,9 @@ Item {
           radicalColor: root.radicalColor
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
+          keyNav: true          // j/k sections, h/l chips, Enter, Esc
           onNavigate: function (subjectId) { root.goSubject(subjectId) }
+          onCloseRequested: root.leave()
           onVisibleChanged: if (visible) Qt.callLater(focusPage)
         }
 
