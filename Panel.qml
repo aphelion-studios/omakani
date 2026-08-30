@@ -36,11 +36,6 @@ Panel {
   // WaniKani's review-forecast green, for the Upcoming Reviews bars and deltas.
   readonly property color forecastColor: "#93c01f"
 
-  // The wordmark's own brand colours -- used only for the "WANI KANI" lockup at
-  // the top of the dashboard, which keeps its identity on every theme.
-  readonly property color brandPink: "#eb187f"
-  readonly property color brandBlue: "#1c46f5"
-
   function typeColor(type) {
     if (type === "radical" || type === "radicals") return radicalColor
     if (type === "kanji") return kanjiColor
@@ -472,10 +467,10 @@ Panel {
 
   component Mark: Item {
     id: markRoot
-    // `size` is the mark's height; the Crabigator (horn bumps up top, tail
-    // below) is a touch taller than it is wide.
+    // `size` is the mark's height; the Crabigator head is much taller than
+    // it is wide (243 x 399 in the source).
     property real size: root.barMarkHeight
-    readonly property real aspect: 0.9
+    readonly property real aspect: 243 / 399
     property color tint: root.foreground
     implicitWidth: Math.round(size * aspect)
     implicitHeight: size
@@ -499,55 +494,17 @@ Panel {
     }
   }
 
-  // The "WANI KANI" lockup for the top of the dashboard: pink wordmark with
-  // WaniKani's blue Crabigator badge in the middle. Fixed brand colours on a
-  // transparent ground, so it looks right on any theme.
-  // `h` is the letter size; the badge runs bigger than the caps, the way it
-  // does in WaniKani's own lockup.
-  component Wordmark: Row {
-    id: wm
-    property real h: Style.space(21)
-    readonly property real badge: Math.round(h * 1.5)
-    spacing: Math.round(h * 0.28)
-
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      text: "WANI"
-      color: root.brandPink
-      font.family: root.fontFamily
-      font.pixelSize: wm.h
-      font.bold: true
-    }
-
-    // The badge on a white disc -- WaniKani's blue is dark, and their own
-    // lockup sets the Crabigator in a white circle, so this reads on any theme.
-    Item {
-      width: wm.badge
-      height: wm.badge
-      anchors.verticalCenter: parent.verticalCenter
-
-      Rectangle {
-        anchors.centerIn: parent
-        width: Math.round(wm.badge * 0.92)
-        height: width
-        radius: width / 2
-        color: "#ffffff"
-      }
-      Mark {
-        anchors.centerIn: parent
-        size: wm.badge
-        tint: root.brandBlue
-      }
-    }
-
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      text: "KANI"
-      color: root.brandPink
-      font.family: root.fontFamily
-      font.pixelSize: wm.h
-      font.bold: true
-    }
+  // The "WANI KANI" lockup for the top of the dashboard -- the plugin
+  // author's artwork (wordmark.png), pink text + blue Crabigator on a
+  // transparent ground so it sits on any theme. `h` is the render height.
+  component Wordmark: Image {
+    property real h: Style.space(44)
+    height: h
+    fillMode: Image.PreserveAspectFit
+    source: Qt.resolvedUrl("wordmark.png")
+    sourceSize.height: Math.round(h * 3)
+    smooth: true
+    mipmap: true
   }
 
   // ---- bar button ---------------------------------------------------------
@@ -560,7 +517,7 @@ Panel {
     // is the child below, and labelVisible is off.
     text: "wanikani"
     labelVisible: false
-    fixedWidth: root.barMarkHeight + Style.space(10)
+    fixedWidth: Math.round(root.barMarkHeight * (243 / 399)) + Style.space(10)
     tooltipText: Model.barTooltip(wk.view, clock.date)
     onPressed: function(pressedButton) {
       if (pressedButton === Qt.MiddleButton) wk.refresh()
@@ -627,7 +584,9 @@ Panel {
 
             Wordmark {
               anchors.horizontalCenter: parent.horizontalCenter
-              h: Style.space(22)
+              h: Style.space(60)
+              // never let a large-font theme push it past the card
+              width: Math.min(implicitWidth, parent.width - Style.space(8))
             }
 
             Text {
