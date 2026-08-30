@@ -71,31 +71,15 @@ function levenshtein(a, b) {
   return d[a.length][b.length];
 }
 
-// WaniKani's fuzzy tolerance for a single word: exact under 4 chars, then
-// one typo through 7, then ~one per 7 chars. Deliberately strict -- a false
-// "correct" moves real SRS state.
-function wordClose(correct, given) {
-  if (correct === given) return true;
-  if (correct.length <= 3) return false;
-  var allowed = correct.length <= 7 ? 1 : Math.floor(correct.length / 7);
-  if (Math.abs(correct.length - given.length) > allowed) return false;
-  return levenshtein(correct, given) <= allowed;
-}
-
-// A multi-word answer has to match word-for-word, each word within its own
-// tolerance -- so "year eno" does NOT pass for "year end" (the 3-letter
-// "end" needs to be exact). Single-word targets fall back to a whole-string
-// compare.
+// WaniKani's fuzzy tolerance: exact under 4 chars, then loosens with length.
+// Matches the website -- an obvious typo ("year eno" for "year end") should
+// still be accepted; being made to type it 100% exactly is just annoying.
 function closeEnough(correct, given) {
   if (correct === given) return true;
-  var cw = correct.split(" ");
-  var gw = given.split(" ");
-  if (cw.length === 1) return wordClose(correct, given);
-  if (cw.length !== gw.length) return false;
-  for (var i = 0; i < cw.length; i++) {
-    if (!wordClose(cw[i], gw[i])) return false;
-  }
-  return true;
+  if (correct.length <= 3) return false;
+  var allowed = correct.length <= 5 ? 1 : Math.floor(correct.length / 7) + 1;
+  if (Math.abs(correct.length - given.length) > allowed) return false;
+  return levenshtein(correct, given) <= allowed;
 }
 
 // -------------------------------------------------------------- collectors

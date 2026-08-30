@@ -98,12 +98,10 @@ t("eating typo (len6)", Answer.check(vocabToEat, null, "meaning", "eatng"), "cor
 t("dog vs dogs (short, strict)", Answer.check(vocabDog, null, "meaning", "dogs"), "incorrect");
 t("dog vs dig", Answer.check(vocabDog, null, "meaning", "dig"), "incorrect");
 
-// multi-word: each word within its own tolerance -- a butchered short word
-// fails even though the whole-string edit distance is only 1
+// multi-word: obvious typos are accepted, like the website
 t("year end exact", Answer.check(vocabYearEnd, null, "meaning", "year end"), "correct");
-t("year eno (3-letter word off)", Answer.check(vocabYearEnd, null, "meaning", "year eno"), "incorrect");
-t("yaer end (typo in long word)", Answer.check(vocabYearEnd, null, "meaning", "yaer end"), "correct");
-t("year ed (missing letter, short word)", Answer.check(vocabYearEnd, null, "meaning", "year ed"), "incorrect");
+t("year eno (one letter off)", Answer.check(vocabYearEnd, null, "meaning", "year eno"), "correct");
+t("yaer end (transposition)", Answer.check(vocabYearEnd, null, "meaning", "yaer end"), "correct");
 
 // meaning: blacklist "close" -> retry, not correct
 t("dog / cat blacklist", Answer.check(vocabDog, null, "meaning", "cat"), "retry");
