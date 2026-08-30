@@ -252,18 +252,21 @@ Item {
     function rtool(what: string): string {
       var c = root.view === "review" ? reviewEngine.cardItem : null
       if (!c) return "not in review"
-      if (what === "check") c.markCorrect()
-      else if (what === "undo") c.retry()
-      else if (what === "drill") {
-        var ip = c.infoPageItem
+      var ip = c.infoPageItem
+      if (what === "drill") {
         var comp = (ip && ip.subject && ip.subject.data
           && (ip.subject.data.component_subject_ids || [])[0]) || 0
         if (ip && comp) ip.navigate(comp)
-        return "drilled to " + comp + "; showing " + (ip && ip.subject ? ip.subject.id : "?")
+        return "drilled to " + comp
       }
-      else if (what === "back") { c.infoPageItem.closeRequested() }
-      return "phase=" + c.phase + " acc=" + reviewEngine.correctCount + "/" + reviewEngine.answerCount
-        + " done=" + reviewEngine.submittedCount
+      else if (what === "back") { if (ip) ip.closeRequested() }
+      else if (what === "down") { if (ip) ip.moveFocus(1) }
+      else if (what === "up") { if (ip) ip.moveFocus(-1) }
+      else if (what === "chipenter") { if (ip) ip.enterChips() }
+      else if (what === "chipnext") { if (ip) ip.moveChip(1) }
+      else if (what === "chipopen") { if (ip) ip.openChip() }
+      return "phase=" + c.phase + " chipIndex=" + (ip ? ip.chipIndex : "?")
+        + " focusedKey=" + (ip ? ip.focusedKey : "?")
     }
     function rinfo(): string {
       var c = root.view === "review" ? reviewEngine.cardItem

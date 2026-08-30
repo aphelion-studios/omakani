@@ -13,6 +13,9 @@ Rectangle {
   property color bg: Color.background
   property bool collapsible: false
   property bool navFocused: false
+  // subject ids of the chips inside this card, if it's a chip section --
+  // lets the item-info overlay's keyboard nav step through them
+  property var chipIds: []
 
   // the parent's reactive default (anti-cheat, section type, ...); a user
   // fold overrides it until `resetToken` changes (e.g. the next subject)

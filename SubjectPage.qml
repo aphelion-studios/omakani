@@ -47,12 +47,38 @@ Item {
   signal navigate(int subjectId)
   signal closeRequested()
 
-  // ---- section navigation (item-info overlay: j/k move, l/h fold) --------
+  // ---- section navigation (item-info overlay) --------
+  //   section level : j/k move the ring, l opens a fold / drops into chips,
+  //                   h folds / (from chips) pops back out, Enter toggles
+  //   chip level     : j/k move between chips, l/Enter opens one, h exits
   property var navCards: []
   property int focusIndex: 0
+  property int chipIndex: -1          // -1 = section level, >=0 = in the chips
   // bumped on every subject change so cards drop any manual fold and go back
   // to their default state
   property int resetToken: 0
+
+  function focusedChipIds() {
+    var c = focusedCard()
+    return (c && c.chipIds) ? c.chipIds : []
+  }
+  function enterChips() {
+    var c = focusedCard()
+    if (!c) return
+    if (c.collapsible && c.collapsed) { c.expand(); return }  // first l: open it
+    if (focusedChipIds().length > 0) { chipIndex = 0; Qt.callLater(scrollToFocused) }
+  }
+  function exitChips() { chipIndex = -1; Qt.callLater(scrollToFocused) }
+  function moveChip(delta) {
+    var ids = focusedChipIds()
+    if (!ids.length) return
+    chipIndex = Math.max(0, Math.min(chipIndex + delta, ids.length - 1))
+    Qt.callLater(scrollToFocused)
+  }
+  function openChip() {
+    var ids = focusedChipIds()
+    if (chipIndex >= 0 && chipIndex < ids.length) page.navigate(ids[chipIndex])
+  }
   function registerCard(c) { var a = navCards.slice(); a.push(c); navCards = a }
   // visible section cards, top-to-bottom (Component.onCompleted fires
   // bottom-up, so sort by on-screen position)
@@ -88,6 +114,7 @@ Item {
   function moveFocus(delta) {
     var v = visibleNav()
     if (!v.length) return
+    chipIndex = -1     // leaving the section drops you out of its chips
     focusIndex = Math.max(0, Math.min(focusIndex + delta, v.length - 1))
     Qt.callLater(scrollToFocused)
   }
@@ -128,6 +155,7 @@ Item {
   onSubjectChanged: {
     flick.contentY = 0
     focusIndex = 0
+    chipIndex = -1
     _syncedSection = ""
     resetToken += 1     // cards drop manual folds, back to their defaults
     Qt.callLater(hydrateLinks)
@@ -228,11 +256,23 @@ Item {
     Keys.onPressed: function (e) {
       var step = Style.space(64)
       // in the item-info overlay j/k walk the section ring and l/h fold the
-      // focused one; a plain page still scrolls with j/k
+      // focused one; once inside a section's chips, j/k move between them and
+      // l / Enter opens the highlighted chip, h steps back out
       if (page.overlayMode) {
+        if (page.chipIndex >= 0) {
+          if (e.text === "j") { page.moveChip(1); e.accepted = true; return }
+          else if (e.text === "k") { page.moveChip(-1); e.accepted = true; return }
+          else if (e.text === "l" || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+            page.openChip(); e.accepted = true; return
+          }
+          else if (e.text === "h" || e.key === Qt.Key_Escape) {
+            page.exitChips(); e.accepted = true; return
+          }
+          e.accepted = true; return
+        }
         if (e.text === "j") { page.moveFocus(1); e.accepted = true; return }
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
-        else if (e.text === "l") { page.foldFocused(true); e.accepted = true; return }
+        else if (e.text === "l") { page.enterChips(); e.accepted = true; return }
         else if (e.text === "h") { page.foldFocused(false); e.accepted = true; return }
         else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
           var c = page.focusedCard(); if (c) c.toggle(); e.accepted = true; return
@@ -611,6 +651,7 @@ Item {
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "kanji" ? "Radical Combination" : "Kanji Composition"
           bg: page.cardBg
+          chipIds: page.sd.component_subject_ids || []
 
           Flow {
             width: parent.width
@@ -626,6 +667,8 @@ Item {
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
+                cursored: page.overlayMode && page.chipIndex === index
+                  && page.focusedKey === "composition"
                 onActivated: page.navigate(modelData)
               }
             }
@@ -644,6 +687,7 @@ Item {
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Found In Kanji" : "Found In Vocabulary"
           bg: page.cardBg
+          chipIds: (page.sd.amalgamation_subject_ids || []).slice(0, 60)
 
           Flow {
             width: parent.width
@@ -659,6 +703,8 @@ Item {
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
+                cursored: page.overlayMode && page.chipIndex === index
+                  && page.focusedKey === "foundin"
                 onActivated: page.navigate(modelData)
               }
             }
@@ -677,6 +723,7 @@ Item {
           Component.onCompleted: page.registerCard(this)
           title: "Visually Similar Kanji"
           bg: page.cardBg
+          chipIds: page.sd.visually_similar_subject_ids || []
 
           Flow {
             width: parent.width
@@ -692,6 +739,8 @@ Item {
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
+                cursored: page.overlayMode && page.chipIndex === index
+                  && page.focusedKey === "similar"
                 onActivated: page.navigate(modelData)
               }
             }
