@@ -252,8 +252,6 @@ Item {
       c.infoOpen = !c.infoOpen
       return "type=" + c.effectiveType + " restrict=" + c.restrictInfo
         + " mDone=" + c.meaningDone + " rDone=" + c.readingDone
-        + " -> showMeaning=" + (!c.restrictInfo || c.effectiveType === "meaning" || c.meaningDone)
-        + " showReading=" + (!c.restrictInfo || c.effectiveType === "reading" || c.readingDone)
         + " infoOpen=" + c.infoOpen
     }
     function lstep(what: string): string {

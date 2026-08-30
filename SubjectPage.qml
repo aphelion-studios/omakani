@@ -27,10 +27,12 @@ Item {
   // when true (used as the quiz's item-info overlay), f / Esc ask to close
   property bool overlayMode: false
 
-  // a review's item-info hides the component you haven't answered yet, so
-  // f can't be used to peek the other half's answer
-  property bool showMeaning: true
-  property bool showReading: true
+  // a review's item info collapses the half you're being tested on (like the
+  // website) -- present but folded, so f can't hand you the answer at a
+  // glance, but you can still open it. "" | "meaning" | "reading".
+  property string collapse: ""
+  readonly property bool meaningFolded: collapse === "meaning"
+  readonly property bool readingFolded: collapse === "reading"
 
   signal navigate(int subjectId)
   signal closeRequested()
@@ -173,17 +175,19 @@ Item {
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            // never fall back to the meaning when it's being withheld
-            text: page.sd.characters || (page.showMeaning ? page.primaryMeaning() : "")
+            // in the review overlay never fall back to the meaning
+            text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
             color: "white"
             font.family: page.jpFamily
             font.pixelSize: Style.font.displayLarge * 2.4
-            font.bold: true
+            font.weight: page.sd.characters ? Font.Normal : Font.Bold
           }
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: page.showMeaning
+            // the meaning sits in the Meaning card; don't also spell it in
+            // the header of the review overlay
+            visible: !page.overlayMode
             text: page.primaryMeaning()
             color: "white"
             font.family: page.fontFamily
@@ -212,7 +216,8 @@ Item {
         // ---- Meaning ---------------------------------------------------
         SubjectCard {
           width: parent.width
-          visible: page.showMeaning
+          collapsible: page.collapse !== ""
+          collapsed: page.meaningFolded
           title: page.kind === "radical" ? "Name" : "Meaning"
           bg: page.cardBg
 
@@ -305,8 +310,10 @@ Item {
         // ---- Reading -------------------------------------------------
         SubjectCard {
           width: parent.width
-          visible: page.showReading && (page.kind === "kanji" || page.kind === "vocabulary"
-            || page.kind === "kana_vocabulary")
+          visible: page.kind === "kanji" || page.kind === "vocabulary"
+            || page.kind === "kana_vocabulary"
+          collapsible: page.collapse !== ""
+          collapsed: page.readingFolded
           title: "Reading"
           bg: page.cardBg
 
@@ -435,12 +442,11 @@ Item {
         }
 
         // ---- Context ------------------------------------------------
-        // withheld entirely in a review until you've cleared both halves --
-        // the sentence gives the reading away and the translation the meaning
         SubjectCard {
           width: parent.width
-          visible: page.showMeaning && page.showReading
-            && (page.sd.context_sentences || []).length > 0
+          visible: (page.sd.context_sentences || []).length > 0
+          collapsible: page.collapse !== ""
+          collapsed: page.collapse !== ""
           title: "Context"
           bg: page.cardBg
 

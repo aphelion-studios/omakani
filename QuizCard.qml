@@ -174,9 +174,11 @@ FocusScope {
           anchors.horizontalCenter: parent.horizontalCenter
           text: quiz.d.characters || ""
           color: "white"
+          // WaniKani sets its subject characters at a regular weight (Noto
+          // Sans JP); match that rather than bolding.
           font.family: quiz.jpFamily
           font.pixelSize: Math.min(header.height * 0.6, Style.font.displayLarge * 3)
-          font.bold: true
+          font.weight: Font.Normal
         }
         Text {
           anchors.horizontalCenter: parent.horizontalCenter
@@ -381,9 +383,12 @@ FocusScope {
         anchors.fill: parent
         anchors.topMargin: Style.space(6)
         overlayMode: true
-        // in a review, don't reveal the half you haven't answered yet
-        showMeaning: !quiz.restrictInfo || quiz.effectiveType === "meaning" || quiz.meaningDone
-        showReading: !quiz.restrictInfo || quiz.effectiveType === "reading" || quiz.readingDone
+        // in a review, fold the half you're being tested on (unless already
+        // cleared this session) -- present but collapsed, like the website
+        collapse: !quiz.restrictInfo ? ""
+          : quiz.effectiveType === "reading" && !quiz.meaningDone ? "meaning"
+          : quiz.effectiveType === "meaning" && !quiz.readingDone ? "reading"
+          : ""
         subject: quiz.subject
         service: quiz.service
         pageBg: quiz.pageBg
