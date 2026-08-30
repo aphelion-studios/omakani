@@ -117,3 +117,7 @@ printf '%s\n' "$TOKEN" | ./wanikani.py set-token
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+`icon.svg` is WaniKani's own published `mask-icon` (from wanikani.com), used
+to identify the service. WaniKani and the Crabigator are trademarks of
+Tofugu LLC.

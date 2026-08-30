@@ -39,7 +39,7 @@ Panel {
   // The wordmark's own brand colours -- used only for the "WANI KANI" lockup at
   // the top of the dashboard, which keeps its identity on every theme.
   readonly property color brandPink: "#eb187f"
-  readonly property color brandBlue: "#2668e4"
+  readonly property color brandBlue: "#1c46f5"
 
   function typeColor(type) {
     if (type === "radical" || type === "radicals") return radicalColor
@@ -465,17 +465,15 @@ Panel {
 
   // ---- the recolourable mark -------------------------------------------------
 
-  // The alligator head fills its viewBox, so it needs to run a touch smaller
-  // than a nominal bar glyph (which leaves ink room inside its em) to weigh the
-  // same as the Nerd Font icons around it.
+  // The Crabigator badge is round and fills its viewBox, so it runs a touch
+  // smaller than a nominal bar glyph (which leaves ink room inside its em) to
+  // weigh the same as the Nerd Font icons around it.
   readonly property int barMarkHeight: Math.round(Style.bar.iconFont * 1.02)
 
   component Mark: Item {
     id: markRoot
-    // `size` is the mark's height; the alligator head is taller than it is wide,
-    // so the box it occupies is narrower and the bar keeps its neighbours close.
     property real size: root.barMarkHeight
-    readonly property real aspect: 0.92
+    readonly property real aspect: 1.0
     property color tint: root.foreground
     implicitWidth: Math.round(size * aspect)
     implicitHeight: size
@@ -484,8 +482,8 @@ Panel {
       id: markSource
       anchors.fill: parent
       source: Qt.resolvedUrl("icon.svg")
-      sourceSize.width: markRoot.size * 2
-      sourceSize.height: markRoot.size * 2
+      sourceSize.width: Math.round(markRoot.size * 4)
+      sourceSize.height: Math.round(markRoot.size * 4)
       fillMode: Image.PreserveAspectFit
       smooth: true
       visible: false
@@ -500,12 +498,12 @@ Panel {
   }
 
   // The "WANI KANI" lockup for the top of the dashboard: pink wordmark with
-  // the blue Crabigator head, ringed, in the middle. Fixed brand colours on a
+  // WaniKani's blue Crabigator badge in the middle. Fixed brand colours on a
   // transparent ground, so it looks right on any theme.
   component Wordmark: Row {
     id: wm
     property real h: Style.space(30)
-    spacing: Math.round(h * 0.14)
+    spacing: Math.round(h * 0.16)
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
@@ -516,21 +514,24 @@ Panel {
       font.bold: true
     }
 
+    // A white disc fills the badge's ring so WaniKani's own (fairly dark) blue
+    // stays legible on dark themes -- the same white-circle lockup as their
+    // wordmark. The disc is the only non-transparent pixel.
     Item {
       width: wm.h
       height: wm.h
       anchors.verticalCenter: parent.verticalCenter
 
       Rectangle {
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: Math.round(wm.h * 0.8)
+        height: width
         radius: width / 2
-        color: "transparent"
-        border.width: Math.max(1, Math.round(wm.h * 0.055))
-        border.color: root.brandBlue
+        color: "#ffffff"
       }
       Mark {
         anchors.centerIn: parent
-        size: Math.round(wm.h * 0.6)
+        size: wm.h
         tint: root.brandBlue
       }
     }
@@ -555,7 +556,7 @@ Panel {
     // is the child below, and labelVisible is off.
     text: "wanikani"
     labelVisible: false
-    fixedWidth: Math.round(root.barMarkHeight * 0.92) + Style.space(10)
+    fixedWidth: root.barMarkHeight + Style.space(10)
     tooltipText: Model.barTooltip(wk.view, clock.date)
     onPressed: function(pressedButton) {
       if (pressedButton === Qt.MiddleButton) wk.refresh()
