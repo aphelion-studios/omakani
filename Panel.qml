@@ -1221,26 +1221,29 @@ Panel {
       readonly property bool lit: cc.cursored || startHover.containsMouse
 
       color: cc.active
-        ? (lit ? Qt.lighter(root.accent, 1.12) : root.accent)
+        ? (lit ? Qt.lighter(root.accent, 1.3) : root.accent)
         : (lit
             ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
             : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08))
-      border.width: cc.cursored ? 2 : 1
-      border.color: cc.cursored
+      // a clear ring on hover / keyboard focus, for both button styles
+      border.width: lit ? 2 : (cc.active ? 0 : 1)
+      border.color: lit
         ? root.foreground
         : (cc.active
             ? "transparent"
             : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22))
+      Behavior on color { ColorAnimation { duration: 110 } }
 
-      // "hey, look here!" breathing highlight while the queue is available
+      // "hey, look here!" breathing highlight while the queue is available --
+      // pauses while the button is focused/hovered so the ring reads clearly
       Rectangle {
         anchors.fill: parent
         radius: parent.radius
         color: Qt.lighter(root.accent, 1.35)
-        visible: cc.active
+        visible: cc.active && !startBtn.lit
         opacity: 0
         SequentialAnimation on opacity {
-          running: cc.active && startBtn.visible
+          running: cc.active && startBtn.visible && !startBtn.lit
           loops: Animation.Infinite
           NumberAnimation { from: 0.0; to: 0.4; duration: 950; easing.type: Easing.InOutSine }
           NumberAnimation { from: 0.4; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
