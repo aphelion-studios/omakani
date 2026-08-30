@@ -38,6 +38,10 @@ FocusScope {
   property bool meaningDone: false
   property bool readingDone: false
 
+  // { text: "Guru", pass: true, up: true } -- the SRS-transition chip shown
+  // under the character as a subject finishes (reviews only), or null
+  property var srsPill: null
+
   // "input" -> "correct" | "wrong" ; Enter from a settled phase advances
   property string phase: "input"
   property string nudge: ""
@@ -51,6 +55,8 @@ FocusScope {
   signal advance()
   signal wrapUp()
   signal infoRequested()
+
+  property alias infoPageItem: infoPage
 
   Component.onCompleted: Answer.useKana(Kana)
   onSubjectChanged: reset()
@@ -146,14 +152,16 @@ FocusScope {
     anchors.fill: parent
     color: quiz.pageBg
 
-    // ---- thin session-progress bar, dead top ----
+    // ---- thin session-progress bar, dead top: a dark rail that fills white
+    // left-to-right as the session is cleared, like the website ----
     Rectangle {
       id: progressBar
       anchors.top: parent.top
       anchors.left: parent.left
       anchors.right: parent.right
-      height: Style.space(3)
-      color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.12)
+      height: Style.space(4)
+      color: Qt.rgba(0, 0, 0, 0.45)
+      z: 10
       Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
@@ -192,6 +200,35 @@ FocusScope {
           color: Qt.rgba(1, 1, 1, 0.82)
           font.family: quiz.fontFamily
           font.pixelSize: Style.font.bodySmall
+        }
+
+        // SRS-transition chip, shown as a subject finishes (reviews)
+        Rectangle {
+          anchors.horizontalCenter: parent.horizontalCenter
+          visible: !!quiz.srsPill && quiz.phase === "correct"
+          width: pillRow.implicitWidth + Style.space(20)
+          height: Style.space(28)
+          radius: Style.space(5)
+          color: (quiz.srsPill && quiz.srsPill.pass) ? quiz.okColor : quiz.noColor
+          Row {
+            id: pillRow
+            anchors.centerIn: parent
+            spacing: Style.space(5)
+            Text {
+              text: (quiz.srsPill && quiz.srsPill.up) ? "↑" : "↓"
+              color: "#ffffff"
+              font.family: quiz.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+            Text {
+              text: quiz.srsPill ? quiz.srsPill.text : ""
+              color: "#ffffff"
+              font.family: quiz.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+          }
         }
       }
     }
@@ -402,12 +439,14 @@ FocusScope {
         anchors.fill: parent
         anchors.topMargin: Style.space(6)
         overlayMode: true
-        // in a review, fold the half you're being tested on (unless already
-        // cleared this session) -- present but collapsed, like the website
-        collapse: !quiz.restrictInfo ? ""
+        // before you answer, fold the half you're being tested on so f can't
+        // hand it to you; once you've answered (right or wrong) nothing hides,
+        // and on a miss the ring lands on the half you got wrong, opened
+        collapse: (!quiz.restrictInfo || quiz.phase !== "input") ? ""
           : quiz.effectiveType === "reading" && !quiz.meaningDone ? "meaning"
           : quiz.effectiveType === "meaning" && !quiz.readingDone ? "reading"
           : ""
+        focusSection: quiz.phase === "wrong" ? quiz.effectiveType : ""
         subject: quiz.subject
         service: quiz.service
         pageBg: quiz.pageBg
@@ -425,7 +464,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.margins: Style.space(12)
-        text: "f / Esc  close"
+        text: "j / k  section   ·   l / h  open · close   ·   f / Esc  close"
         color: Qt.darker(quiz.fg, 1.5)
         font.family: quiz.fontFamily
         font.pixelSize: Style.font.caption

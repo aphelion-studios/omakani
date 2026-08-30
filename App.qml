@@ -254,9 +254,14 @@ Item {
         : root.view === "lesson" ? lessonFlow.cardItem : null
       if (!c) return "no card"
       c.infoOpen = !c.infoOpen
+      var ip = c.infoPageItem
       return "type=" + c.effectiveType + " restrict=" + c.restrictInfo
         + " mDone=" + c.meaningDone + " rDone=" + c.readingDone
-        + " infoOpen=" + c.infoOpen
+        + " infoOpen=" + c.infoOpen + " phase=" + c.phase
+        + (ip ? " focusSection=" + ip.focusSection + " focusIndex=" + ip.focusIndex
+            + " focusedKey=" + ip.focusedKey
+            + " nav=" + ip.visibleNav().map(function (x) { return x.navKey }).join(",")
+          : "")
     }
     function lstep(what: string): string {
       if (root.view !== "lesson") return "not in lesson"
