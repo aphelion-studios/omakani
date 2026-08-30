@@ -95,6 +95,18 @@ FocusScope {
     }
   }
 
+  Shortcut {
+    sequences: ["d"]
+    enabled: flow.visible && flow.phase === "ready"
+    onActivated: flow.dryRun = !flow.dryRun
+  }
+  Shortcut {
+    sequences: ["Return", "Enter"]
+    enabled: flow.visible && (flow.phase === "ready"
+      || flow.phase === "summary" || flow.phase === "error")
+    onActivated: flow.phase === "ready" ? flow.startInfo() : flow.exit()
+  }
+
   Keys.onPressed: function (e) {
     if (phase === "ready") {
       if (e.text === "d") { dryRun = !dryRun; e.accepted = true }

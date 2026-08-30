@@ -63,10 +63,6 @@ Item {
     else focusScope.forceActiveFocus()
   }
 
-  // Set while a linked-subject fetch triggered by detailReady is in flight,
-  // so the follow-up fetch doesn't recurse.
-  property bool hydratingLinks: false
-
   function pushPage(page) {
     var next = navStack.slice()
     next.push(page)
@@ -76,6 +72,13 @@ Item {
   function popPage() {
     if (navStack.length <= 1) return
     navStack = navStack.slice(0, navStack.length - 1)
+  }
+
+  // leave the current view: step back if there's somewhere to step back to,
+  // otherwise close the app (a flow summoned from the dashboard is the root)
+  function leave() {
+    if (navStack.length > 1) popPage()
+    else requestClose()
   }
 
   function resetNav() {
@@ -154,25 +157,8 @@ Item {
     }
   }
 
-  // After a subject's detail lands, pull in any linked subjects (components,
-  // amalgamations, look-alikes) we don't have yet so their chips show real
-  // characters -- one extra request, capped.
-  function hydrateLinks() {
-    if (hydratingLinks || !root.service || view !== "subject") return
-    var subject = root.service.subjectDetail(currentPage.id)
-    if (!subject || !subject.data) return
-    var d = subject.data
-    var ids = []
-      .concat(d.component_subject_ids || [])
-      .concat((d.amalgamation_subject_ids || []).slice(0, 60))
-      .concat(d.visually_similar_subject_ids || [])
-    var missing = ids.filter(function (x) {
-      return !root.service.subjectDetail(x)
-    })
-    if (missing.length === 0) return
-    hydratingLinks = true
-    root.service.loadDetail(missing.slice(0, 100))
-  }
+  // (linked-subject hydration lives in SubjectPage now -- it self-fetches
+  // component / amalgamation detail so the chips resolve everywhere)
 
   function open(payloadJson) {
     closingFromHost = false
@@ -180,16 +166,19 @@ Item {
     resetNav()
     if (service) service.refreshAll()
 
-    // a summon payload can route straight to a view, e.g. the dashboard's
-    // Extra Study buttons: {"session":"recent-lessons"|"mistakes"|"burned"}
+    // a summon payload routes straight to a view (the dashboard's Start
+    // Reviews / Start Lessons / Extra Study). It clears the stack first so
+    // Esc / Back from that view closes the app rather than landing on a
+    // home screen the user never opened.
     var payload = null
     try { payload = payloadJson ? JSON.parse(payloadJson) : null } catch (e) { payload = null }
-    if (payload && payload.session) {
-      Qt.callLater(function () { root.openSessionMode(String(payload.session)) })
-    } else if (payload && payload.review) {
-      Qt.callLater(function () { root.goReview() })
-    } else if (payload && payload.lesson) {
-      Qt.callLater(function () { root.goLesson() })
+    if (payload && (payload.session || payload.review || payload.lesson)) {
+      Qt.callLater(function () {
+        root.navStack = []
+        if (payload.session) root.openSessionMode(String(payload.session))
+        else if (payload.review) root.goReview()
+        else root.goLesson()
+      })
     } else {
       Qt.callLater(applyFocus)
     }
@@ -255,6 +244,17 @@ Item {
       if (root.view !== "review") return "not in review"
       reviewEngine.startRun()
       return reviewEngine.phase
+    }
+    function rinfo(): string {
+      var c = root.view === "review" ? reviewEngine.cardItem
+        : root.view === "lesson" ? lessonFlow.cardItem : null
+      if (!c) return "no card"
+      c.infoOpen = !c.infoOpen
+      return "type=" + c.effectiveType + " restrict=" + c.restrictInfo
+        + " mDone=" + c.meaningDone + " rDone=" + c.readingDone
+        + " -> showMeaning=" + (!c.restrictInfo || c.effectiveType === "meaning" || c.meaningDone)
+        + " showReading=" + (!c.restrictInfo || c.effectiveType === "reading" || c.readingDone)
+        + " infoOpen=" + c.infoOpen
     }
     function lstep(what: string): string {
       if (root.view !== "lesson") return "not in lesson"
@@ -324,17 +324,6 @@ Item {
     }
   }
 
-  Connections {
-    target: root.service
-    enabled: root.service !== null
-    function onDetailReady(ids) {
-      if (root.hydratingLinks) {
-        root.hydratingLinks = false
-        return
-      }
-      root.hydrateLinks()
-    }
-  }
 
   FloatingWindow {
     id: window
@@ -465,8 +454,7 @@ Item {
           }
 
           // Start Lessons / Start Reviews — shown for whichever queue has
-          // something waiting. Interim: opens the session on wanikani.com
-          // until the in-shell flow lands.
+          // something waiting. Runs the flow in-app.
           Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: Style.space(12)
@@ -476,10 +464,8 @@ Item {
             Repeater {
               model: {
                 var out = []
-                if (root.startLessons)
-                  out.push({ text: "Start Lessons", url: "https://www.wanikani.com/subjects/lesson" })
-                if (root.startReviews)
-                  out.push({ text: "Start Reviews", url: "https://www.wanikani.com/subjects/review" })
+                if (root.startLessons) out.push({ text: "Start Lessons", act: "lesson" })
+                if (root.startReviews) out.push({ text: "Start Reviews", act: "review" })
                 return out
               }
               delegate: Rectangle {
@@ -506,7 +492,7 @@ Item {
                   anchors.fill: parent
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: Quickshell.execDetached(["xdg-open", String(modelData.url)])
+                  onClicked: modelData.act === "lesson" ? root.goLesson() : root.goReview()
                 }
               }
             }
@@ -650,7 +636,7 @@ Item {
           radicalColor: root.radicalColor
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
-          onExit: root.popPage()
+          onExit: root.leave()
           onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
         }
 
@@ -668,7 +654,7 @@ Item {
           radicalColor: root.radicalColor
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
-          onExit: root.popPage()
+          onExit: root.leave()
           onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
         }
 
@@ -687,7 +673,7 @@ Item {
           radicalColor: root.radicalColor
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
-          onExit: root.popPage()
+          onExit: root.leave()
           onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
         }
       }
