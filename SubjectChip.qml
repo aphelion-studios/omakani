@@ -24,9 +24,9 @@ Rectangle {
   property string fontFamily: Style.font.family
   property string jpFamily: "Noto Sans CJK JP"
   property color fg: Color.foreground
-  property color radicalColor: "#00a1f1"
-  property color kanjiColor: "#f100a1"
-  property color vocabColor: "#a100f1"
+  property color radicalColor: "#01a9fd"
+  property color kanjiColor: "#fc02a9"
+  property color vocabColor: "#a802fd"
 
   signal activated()
 
@@ -57,15 +57,14 @@ Rectangle {
   implicitHeight: Style.space(34)
   radius: Style.space(5)
 
+  // solid brand colour for an unlocked item -- same whether it's the current
+  // selection or not; the focus ring is what marks the selection. Locked
+  // items stay hollow (dashed border in the Canvas below).
   color: locked
     ? (lit ? Qt.rgba(tint.r, tint.g, tint.b, 0.10) : "transparent")
-    : Qt.rgba(tint.r, tint.g, tint.b, lit ? 0.34 : 0.16)
-  // The keyboard cursor gets a bright foreground-coloured ring; hover/normal
-  // keep the tint border. Locked items draw their border in the dashed Canvas.
-  border.width: cursored ? 2 : (locked ? 0 : 1)
-  border.color: cursored
-    ? Qt.rgba(fg.r, fg.g, fg.b, 0.95)
-    : Qt.rgba(tint.r, tint.g, tint.b, hovered ? 0.9 : 0.4)
+    : tint
+  border.width: cursored ? 2 : 0
+  border.color: Qt.rgba(fg.r, fg.g, fg.b, 0.95)
 
   Loader {
     anchors.fill: parent

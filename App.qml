@@ -42,10 +42,34 @@ Item {
   readonly property bool startReviews: !!service && service.configured
     && !service.vacation && service.reviewsNow > 0
 
+  // ---- home screen keyboard nav --------------------------------------
+  property int homeIndex: 0
+  readonly property var homeActions: {
+    var out = []
+    if (!service || !service.configured) return out
+    if (startLessons) out.push({ text: "Start Lessons", act: "lesson", loud: true })
+    if (startReviews) out.push({ text: "Start Reviews", act: "review", loud: true })
+    out.push({ text: "Browse subjects", act: "browse", loud: false })
+    return out
+  }
+  function homeMove(d) {
+    if (homeActions.length === 0) return
+    homeIndex = (homeIndex + d + homeActions.length) % homeActions.length
+  }
+  onHomeActionsChanged: if (homeIndex >= homeActions.length)
+    homeIndex = Math.max(0, homeActions.length - 1)
+  function homeActivate() {
+    var a = homeActions[Math.max(0, Math.min(homeIndex, homeActions.length - 1))]
+    if (!a) return
+    if (a.act === "lesson") goLesson()
+    else if (a.act === "review") goReview()
+    else goBrowse(service ? (service.level || 1) : 1)
+  }
+
   // Website type colours (vivid variants, tuned against the dark app ground).
-  readonly property color radicalColor: "#00a1f1"
-  readonly property color kanjiColor: "#f100a1"
-  readonly property color vocabColor: "#a100f1"
+  readonly property color radicalColor: "#01a9fd"
+  readonly property color kanjiColor: "#fc02a9"
+  readonly property color vocabColor: "#a802fd"
 
   // ---- navigation stack -------------------------------------------------
   // Each entry: { view: "home" | "browse" | "subject", level, id }
@@ -381,10 +405,12 @@ Item {
       Keys.onPressed: function (e) {
         // On the home screen only; the browser and subject page own their keys.
         if (root.view !== "home") return
-        if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.text === "b") {
-          if (root.service && root.service.configured)
-            root.goBrowse(root.service.level || 1)
-          e.accepted = true
+        if (e.key === Qt.Key_Down || e.key === Qt.Key_Right || e.text === "j" || e.text === "l") {
+          root.homeMove(1); e.accepted = true
+        } else if (e.key === Qt.Key_Up || e.key === Qt.Key_Left || e.text === "k" || e.text === "h") {
+          root.homeMove(-1); e.accepted = true
+        } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+          root.homeActivate(); e.accepted = true
         }
       }
 
@@ -482,75 +508,49 @@ Item {
             }
           }
 
-          // Start Lessons / Start Reviews — shown for whichever queue has
-          // something waiting. Runs the flow in-app.
-          Row {
+          // Start Lessons / Start Reviews (when waiting) + Browse subjects.
+          // j/k/h/l or arrows move the cursor, Enter activates.
+          Column {
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Style.space(12)
+            spacing: Style.space(10)
             visible: !!root.service && root.service.configured
-              && (root.startLessons || root.startReviews)
 
             Repeater {
-              model: {
-                var out = []
-                if (root.startLessons) out.push({ text: "Start Lessons", act: "lesson" })
-                if (root.startReviews) out.push({ text: "Start Reviews", act: "review" })
-                return out
-              }
+              model: root.homeActions
               delegate: Rectangle {
-                width: startLabel.implicitWidth + Style.space(44)
-                height: Style.space(40)
+                anchors.horizontalCenter: parent.horizontalCenter
+                readonly property bool current: index === root.homeIndex
+                readonly property bool lit: current || homeHover.containsMouse
+                width: homeLabel.implicitWidth + Style.space(48)
+                height: Style.space(42)
                 radius: Style.space(6)
-                color: startHover.containsMouse
-                  ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.24)
-                  : Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.14)
-                border.width: 1
-                border.color: Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.4)
+                color: modelData.loud
+                  ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, lit ? 0.28 : 0.14)
+                  : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.16 : 0.08)
+                border.width: current ? 2 : 1
+                border.color: current ? root.fg
+                  : modelData.loud
+                    ? Qt.rgba(root.accent.r, root.accent.g, root.accent.b, 0.4)
+                    : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.25)
 
                 Text {
-                  id: startLabel
+                  id: homeLabel
                   anchors.centerIn: parent
-                  text: modelData.text + "  ›"
+                  text: modelData.text + (modelData.loud ? "  ›" : "")
                   color: root.fg
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
-                  font.bold: true
+                  font.bold: modelData.loud
                 }
                 MouseArea {
-                  id: startHover
+                  id: homeHover
                   anchors.fill: parent
                   hoverEnabled: true
                   cursorShape: Qt.PointingHandCursor
-                  onClicked: modelData.act === "lesson" ? root.goLesson() : root.goReview()
+                  onEntered: root.homeIndex = index
+                  onClicked: { root.homeIndex = index; root.homeActivate() }
                 }
               }
-            }
-          }
-
-          Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: !!root.service && root.service.configured
-            width: browseLabel.implicitWidth + Style.space(40)
-            height: Style.space(40)
-            radius: Style.space(6)
-            color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, browseHover.containsMouse ? 0.14 : 0.08)
-            border.width: 1
-            border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.25)
-
-            Text {
-              id: browseLabel
-              anchors.centerIn: parent
-              text: "Browse subjects"
-              color: root.fg
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-            }
-            MouseArea {
-              id: browseHover
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.goBrowse(root.service ? (root.service.level || 1) : 1)
             }
           }
 

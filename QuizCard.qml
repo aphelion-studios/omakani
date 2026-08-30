@@ -26,9 +26,9 @@ FocusScope {
   property string fontFamily: Style.font.family
   property string jpFamily: Qt.fontFamilies().indexOf("Noto Sans JP") >= 0
     ? "Noto Sans JP" : "Noto Sans CJK JP"
-  property color radicalColor: "#00a1f1"
-  property color kanjiColor: "#f100a1"
-  property color vocabColor: "#a100f1"
+  property color radicalColor: "#01a9fd"
+  property color kanjiColor: "#fc02a9"
+  property color vocabColor: "#a802fd"
 
   readonly property color okColor: "#93c01f"
   readonly property color noColor: "#fc0234"
@@ -236,26 +236,33 @@ FocusScope {
       color: quiz.typeColor
 
       // just the character -- no "Kanji · Level 7" line: the level leaks which
-      // of two look-alike subjects (矢 lv3 vs 失 lv7) you're being asked
+      // of two look-alike subjects (矢 lv3 vs 失 lv7) you're being asked.
+      // Sits a little above centre to leave room for the SRS chip below.
       Text {
-        anchors.centerIn: parent
+        id: charText
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: -Style.space(8)
         text: quiz.d.characters || ""
         color: "white"
         // WaniKani sets its subject characters at a regular weight (Noto
         // Sans JP); match that rather than bolding.
         font.family: quiz.jpFamily
-        font.pixelSize: Math.min(header.height * 0.6, Style.font.displayLarge * 3)
+        font.pixelSize: Math.min(header.height * 0.52, Style.font.displayLarge * 3)
         font.weight: Font.Normal
       }
     }
 
-    // SRS-transition chip as a subject finishes (reviews) -- floats over the
-    // header / prompt-bar seam so it never nudges the layout
+    // SRS-transition chip as a subject finishes (reviews) -- centred in the
+    // gap between the character and the prompt bar, floating so it never
+    // nudges the layout
     Rectangle {
       id: srsChip
       anchors.horizontalCenter: parent.horizontalCenter
-      anchors.bottom: promptBar.top
-      anchors.bottomMargin: Style.space(4)
+      y: {
+        var charBottom = header.y + charText.y + charText.height
+        return charBottom + (promptBar.y - charBottom - height) / 2
+      }
       z: 15
       visible: !!quiz.srsPill && quiz.phase === "correct"
       width: pillRow.implicitWidth + Style.space(20)
@@ -533,10 +540,7 @@ FocusScope {
         text: quiz._infoStack.length > 0
           ? "j / k  section   ·   h / l  chip   ·   Enter  open   ·   Esc  back"
           : "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  close"
-        // sits over the colour header -- white with a dark edge reads on any
         color: "#ffffff"
-        style: Text.Outline
-        styleColor: Qt.rgba(0, 0, 0, 0.4)
         font.family: quiz.fontFamily
         font.pixelSize: Style.font.caption
       }

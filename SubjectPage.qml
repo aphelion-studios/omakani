@@ -21,9 +21,9 @@ Item {
   property string jpFamily: Qt.fontFamilies().indexOf("Noto Sans JP") >= 0
     ? "Noto Sans JP" : "Noto Sans CJK JP"
 
-  property color radicalColor: "#00a1f1"
-  property color kanjiColor: "#f100a1"
-  property color vocabColor: "#a100f1"
+  property color radicalColor: "#01a9fd"
+  property color kanjiColor: "#fc02a9"
+  property color vocabColor: "#a802fd"
 
   // when true (used as the quiz's item-info overlay), f / Esc ask to close
   property bool overlayMode: false

@@ -15,9 +15,9 @@ Item {
   property color pageBg: Color.background
   property string fontFamily: Style.font.family
   property string jpFamily: "Noto Sans CJK JP"
-  property color radicalColor: "#00a1f1"
-  property color kanjiColor: "#f100a1"
-  property color vocabColor: "#a100f1"
+  property color radicalColor: "#01a9fd"
+  property color kanjiColor: "#fc02a9"
+  property color vocabColor: "#a802fd"
   readonly property color passedColor: "#93c01f"
 
   signal openSubject(int subjectId)
