@@ -65,6 +65,11 @@ FocusScope {
   readonly property string promptWord: kind === "radical" ? "Name"
     : effectiveType === "reading" ? "Reading" : "Meaning"
   readonly property bool readingPrompt: effectiveType === "reading"
+  // audio (p) only makes sense for vocab, and only once the reading is fair
+  // game -- on a meaning prompt you haven't reached yet, hearing it is a peek
+  readonly property bool isVocab: kind === "vocabulary" || kind === "kana_vocabulary"
+  readonly property bool canAudio: !!service && isVocab
+    && (readingPrompt || readingDone)
 
   function reset() {
     phase = "input"
@@ -112,7 +117,7 @@ FocusScope {
   }
 
   function playAudio() {
-    if (service && (kind === "vocabulary" || kind === "kana_vocabulary") && subject && subject.id)
+    if (canAudio && subject && subject.id)
       service.playAudio(subject.id, "random")
   }
 
@@ -131,7 +136,7 @@ FocusScope {
   }
   Shortcut {
     sequences: ["p"]
-    enabled: quiz.visible && quiz.phase !== "input"
+    enabled: quiz.visible && quiz.phase !== "input" && quiz.canAudio
     onActivated: quiz.playAudio()
   }
 
@@ -201,13 +206,25 @@ FocusScope {
       color: quiz.readingPrompt
         ? Qt.rgba(0, 0, 0, 0.55)
         : Qt.rgba(1, 1, 1, 0.92)
-      Text {
+      // "<Type> <Meaning|Reading>" -- the type in a regular weight, the part
+      // you're being tested on in bold, matching the website
+      Row {
         anchors.centerIn: parent
-        text: quiz.typeWord + "  " + quiz.promptWord
-        color: quiz.readingPrompt ? "#ffffff" : "#1a1a1a"
-        font.family: quiz.fontFamily
-        font.pixelSize: Style.font.subtitle
-        font.bold: true
+        spacing: Style.space(6)
+        Text {
+          text: quiz.typeWord
+          color: quiz.readingPrompt ? "#ffffff" : "#1a1a1a"
+          font.family: quiz.fontFamily
+          font.pixelSize: Style.font.subtitle
+          font.weight: Font.Normal
+        }
+        Text {
+          text: quiz.promptWord
+          color: quiz.readingPrompt ? "#ffffff" : "#1a1a1a"
+          font.family: quiz.fontFamily
+          font.pixelSize: Style.font.subtitle
+          font.bold: true
+        }
       }
     }
 
@@ -321,7 +338,8 @@ FocusScope {
       anchors.horizontalCenter: parent.horizontalCenter
       visible: quiz.phase !== "input" && quiz.nudge === ""
       text: quiz.phase === "correct"
-        ? "Enter to continue   ·   f  item info   ·   p  audio"
+        ? ("Enter to continue   ·   f  item info"
+           + (quiz.canAudio ? "   ·   p  audio" : ""))
         : "Enter to continue   ·   f  see why"
       color: Qt.darker(quiz.fg, 1.5)
       font.family: quiz.fontFamily
@@ -339,10 +357,10 @@ FocusScope {
         model: [
           { g: "󰔟", act: "wrap", tip: "Wrap up" },
           { g: "󰋼", act: "info", tip: "Item info (f)" },
-          { g: "󰕾", act: "audio", tip: "Audio (p)", vocab: true }
+          { g: "󰕾", act: "audio", tip: "Audio (p)", audio: true }
         ]
         delegate: Rectangle {
-          visible: !modelData.vocab || quiz.kind === "vocabulary" || quiz.kind === "kana_vocabulary"
+          visible: !modelData.audio || quiz.canAudio
           width: Style.space(38)
           height: Style.space(38)
           radius: width / 2
