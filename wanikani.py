@@ -1124,7 +1124,20 @@ def cmd_submit_review(args):
                 "fetchedAt": iso(now_utc())}
 
     api = Api(token)
-    result = api.post("/reviews", {"review": review}) or {}
+    try:
+        result = api.post("/reviews", {"review": review}) or {}
+    except ApiError as error:
+        if error.code in (401, 403):
+            payload = base_summary()
+            payload["ok"] = False
+            payload["configured"] = True  # the token still reads fine
+            payload["error"] = (
+                "This API token can't write reviews -- it's read-only. Make a "
+                "new one at wanikani.com/settings/personal_access_tokens with "
+                "the 'assignments:start' and 'reviews:create' permissions "
+                "checked, then paste it in again.")
+            return payload
+        raise
     data = result.get("data") or {}
     updated = (result.get("resources_updated") or {})
     assignment = data_of(updated.get("assignment"))

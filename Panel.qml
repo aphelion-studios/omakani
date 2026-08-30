@@ -74,11 +74,13 @@ Panel {
   function openStart(index) {
     var a = startActions[index]
     if (!a) return
-    if (a.payload)
+    if (a.payload) {
       Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
         "io.github.aphelion-studios.omakani", JSON.stringify(a.payload)])
-    else if (a.url)
+      root.close()   // get the dropdown out of the app's way
+    } else if (a.url) {
       Quickshell.execDetached(["xdg-open", String(a.url)])
+    }
   }
 
   // The mark always shows while unconnected (so the panel stays reachable to
