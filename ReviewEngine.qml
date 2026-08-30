@@ -126,9 +126,6 @@ FocusScope {
     return Math.max(1, cur - adj * penalty)
   }
 
-  // remembers the last answer so the undo (↺) tool can reverse it cleanly
-  property var lastAnswer: null
-
   function finishIfComplete(rec, id) {
     if (!subjectComplete(rec) || rec.sent) return
     rec.sent = true
@@ -149,12 +146,6 @@ FocusScope {
     var type = current.type
     var it = items
     var rec = it[id]
-    engine.lastAnswer = {
-      id: id, type: type, correct: correct,
-      mWrong: rec.mWrong, rWrong: rec.rWrong, mOK: rec.mOK, rOK: rec.rOK,
-      sent: rec.sent, answerCount: answerCount, correctCount: correctCount,
-      submittedCount: submittedCount, queueLen: queue.length
-    }
     answerCount += 1
     if (correct) {
       correctCount += 1
@@ -171,53 +162,6 @@ FocusScope {
       queue = nq
     }
     items = it
-  }
-
-  // "my answer was actually right" -- undo the miss on the current question
-  function overrideCorrect() {
-    if (!current) return
-    var it = items
-    var rec = it[current.id]
-    if (current.type === "meaning") {
-      rec.mWrong = Math.max(0, rec.mWrong - 1); rec.mOK = true
-    } else {
-      rec.rWrong = Math.max(0, rec.rWrong - 1); rec.rOK = true
-    }
-    correctCount += 1
-    // drop the copy the miss requeued
-    var nq = queue.slice()
-    for (var i = pos + 1; i < nq.length; i++) {
-      if (nq[i].id === current.id && nq[i].type === current.type) { nq.splice(i, 1); break }
-    }
-    queue = nq
-    finishIfComplete(rec, current.id)
-    items = it
-    engine.lastAnswer = null
-  }
-
-  // "let me answer that again" -- fully reverse the last answer
-  function retryCurrent() {
-    var u = engine.lastAnswer
-    if (!u || !current || u.id !== current.id || u.type !== current.type) return
-    var it = items
-    var rec = it[u.id]
-    if (rec.sent && !engine.dryRun) return   // already sent live -- can't take it back
-    rec.mWrong = u.mWrong; rec.rWrong = u.rWrong
-    rec.mOK = u.mOK; rec.rOK = u.rOK
-    rec.sent = u.sent
-    answerCount = u.answerCount
-    correctCount = u.correctCount
-    submittedCount = u.submittedCount
-    engine.pill = null
-    if (queue.length > u.queueLen) {
-      var nq = queue.slice()
-      for (var i = pos + 1; i < nq.length; i++) {
-        if (nq[i].id === u.id && nq[i].type === u.type) { nq.splice(i, 1); break }
-      }
-      queue = nq
-    }
-    items = it
-    engine.lastAnswer = null
   }
 
   function onAdvance() {
@@ -421,8 +365,6 @@ FocusScope {
       ? engine.items[engine.current.id].rOK === true : false
     srsPill: engine.pill
     reviewMode: true
-    onMarkedCorrect: engine.overrideCorrect()
-    onRetried: engine.retryCurrent()
     pageBg: engine.pageBg
     fg: engine.fg
     fontFamily: engine.fontFamily

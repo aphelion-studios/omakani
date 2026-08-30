@@ -31,7 +31,7 @@ FocusScope {
   property color vocabColor: "#a100f1"
 
   readonly property color okColor: "#93c01f"
-  readonly property color noColor: "#e64a3b"
+  readonly property color noColor: "#fc0234"
 
   // when set (reviews), item info hides the half you haven't answered yet
   property bool restrictInfo: false
@@ -55,10 +55,8 @@ FocusScope {
   signal advance()
   signal wrapUp()
   signal infoRequested()
-  signal markedCorrect()   // "my answer was actually right" (reviews)
-  signal retried()         // "let me answer that again" (reviews)
 
-  // reviews light up the check / undo tools; lessons don't
+  // reviews vs lessons -- kept for anything review-only in the card
   property bool reviewMode: false
 
   property alias infoPageItem: infoPage
@@ -91,7 +89,11 @@ FocusScope {
   }
 
   Component.onCompleted: Answer.useKana(Kana)
+  // the queue can ask both halves of one subject back to back, so `subject`
+  // doesn't change between them -- reset on the question type too, or the
+  // card stays stuck green/red on the previous answer
   onSubjectChanged: reset()
+  onQuestionTypeChanged: reset()
 
   readonly property string kind: subject ? String(subject.object || "") : ""
   readonly property var d: (subject && subject.data) || ({})
@@ -165,21 +167,6 @@ FocusScope {
     infoOpen = true
     infoRequested()
   }
-  function markCorrect() {
-    if (phase !== "wrong") return
-    phase = "correct"
-    nudge = ""
-    markedCorrect()
-    Qt.callLater(quiz.forceActiveFocus)
-  }
-  function retry() {
-    if (phase === "input") return
-    phase = "input"
-    nudge = ""
-    field.text = ""
-    retried()
-    Qt.callLater(field.forceActiveFocus)
-  }
 
   Keys.onPressed: function (e) {
     if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { submit(); e.accepted = true }
@@ -198,6 +185,12 @@ FocusScope {
     sequences: ["p"]
     enabled: quiz.visible && quiz.phase !== "input" && quiz.canAudio
     onActivated: quiz.playAudio()
+  }
+  // w = wrap up the session (the hourglass), between questions only
+  Shortcut {
+    sequences: ["w"]
+    enabled: quiz.visible && quiz.phase !== "input" && !quiz.infoOpen
+    onActivated: quiz.wrapUp()
   }
   // Enter advances from a settled card even if focus drifted (e.g. just
   // closed item info); during input the field's own Enter handles submit
@@ -262,34 +255,38 @@ FocusScope {
           font.family: quiz.fontFamily
           font.pixelSize: Style.font.bodySmall
         }
+      }
+    }
 
-        // SRS-transition chip, shown as a subject finishes (reviews)
-        Rectangle {
-          anchors.horizontalCenter: parent.horizontalCenter
-          visible: !!quiz.srsPill && quiz.phase === "correct"
-          width: pillRow.implicitWidth + Style.space(20)
-          height: Style.space(28)
-          radius: Style.space(5)
-          color: (quiz.srsPill && quiz.srsPill.pass) ? quiz.okColor : quiz.noColor
-          Row {
-            id: pillRow
-            anchors.centerIn: parent
-            spacing: Style.space(5)
-            Text {
-              text: (quiz.srsPill && quiz.srsPill.up) ? "↑" : "↓"
-              color: "#ffffff"
-              font.family: quiz.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-            }
-            Text {
-              text: quiz.srsPill ? quiz.srsPill.text : ""
-              color: "#ffffff"
-              font.family: quiz.fontFamily
-              font.pixelSize: Style.font.bodySmall
-              font.bold: true
-            }
-          }
+    // SRS-transition chip as a subject finishes (reviews) -- floats over the
+    // header / prompt-bar seam so it never nudges the layout
+    Rectangle {
+      id: srsChip
+      anchors.horizontalCenter: parent.horizontalCenter
+      anchors.verticalCenter: promptBar.top
+      z: 15
+      visible: !!quiz.srsPill && quiz.phase === "correct"
+      width: pillRow.implicitWidth + Style.space(20)
+      height: Style.space(28)
+      radius: Style.space(5)
+      color: (quiz.srsPill && quiz.srsPill.pass) ? quiz.okColor : quiz.noColor
+      Row {
+        id: pillRow
+        anchors.centerIn: parent
+        spacing: Style.space(5)
+        Text {
+          text: (quiz.srsPill && quiz.srsPill.up) ? "↑" : "↓"
+          color: "#ffffff"
+          font.family: quiz.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+        Text {
+          text: quiz.srsPill ? quiz.srsPill.text : ""
+          color: "#ffffff"
+          font.family: quiz.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
         }
       }
     }
@@ -437,8 +434,8 @@ FocusScope {
       visible: quiz.phase !== "input" && quiz.nudge === ""
       text: quiz.phase === "correct"
         ? ("Enter to continue   ·   f  item info"
-           + (quiz.canAudio ? "   ·   p  audio" : ""))
-        : "Enter to continue   ·   f  see why"
+           + (quiz.canAudio ? "   ·   p  audio" : "") + "   ·   w  wrap up")
+        : "Enter to continue   ·   f  see why   ·   w  wrap up"
       color: Qt.darker(quiz.fg, 1.5)
       font.family: quiz.fontFamily
       font.pixelSize: Style.font.caption
@@ -453,11 +450,9 @@ FocusScope {
 
       Repeater {
         model: [
-          { g: "󰔟", act: "wrap",  show: true,             on: true },
-          { g: "󰄬", act: "check", show: quiz.reviewMode,   on: quiz.phase === "wrong" },
-          { g: "󰈈", act: "info",  show: true,             on: quiz.phase !== "input" },
-          { g: "󰕌", act: "undo",  show: quiz.reviewMode,   on: quiz.phase !== "input" },
-          { g: "󰕾", act: "audio", show: quiz.isVocab,      on: quiz.canAudio }
+          { g: "󰅐", act: "wrap",  show: true,        on: true },
+          { g: "󰈈", act: "info",  show: true,        on: quiz.phase !== "input" },
+          { g: "󰕾", act: "audio", show: quiz.isVocab, on: quiz.canAudio }
         ]
         delegate: Rectangle {
           visible: modelData.show
@@ -485,9 +480,7 @@ FocusScope {
             cursorShape: Qt.PointingHandCursor
             onClicked: {
               if (modelData.act === "wrap") quiz.wrapUp()
-              else if (modelData.act === "check") quiz.markCorrect()
               else if (modelData.act === "info") quiz.infoOpen ? quiz.infoOpen = false : quiz.openInfo()
-              else if (modelData.act === "undo") quiz.retry()
               else if (modelData.act === "audio") quiz.playAudio()
             }
           }
@@ -510,15 +503,15 @@ FocusScope {
         // while drilled into a linked subject (a kanji chip, etc.) show it
         // fully -- the review folds only apply to the item you're on
         readonly property bool drilled: quiz._infoStack.length > 0
-        // in a review, keep the half you're not being tested on folded (like
-        // the website: reading review -> meaning folded, meaning review ->
-        // reading folded). On a miss, unfold everything and ring the half you
-        // got wrong.
+        // in a review, keep the half you haven't earned yet folded: on a
+        // reading question the Meaning pane stays folded until you've cleared
+        // meaning this session, and vice versa -- even after a wrong answer
+        // (you still haven't done the other half). The half you were just
+        // tested on is shown, with the ring on it if you missed.
         reviewFolds: quiz.restrictInfo && !drilled
         collapse: (!quiz.restrictInfo || drilled) ? ""
-          : quiz.phase === "wrong" ? ""
-          : quiz.effectiveType === "reading" && !quiz.meaningDone ? "meaning"
-          : quiz.effectiveType === "meaning" && !quiz.readingDone ? "reading"
+          : quiz.effectiveType === "reading" ? (quiz.meaningDone ? "" : "meaning")
+          : quiz.effectiveType === "meaning" ? (quiz.readingDone ? "" : "reading")
           : ""
         focusSection: (quiz.phase === "wrong" && !drilled) ? quiz.effectiveType : ""
         audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
@@ -541,9 +534,12 @@ FocusScope {
         anchors.right: parent.right
         anchors.margins: Style.space(12)
         text: quiz._infoStack.length > 0
-          ? "Esc  back   ·   j / k  section   ·   l / h  open · close"
-          : "j / k  section   ·   l / h  open · close   ·   f / Esc  close"
-        color: Qt.darker(quiz.fg, 1.5)
+          ? "Esc  back   ·   j / k  move   ·   l  open   ·   h  back"
+          : "j / k  move   ·   l  open   ·   h  fold   ·   f / Esc  close"
+        // sits over the colour header -- white with a dark edge reads on any
+        color: "#ffffff"
+        style: Text.Outline
+        styleColor: Qt.rgba(0, 0, 0, 0.4)
         font.family: quiz.fontFamily
         font.pixelSize: Style.font.caption
       }
