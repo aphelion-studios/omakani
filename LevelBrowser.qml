@@ -73,6 +73,9 @@ Item {
   FocusScope {
     id: keyScope
     anchors.fill: parent
+    // a focused item still gets key events while hidden -- stop eating keys
+    // when the browser isn't the visible view
+    Keys.enabled: browser.visible
 
     Keys.onPressed: function (e) {
       if (e.text === "h" || e.key === Qt.Key_Left) { browser.moveCursor(-1); e.accepted = true }

@@ -125,8 +125,16 @@ Item {
   function moveFocus(delta) {
     var v = visibleNav()
     if (!v.length) return
+    var next = Math.max(0, Math.min(focusIndex + delta, v.length - 1))
+    if (next === focusIndex) {
+      // already at the edge -- scroll the rest of the way (past the header
+      // at the top, past the tail padding at the bottom)
+      flick.contentY = delta < 0 ? 0
+        : Math.max(0, flick.contentHeight - flick.height)
+      return
+    }
     chipIndex = 0      // new section -> highlight its first chip
-    focusIndex = Math.max(0, Math.min(focusIndex + delta, v.length - 1))
+    focusIndex = next
     Qt.callLater(scrollToFocused)
   }
   // text sections (Meaning / Reading / Context) fold in the overlay; a plain
@@ -258,6 +266,9 @@ Item {
   FocusScope {
     id: keys
     anchors.fill: parent
+    // a focused item still gets key events while hidden -- don't eat keys
+    // when this page isn't the visible view
+    Keys.enabled: page.visible
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)

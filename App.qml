@@ -49,7 +49,7 @@ Item {
     if (!service || !service.configured) return out
     if (startLessons) out.push({ text: "Start Lessons", act: "lesson", loud: true })
     if (startReviews) out.push({ text: "Start Reviews", act: "review", loud: true })
-    out.push({ text: "Browse subjects", act: "browse", loud: false })
+    out.push({ text: "Browse Subjects", act: "browse", loud: false })
     return out
   }
   function homeMove(d) {
@@ -537,8 +537,8 @@ Item {
                 color: loud
                   ? (lit ? Qt.lighter(root.accent, 1.3) : root.accent)
                   : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.16 : 0.08)
-                border.width: lit ? 2 : (loud ? 0 : 1)
-                border.color: lit ? root.fg
+                border.width: lit ? 3 : (loud ? 0 : 1)
+                border.color: lit ? (loud ? "#fcfdfd" : root.fg)
                   : (loud ? "transparent"
                           : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22))
                 Behavior on color { ColorAnimation { duration: 110 } }
@@ -609,7 +609,7 @@ Item {
             root.navStack = next
             if (root.service) root.service.loadBrowse(newLevel)
           }
-          onVisibleChanged: if (visible) Qt.callLater(focusGrid)
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (levelBrowser.visible) levelBrowser.focusGrid() })
         }
 
         // -------------------------------------------------- SUBJECT
@@ -630,7 +630,7 @@ Item {
           keyNav: true          // j/k sections, h/l chips, Enter, Esc
           onNavigate: function (subjectId) { root.goSubject(subjectId) }
           onCloseRequested: root.leave()
-          onVisibleChanged: if (visible) Qt.callLater(focusPage)
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (subjectPage.visible) subjectPage.focusPage() })
         }
 
         // loading / empty state for the subject page
@@ -663,7 +663,7 @@ Item {
           vocabColor: root.vocabColor
           onAdvance: root.popPage()
           onWrapUp: root.popPage()
-          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (quizCard.visible) quizCard.forceActiveFocus() })
         }
 
         Text {
@@ -692,7 +692,7 @@ Item {
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
           onExit: root.leave()
-          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (quizSession.visible) quizSession.forceActiveFocus() })
         }
 
         // -------------------------------------------------- REVIEW (POSTs)
@@ -712,7 +712,7 @@ Item {
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
           onExit: root.leave()
-          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (reviewEngine.visible) reviewEngine.forceActiveFocus() })
         }
 
         // -------------------------------------------------- LESSON (POSTs)
@@ -731,7 +731,7 @@ Item {
           kanjiColor: root.kanjiColor
           vocabColor: root.vocabColor
           onExit: root.leave()
-          onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (lessonFlow.visible) lessonFlow.forceActiveFocus() })
         }
       }
     }
