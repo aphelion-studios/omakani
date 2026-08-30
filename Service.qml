@@ -236,8 +236,13 @@ Item {
       return
     }
     lastVoiceActor = String(payload.voiceActor || "")
-    Quickshell.execDetached(["mpv", "--no-video", "--no-terminal",
-                             "--really-quiet", String(payload.path)])
+    // --no-config / --no-ytdl / explicit ao: a user mpv.conf or the ytdl
+    // hook can stall a bare mpv for many seconds on a short clip.
+    Quickshell.execDetached(["mpv", "--no-config", "--no-terminal",
+                             "--no-video", "--vo=null", "--no-ytdl",
+                             "--ao=pipewire,pulse,alsa",
+                             "--really-quiet", "--idle=no",
+                             String(payload.path)])
     audioPlayed(lastVoiceActor)
   }
 
