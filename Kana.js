@@ -57,6 +57,7 @@ var SMALL = {
 };
 
 var SOKUON = "っ"; // small tsu
+var LATIN_CONSONANT = "bcdfghjkmpqrstvwxyz"; // 'n' handled on its own
 
 function isVowel(c) { return "aiueo".indexOf(c) >= 0; }
 
@@ -77,8 +78,10 @@ function toKana(input) {
       if (SMALL[rest1]) { out += SMALL[rest1]; i += 2; continue; }
     }
 
-    // sokuon: a doubled consonant that isn't "nn"
-    if (c !== "n" && !isVowel(c) && i + 1 < s.length && s.charAt(i + 1) === c) {
+    // sokuon: a doubled *latin* consonant that isn't "nn". Guarding on latin
+    // keeps toKana idempotent -- "おお" must stay "おお", not become "っお".
+    if (c !== "n" && LATIN_CONSONANT.indexOf(c) >= 0
+        && i + 1 < s.length && s.charAt(i + 1) === c) {
       out += SOKUON;
       i += 1;
       continue;

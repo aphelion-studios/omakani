@@ -76,7 +76,7 @@ FocusScope {
     if (phase === "correct" || phase === "wrong") { quiz.advance(); return }
     if (field.text.replace(/\s/g, "") === "") { shake.restart(); return }
 
-    if (readingPrompt) {
+    if (readingPrompt && !Kana.isKana(field.text.replace(/\s/g, ""))) {
       _converting = true
       field.text = Kana.toKana(field.text)
       _converting = false

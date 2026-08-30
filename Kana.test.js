@@ -57,6 +57,13 @@ check("katakanaToHiragana", K.katakanaToHiragana("ニチ"), "にち");
 check("isKana(kana)", K.isKana("しゅっぱつ"), true);
 check("isKana(romaji)", K.isKana("shu"), false);
 
+// toKana must be idempotent -- feeding it kana returns the same kana
+// (doubled vowels like おお must not turn into っお).
+for (const kana of ["おおきさ", "がっこう", "きゅう", "しゅっぱつ",
+    "ぜんぜん", "こんにちは", "ええ", "とおい"]) {
+  check("idempotent " + kana, K.toKana(kana), kana);
+}
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);
