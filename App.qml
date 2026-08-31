@@ -43,37 +43,57 @@ Item {
     && !service.vacation && service.reviewsNow > 0
 
   // ---- home screen keyboard nav --------------------------------------
-  // one flat list (primary buttons first, then the Extra Study pills) so
-  // j/k just walks the lot; `kind` splits them for rendering
+  // one flat list: [Lessons, Reviews, Level Progress] then the three Extra
+  // Study rows. Rows with a zero count render dimmed and can't be focused or
+  // activated. `count` -1 means "no pill" (Level Progress).
   property int homeIndex: 0
   readonly property var homeActions: {
     var out = []
     if (!service || !service.configured) return out
-    if (startLessons) out.push({ text: "Start Lessons", act: "lesson", loud: true, kind: "primary" })
-    if (startReviews) out.push({ text: "Start Reviews", act: "review", loud: true, kind: "primary" })
-    out.push({ text: "Level Progress", act: "browse", loud: false, kind: "primary" })
+    var ok = !service.vacation
+    var ln = service.lessonsNow, rn = service.reviewsNow
+    out.push({ text: "Lessons", act: "lesson", kind: "primary",
+               count: ln, enabled: ok && ln > 0 })
+    out.push({ text: "Reviews", act: "review", kind: "primary",
+               count: rn, enabled: ok && rn > 0 })
+    out.push({ text: "Level Progress", act: "browse", kind: "wide",
+               count: -1, enabled: true })
     var es = service.extraStudy || ({})
-    var rows = [
-      { text: "Recent Lessons", act: "es:recent-lessons", count: Number(es.recentLessons) || 0 },
-      { text: "Recent Mistakes", act: "es:mistakes", count: Number(es.recentMistakes) || 0 },
-      { text: "Burned Items", act: "es:burned", count: Number(es.burnedItems) || 0 }
-    ]
-    for (var i = 0; i < rows.length; i++)
-      if (rows[i].count > 0) out.push({ text: rows[i].text, act: rows[i].act,
-                                        count: rows[i].count, loud: false, kind: "extra" })
+    var rl = Number(es.recentLessons) || 0
+    var rm = Number(es.recentMistakes) || 0
+    var bi = Number(es.burnedItems) || 0
+    out.push({ text: "Recent Lessons",  act: "es:recent-lessons", kind: "extra",
+               glyph: "󰌵", count: rl, enabled: rl > 0 })
+    out.push({ text: "Recent Mistakes", act: "es:mistakes", kind: "extra",
+               glyph: "󰀦", count: rm, enabled: rm > 0 })
+    out.push({ text: "Burned Items",    act: "es:burned", kind: "extra",
+               glyph: "󰈸", count: bi, enabled: bi > 0 })
     return out
   }
   readonly property var homePrimary: homeActions.filter(function (a) { return a.kind === "primary" })
+  readonly property var homeWide: homeActions.filter(function (a) { return a.kind === "wide" })
   readonly property var homeExtra: homeActions.filter(function (a) { return a.kind === "extra" })
   function homeMove(d) {
-    if (homeActions.length === 0) return
-    homeIndex = (homeIndex + d + homeActions.length) % homeActions.length
+    var n = homeActions.length
+    if (n === 0) return
+    var i = homeIndex
+    for (var step = 0; step < n; step++) {
+      i = (i + d + n) % n
+      if (homeActions[i] && homeActions[i].enabled !== false) { homeIndex = i; return }
+    }
   }
-  onHomeActionsChanged: if (homeIndex >= homeActions.length)
-    homeIndex = Math.max(0, homeActions.length - 1)
+  function homeEnsureValid() {
+    var n = homeActions.length
+    if (n === 0) { homeIndex = 0; return }
+    if (homeIndex < n && homeActions[homeIndex] && homeActions[homeIndex].enabled !== false) return
+    for (var i = 0; i < n; i++)
+      if (homeActions[i] && homeActions[i].enabled !== false) { homeIndex = i; return }
+    homeIndex = 0
+  }
+  onHomeActionsChanged: Qt.callLater(homeEnsureValid)
   function homeActivate() {
     var a = homeActions[Math.max(0, Math.min(homeIndex, homeActions.length - 1))]
-    if (!a) return
+    if (!a || a.enabled === false) return
     if (a.act === "lesson") goLesson()
     else if (a.act === "review") goReview()
     else if (a.act === "browse") goBrowse(service ? (service.level || 1) : 1)
@@ -625,15 +645,20 @@ Item {
           }
 
         Column {
+          id: homeCol
           visible: root.view === "home"
           anchors.centerIn: parent
-          spacing: Style.space(18)
-          width: Math.min(parent.width - Style.space(80), Style.space(520))
+          spacing: Style.space(14)
+          // one column width drives the button pair, Level Progress and the
+          // Extra Study rows so their edges line up
+          readonly property real colW: Math.min(parent.width - Style.space(80), Style.space(360))
+          readonly property real gap: Style.space(10)
+          width: colW
 
           Image {
             anchors.horizontalCenter: parent.horizontalCenter
             source: Qt.resolvedUrl("wordmark.svg")
-            height: Style.space(64)
+            height: Style.space(58)
             fillMode: Image.PreserveAspectFit
             sourceSize.width: 1893
             smooth: true
@@ -641,95 +666,157 @@ Item {
             width: Math.min(implicitWidth, parent.width)
           }
 
-          Text {
+          // greeting -- ようこそ, <name> !  /  Level N
+          Column {
             width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            color: Qt.darker(root.fg, 1.4)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            text: {
-              if (!root.service) return "Connecting to the service…"
-              if (!root.service.configured) return "Add your API token from the bar widget first."
-              var s = root.service
-              return s.username + "   ·   Level " + s.level + "\n"
-                + s.reviewsNow + " reviews   ·   " + s.lessonsNow + " lessons ready"
+            spacing: Style.space(2)
+            bottomPadding: Style.space(6)
+
+            Text {
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WordWrap
+              color: Qt.darker(root.fg, 1.4)
+              font.family: root.jpFamily
+              font.pixelSize: Style.font.body
+              text: {
+                if (!root.service) return "Connecting to the service…"
+                if (!root.service.configured) return "Add your API token from the bar widget first."
+                return "ようこそ, " + root.service.username + " !"
+              }
+            }
+            Text {
+              visible: !!root.service && root.service.configured
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
+              color: Qt.darker(root.fg, 1.5)
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              text: root.service ? ("Level " + root.service.level) : ""
             }
           }
 
-          // Start Lessons / Start Reviews (when waiting) + Level Progress.
-          // j/k/h/l or arrows move the cursor, Enter activates. The "loud"
-          // ones are styled like the dashboard's Start buttons -- accent
-          // fill, focus ring, breathing pulse.
-          Column {
+          // ---- Lessons / Reviews (side by side) ----
+          Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Style.space(10)
+            spacing: homeCol.gap
             visible: !!root.service && root.service.configured
 
             Repeater {
               model: root.homePrimary
               delegate: Rectangle {
                 id: homeBtn
-                anchors.horizontalCenter: parent.horizontalCenter
-                readonly property bool current: index === root.homeIndex
-                readonly property bool lit: current || homeHover.containsMouse
-                readonly property bool loud: modelData.loud
-                width: homeLabel.implicitWidth + Style.space(52)
-                height: Style.space(42)
+                readonly property int gIndex: index
+                readonly property bool on: modelData.enabled !== false
+                readonly property bool current: gIndex === root.homeIndex && on
+                readonly property bool lit: current || (homeHover.containsMouse && on)
+                width: (homeCol.colW - homeCol.gap) / 2
+                height: Style.space(44)
                 radius: Style.space(6)
                 clip: true
-                color: loud
-                  ? (lit ? Qt.lighter(root.accent, 1.3) : root.accent)
-                  : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.16 : 0.08)
-                border.width: lit ? 3 : (loud ? 0 : 1)
-                border.color: lit ? (loud ? "#fcfdfd" : root.fg)
-                  : (loud ? "transparent"
-                          : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22))
+                opacity: on ? 1.0 : 0.4
+                color: lit ? Qt.lighter(root.accent, 1.3) : root.accent
+                border.width: lit ? 3 : 0
+                border.color: "#fcfdfd"
                 Behavior on color { ColorAnimation { duration: 110 } }
 
                 Rectangle {
                   anchors.fill: parent
                   radius: parent.radius
                   color: Qt.lighter(root.accent, 1.35)
-                  visible: homeBtn.loud && !homeBtn.lit
+                  visible: homeBtn.on && !homeBtn.lit
                   opacity: 0
                   SequentialAnimation on opacity {
-                    running: homeBtn.loud && homeBtn.visible && !homeBtn.lit
+                    running: homeBtn.on && homeBtn.visible && !homeBtn.lit
                     loops: Animation.Infinite
-                    NumberAnimation { from: 0.0; to: 0.4; duration: 950; easing.type: Easing.InOutSine }
-                    NumberAnimation { from: 0.4; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: 0.0; to: 0.35; duration: 950; easing.type: Easing.InOutSine }
+                    NumberAnimation { from: 0.35; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
                   }
                 }
 
-                Text {
-                  id: homeLabel
+                Row {
                   anchors.centerIn: parent
-                  text: modelData.text + (homeBtn.loud ? "  ›" : "")
-                  color: homeBtn.loud ? root.bg : root.fg
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  font.bold: homeBtn.loud
+                  spacing: Style.space(8)
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.text
+                    color: root.bg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                  }
+                  // count pill (white, like the website)
+                  Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.max(height, cnt.implicitWidth + Style.space(12))
+                    height: Style.space(20)
+                    radius: height / 2
+                    color: "#fcfdfd"
+                    Text {
+                      id: cnt
+                      anchors.centerIn: parent
+                      text: modelData.count
+                      color: root.bg
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                    }
+                  }
                 }
                 MouseArea {
                   id: homeHover
                   anchors.fill: parent
                   hoverEnabled: true
+                  enabled: homeBtn.on
                   cursorShape: Qt.PointingHandCursor
-                  onEntered: root.homeIndex = index
-                  onClicked: { root.homeIndex = index; root.homeActivate() }
+                  onEntered: root.homeIndex = homeBtn.gIndex
+                  onClicked: { root.homeIndex = homeBtn.gIndex; root.homeActivate() }
                 }
               }
             }
           }
 
-          // ---- Extra Study (mirrors the dashboard block) ----
-          // only the buckets with something in them; each opens a no-sync
-          // quiz over that batch. Same homeIndex cursor, offset past the
-          // primary buttons.
+          // ---- Level Progress (full column width) ----
+          Repeater {
+            model: root.homeWide
+            delegate: Rectangle {
+              id: wideBtn
+              anchors.horizontalCenter: parent.horizontalCenter
+              readonly property int gIndex: root.homePrimary.length + index
+              readonly property bool lit: gIndex === root.homeIndex || wideHover.containsMouse
+              width: homeCol.colW
+              height: Style.space(40)
+              radius: Style.space(6)
+              color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.16 : 0.08)
+              border.width: lit ? 2 : 1
+              border.color: lit ? root.fg
+                : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.22)
+              Behavior on color { ColorAnimation { duration: 110 } }
+              Text {
+                anchors.centerIn: parent
+                text: modelData.text
+                color: root.fg
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+              MouseArea {
+                id: wideHover
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onEntered: root.homeIndex = wideBtn.gIndex
+                onClicked: { root.homeIndex = wideBtn.gIndex; root.homeActivate() }
+              }
+            }
+          }
+
+          // ---- Extra Study ----
           Column {
             anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
             spacing: Style.space(6)
-            visible: root.homeExtra.length > 0
+            topPadding: Style.space(8)
+            visible: !!root.service && root.service.configured
 
             Text {
               anchors.horizontalCenter: parent.horizontalCenter
@@ -738,7 +825,7 @@ Item {
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               font.bold: true
-              bottomPadding: Style.space(2)
+              bottomPadding: Style.space(4)
             }
 
             Repeater {
@@ -746,43 +833,69 @@ Item {
               delegate: Rectangle {
                 id: esRow
                 anchors.horizontalCenter: parent.horizontalCenter
-                readonly property int globalIndex: root.homePrimary.length + index
-                readonly property bool lit: globalIndex === root.homeIndex || esHover.containsMouse
-                width: Style.space(280)
-                height: Style.space(34)
+                readonly property int gIndex: root.homePrimary.length + root.homeWide.length + index
+                readonly property bool on: modelData.enabled !== false
+                readonly property bool lit: (gIndex === root.homeIndex || esHover.containsMouse) && on
+                width: homeCol.colW
+                height: Style.space(38)
                 radius: Style.space(6)
+                opacity: on ? 1.0 : 0.4
                 color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.14 : 0.06)
                 border.width: lit ? 2 : 1
                 border.color: lit ? root.fg
                   : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.18)
                 Behavior on color { ColorAnimation { duration: 110 } }
 
-                Text {
+                Row {
                   anchors.left: parent.left
-                  anchors.leftMargin: Style.space(14)
+                  anchors.leftMargin: Style.space(13)
                   anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.text
-                  color: root.fg
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
+                  spacing: Style.space(9)
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.glyph
+                    color: Qt.darker(root.fg, 1.25)
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                  }
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: modelData.text
+                    color: root.fg
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                  }
                 }
-                Text {
+
+                // count pill (outline, like the website)
+                Rectangle {
                   anchors.right: parent.right
-                  anchors.rightMargin: Style.space(14)
+                  anchors.rightMargin: Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.count
-                  color: Qt.darker(root.fg, 1.35)
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: true
+                  width: Math.max(height, esCnt.implicitWidth + Style.space(12))
+                  height: Style.space(19)
+                  radius: height / 2
+                  color: "transparent"
+                  border.width: 1
+                  border.color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.35)
+                  Text {
+                    id: esCnt
+                    anchors.centerIn: parent
+                    text: modelData.count
+                    color: Qt.darker(root.fg, 1.15)
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
                 }
                 MouseArea {
                   id: esHover
                   anchors.fill: parent
                   hoverEnabled: true
+                  enabled: esRow.on
                   cursorShape: Qt.PointingHandCursor
-                  onEntered: root.homeIndex = esRow.globalIndex
-                  onClicked: { root.homeIndex = esRow.globalIndex; root.homeActivate() }
+                  onEntered: root.homeIndex = esRow.gIndex
+                  onClicked: { root.homeIndex = esRow.gIndex; root.homeActivate() }
                 }
               }
             }
