@@ -252,6 +252,9 @@ Item {
       root.resetNav()
       root.goSubject(parseInt(id, 10))
     }
+    // testing: open a subject the way a chip click does -- keep the current
+    // stack (home -> browse -> subject) instead of resetting
+    function pick(id: string): void { root.goSubject(parseInt(id, 10)) }
     function quiz(id: string, type: string): void {
       root.open("")
       root.resetNav()
@@ -375,7 +378,10 @@ Item {
         browseError: root.service ? root.service.browseError : "",
         browseCursor: levelBrowser.cursor,
         browseRows: levelBrowser.rows.length,
-        browseKeyFocus: levelBrowser.hasKeyFocus
+        browseKeyFocus: levelBrowser.hasKeyFocus,
+        subjectHasSubject: !!subjectPage.subject,
+        subjectKeyFocus: subjectPage.hasKeyFocus,
+        subjectFocusIndex: subjectPage.focusIndex
       })
     }
   }
