@@ -176,6 +176,7 @@ Panel {
     var si = navSecAt(navSection)
     if (si < 0) { navSection = secs[0].n; navIndex = 0; scrollTimer.restart(); return }
     var cur = secs[si]
+    var beforeSec = navSection, beforeIdx = navIndex
 
     if (dy !== 0) {
       var down = dy > 0
@@ -202,6 +203,13 @@ Panel {
         navActivate()
         return
       }
+    }
+    // the cursor couldn't move -- a second Up at the top scrolls the header
+    // fully in, a second Down at the bottom scrolls to the end
+    if (navSection === beforeSec && navIndex === beforeIdx && dy !== 0 && panelFlick) {
+      panelFlick.contentY = dy < 0 ? 0
+        : Math.max(0, panelFlick.contentHeight - panelFlick.height)
+      return
     }
     scrollTimer.restart()
   }
@@ -265,12 +273,8 @@ Panel {
   function scrollToCursor() {
     var it = cursorItem
     if (!it || !it.visible || !panelFlick) return
-    // Anywhere in the first section (the Start buttons), show the whole
-    // header/wordmark above it.
-    if (navSecAt(navSection) === 0) {
-      panelFlick.contentY = 0
-      return
-    }
+    // The very first target lands with a fat top margin; a second Up press
+    // (handled in navMove) scrolls the header the rest of the way in.
     var y = it.mapToItem(panelFlick.contentItem, 0, 0).y
     // A fatter top margin on the first row of a section pulls its heading in too.
     var topM = navIndex === 0 ? Style.space(38) : Style.space(16)
