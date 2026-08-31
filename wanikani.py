@@ -987,6 +987,35 @@ def fetch_file(url, dest):
     os.replace(temporary, dest)
 
 
+def ensure_radical_image(subject_id, data):
+    """WaniKani ships a stylised SVG for every radical (the picture the website
+    shows under the mnemonic -- handy for the image-only radicals, and a nice
+    memory hook for the rest). Download it once, and bake a visible colour in
+    where the source has `var(--color-text, #000)` (QtSvg has no CSS var()).
+    Returns a local path, or "" when there's nothing to show / the fetch fails
+    -- never raises, so a flaky download can't break the detail response."""
+    images = data.get("character_images") or []
+    svg = next((img for img in images
+                if img.get("content_type") == "image/svg+xml" and img.get("url")), None)
+    if not svg:
+        return ""
+    dest = cache_dir() / "radical_images" / (str(subject_id) + ".svg")
+    if not dest.exists():
+        try:
+            fetch_file(svg["url"], dest)
+            text = dest.read_text(encoding="utf-8", errors="replace")
+            text = text.replace("var(--color-text, #000)", "#111111") \
+                       .replace("var(--color-text,#000)", "#111111")
+            dest.write_text(text, encoding="utf-8")
+        except Exception:
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+            return ""
+    return str(dest)
+
+
 def audio_pool(audios, voice, reading=""):
     """A subject's `pronunciation_audios`, ordered best-first for `voice`
     ('kyoko' / 'kenichi' / 'random' / '' = any), mp3 ahead of webm. When
@@ -1210,6 +1239,13 @@ def cmd_detail(args):
         entry = dict(subject)
         entry["study_material"] = notes.get(sid) or {}
         entry["assignment"] = assignments.get(sid) or {}
+        # the radical picture -- only for a focused lookup (the browser's
+        # subject page asks for one id), never a review / lesson batch where
+        # the serial downloads would stack up
+        if len(ids) == 1 and entry.get("object") == "radical":
+            path = ensure_radical_image(sid, entry.get("data") or {})
+            if path:
+                entry["character_image_path"] = path
         out[sid] = entry
 
     return {"ok": True, "configured": True, "error": "", "subjects": out,

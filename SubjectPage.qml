@@ -245,6 +245,10 @@ FocusScope {
 
   readonly property var sd: subject && subject.data ? subject.data : ({})
   readonly property string kind: subject ? String(subject.object || "") : ""
+  // WK's stylised radical picture (helper downloads the SVG for single-id
+  // lookups) -- shown on a light tile in the Name card, like the website
+  readonly property string characterImagePath: subject && subject.character_image_path
+    ? String(subject.character_image_path) : ""
   readonly property var study: subject && subject.study_material ? subject.study_material : ({})
 
   readonly property color typeColor: {
@@ -486,6 +490,27 @@ FocusScope {
               color: page.fg
               font.family: page.fontFamily
               font.pixelSize: Style.font.body
+            }
+
+            // the radical picture, on a light tile like the website
+            Rectangle {
+              visible: page.kind === "radical" && page.characterImagePath !== ""
+              width: Style.space(132)
+              height: Style.space(132)
+              radius: Style.space(6)
+              color: "#fcfdfd"
+              Image {
+                anchors.centerIn: parent
+                width: parent.width - Style.space(28)
+                height: parent.height - Style.space(28)
+                fillMode: Image.PreserveAspectFit
+                source: page.characterImagePath !== ""
+                  ? "file://" + page.characterImagePath : ""
+                sourceSize.width: 264
+                sourceSize.height: 264
+                smooth: true
+                mipmap: true
+              }
             }
 
             Rectangle {
