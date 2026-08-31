@@ -108,10 +108,13 @@ Item {
   }
 
   // leave the current view: step back if there's somewhere to step back to,
-  // otherwise close the app (a flow summoned from the dashboard is the root)
+  // otherwise land on the home menu. A flow summoned straight from the
+  // dashboard has no page under it -- finishing or wrapping it out should
+  // drop to the menu (where you can re-enter the remaining reviews), not
+  // slam the window shut. Esc from the menu itself still closes the app.
   function leave() {
     if (navStack.length > 1) popPage()
-    else requestClose()
+    else navStack = [{ view: "home" }]
   }
 
   function resetNav() {
@@ -146,6 +149,7 @@ Item {
   function goSession(ids, title) {
     root.sessionIds = (Array.isArray(ids) ? ids : []).slice(0, 100)
     root.sessionTitle = title || "Extra Study"
+    quizSession.rearm()   // drop any stale summary/empty screen from a past run
     pushPage({ view: "session" })
     Qt.callLater(function () { quizSession.start() })
   }
@@ -154,6 +158,7 @@ Item {
   // screen). Pulls the due queue from the helper first.
   property var reviewIds: []
   function goReview() {
+    reviewEngine.rearm()   // drop a stale summary/error screen until begin() rebuilds
     pushPage({ view: "review" })
     if (service) service.loadReviews()
   }
@@ -162,6 +167,7 @@ Item {
   property var lessonIds: []
   property int lessonTotal: 0
   function goLesson() {
+    lessonFlow.rearm()   // drop a stale summary/error screen until begin() rebuilds
     pushPage({ view: "lesson" })
     if (service) service.loadLessons(lessonBatchSize())
   }
@@ -281,6 +287,22 @@ Item {
       reviewEngine.startRun()
       return reviewEngine.phase
     }
+    // testing the wrap-out / re-enter path
+    function rwrap(): string {
+      if (root.view !== "review") return "not in review"
+      reviewEngine.phase = "summary"
+      return reviewEngine.phase
+    }
+    function rphase(): string { return reviewEngine.phase }
+    // simulate the home-screen Enter on the focused action
+    function henter(): string {
+      if (root.view !== "home") return "not home"
+      root.homeActivate()
+      return "view=" + root.view + " depth=" + root.navStack.length
+    }
+    function hidx(n: string): string { root.homeIndex = parseInt(n, 10) || 0; return String(root.homeIndex) }
+    function goreview2(): string { root.goReview(); return "view=" + root.view + " depth=" + root.navStack.length + " phase=" + reviewEngine.phase }
+    function eexit(): string { reviewEngine.exit(); return "depth=" + root.navStack.length + " opened=" + root.opened }
     function rtool(what: string): string {
       var c = root.view === "review" ? reviewEngine.cardItem : null
       if (!c) return "not in review"
@@ -381,7 +403,10 @@ Item {
         browseKeyFocus: levelBrowser.hasKeyFocus,
         subjectHasSubject: !!subjectPage.subject,
         subjectKeyFocus: subjectPage.hasKeyFocus,
-        subjectFocusIndex: subjectPage.focusIndex
+        subjectFocusIndex: subjectPage.focusIndex,
+        enginePhase: reviewEngine.phase,
+        homeIndex: root.homeIndex,
+        homeActions: root.homeActions.map(function (a) { return a.act })
       })
     }
   }
