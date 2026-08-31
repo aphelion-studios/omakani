@@ -297,7 +297,7 @@ FocusScope {
         return (glyphBottom + barTop) / 2 - height / 2
       }
       z: 15
-      visible: !!quiz.srsPill && quiz.phase === "correct"
+      visible: !!quiz.srsPill && quiz.phase === "correct" && !quiz.infoOpen
       width: pillRow.implicitWidth + Style.space(20)
       height: Style.space(28)
       radius: Style.space(5)
@@ -525,8 +525,17 @@ FocusScope {
     }
 
     // ---- item info (f) ----
+    // for the item you're reviewing: start right under the real header +
+    // prompt bar so those bands are literally the same pixels as the answer
+    // view -- we only overlay the scrolling card list. When drilled into a
+    // linked subject, cover the header too and let SubjectPage draw its own
+    // (it's a different subject now).
     Rectangle {
-      anchors.fill: parent
+      readonly property bool drilled: quiz._infoStack.length > 0
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: drilled ? parent.top : promptBar.bottom
+      anchors.bottom: parent.bottom
       visible: quiz.infoOpen
       color: quiz.pageBg
       z: 20
@@ -535,13 +544,9 @@ FocusScope {
         id: infoPage
         anchors.fill: parent
         overlayMode: true
-        // match the answer view's header + prompt bar exactly, so f doesn't
-        // resize those bands
-        overlayHeaderH: header.y + header.height
-        overlayBarH: promptBar.height
-        // while drilled into a linked subject (a kanji chip, etc.) show it
-        // fully -- the review folds only apply to the item you're on
         readonly property bool drilled: quiz._infoStack.length > 0
+        headerless: !drilled       // QuizCard keeps its own header for the
+                                   // item you're on; the drill shows its own
         // in a review, keep the half you haven't earned yet folded: on a
         // reading question the Meaning pane stays folded until you've cleared
         // meaning this session, and vice versa -- even after a wrong answer
@@ -553,8 +558,6 @@ FocusScope {
           : quiz.effectiveType === "reading" ? (quiz.meaningDone ? "" : "meaning")
           : quiz.effectiveType === "meaning" ? (quiz.readingDone ? "" : "reading")
           : ""
-        // the "<Type> <Meaning|Reading>" bar -- only for the item you're on
-        promptWord: (quiz.restrictInfo && !drilled) ? quiz.promptWord : ""
         focusSection: (quiz.phase === "wrong" && !drilled) ? quiz.effectiveType : ""
         audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
         subject: quiz._infoSubject

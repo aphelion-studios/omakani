@@ -41,14 +41,10 @@ FocusScope {
   // the level leaks which look-alike you're being asked
   property bool hideLevel: false
 
-  // in a review overlay, the "<Type> <Meaning|Reading>" bar under the header
-  // (mirrors the quiz card's prompt bar). "" = no bar (the standalone page).
-  property string promptWord: ""
-  readonly property bool _readingPrompt: promptWord === "Reading"
-  // when > 0 (review overlay), pin the coloured header / prompt bar to these
-  // exact pixel heights so f doesn't change the band sizes vs the answer view
-  property real overlayHeaderH: 0
-  property real overlayBarH: 0
+  // the review overlay's host (QuizCard) keeps its own real header + prompt
+  // bar on screen and only wants the scrolling card list from us -- skip our
+  // header entirely so the two can't drift a pixel
+  property bool headerless: false
 
   // a review's item info collapses the half you're being tested on (like the
   // website) -- present but folded, so f can't hand you the answer at a
@@ -397,9 +393,8 @@ FocusScope {
       // ---------------------------------------------------- header band
       Rectangle {
         width: parent.width
-        implicitHeight: (page.overlayMode && page.overlayHeaderH > 0)
-          ? page.overlayHeaderH
-          : header.implicitHeight + Style.space(44)
+        visible: !page.headerless
+        implicitHeight: visible ? header.implicitHeight + Style.space(44) : 0
         color: page.typeColor
 
         // key hint -- lives in the (scrolling) header so it doesn't sit over
@@ -418,8 +413,6 @@ FocusScope {
         Column {
           id: header
           anchors.centerIn: parent
-          anchors.verticalCenterOffset: (page.overlayMode && page.overlayHeaderH > 0)
-            ? -Style.space(4) : 0
           width: parent.width - Style.space(64)
           spacing: Style.space(8)
 
@@ -429,10 +422,7 @@ FocusScope {
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
             color: "#fcfdfd"
             font.family: page.jpFamily
-            // match the answer view's character sizing in a review overlay
-            font.pixelSize: (page.overlayMode && page.overlayHeaderH > 0)
-              ? Math.min(page.overlayHeaderH * 0.56, Style.font.displayLarge * 3)
-              : Style.font.displayLarge * 2.4
+            font.pixelSize: Style.font.displayLarge * 2.4
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
           }
 
@@ -504,10 +494,8 @@ FocusScope {
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            // with the prompt bar the type sits there instead; hide the level
-            // in a live review -- it leaks which of two look-alikes you're
-            // being asked (browsing keeps it)
-            visible: page.promptWord === ""
+            // hide the level in a live review -- it leaks which of two
+            // look-alikes you're being asked (browsing keeps it)
             text: (page.overlayMode && page.hideLevel)
               ? page.typeLabel
               : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
@@ -518,33 +506,7 @@ FocusScope {
         }
       }
 
-      // ---- prompt bar (review overlay) -- "<Type> <Meaning|Reading>" ----
-      Rectangle {
-        width: parent.width
-        visible: page.promptWord !== ""
-        implicitHeight: !visible ? 0
-          : page.overlayBarH > 0 ? page.overlayBarH : Style.space(38)
-        color: page._readingPrompt ? Qt.rgba(0, 0, 0, 0.55) : "#ebedef"
-        Row {
-          anchors.centerIn: parent
-          spacing: Style.space(6)
-          Text {
-            text: page.typeLabel
-            color: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
-            font.family: page.fontFamily
-            font.pixelSize: Style.font.subtitle
-          }
-          Text {
-            text: page.promptWord
-            color: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
-            font.family: page.fontFamily
-            font.pixelSize: Style.font.subtitle
-            font.bold: true
-          }
-        }
-      }
-
-      Item { width: 1; height: Style.space(20) }
+      Item { width: 1; height: Style.space(page.headerless ? 12 : 20) }
 
       // ---------------------------------------------------- cards
       Column {
