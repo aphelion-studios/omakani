@@ -391,10 +391,13 @@ FocusScope {
       spacing: 0
 
       // ---------------------------------------------------- header band
+      // same shallow proportion as the review card, so a chip page and the
+      // review item info read identically
+      readonly property real _bandH: Math.round(page.height * 0.26)
       Rectangle {
         width: parent.width
         visible: !page.headerless
-        implicitHeight: visible ? header.implicitHeight + Style.space(44) : 0
+        implicitHeight: visible ? body._bandH : 0
         color: page.typeColor
 
         // key hint -- lives in the (scrolling) header so it doesn't sit over
@@ -413,34 +416,24 @@ FocusScope {
         Column {
           id: header
           anchors.centerIn: parent
+          anchors.verticalCenterOffset: -Style.space(4)
           width: parent.width - Style.space(64)
           spacing: Style.space(8)
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            // in the review overlay never fall back to the meaning
+            // just the character (the meaning lives in the Meaning card and
+            // the type in the bar below) -- charless radicals fall back to
+            // the name so the band isn't empty on a browse page
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
             color: "#fcfdfd"
             font.family: page.jpFamily
-            font.pixelSize: Style.font.displayLarge * 2.4
+            font.pixelSize: Math.min(body._bandH * 0.56, Style.font.displayLarge * 3)
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
           }
 
-          Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            // the meaning sits in the Meaning card; don't also spell it in
-            // the header of the review overlay
-            visible: !page.overlayMode
-            text: page.primaryMeaning()
-            color: "#fcfdfd"
-            font.family: page.fontFamily
-            font.pixelSize: Style.font.display
-            font.bold: true
-          }
-
-          // locked / unlocked -- its own line, between the name and the type;
-          // solid outline for UNLOCKED, dashed for LOCKED (the website's tile
-          // border convention)
+          // locked / unlocked (browse only) -- solid outline for UNLOCKED,
+          // dashed for LOCKED, the website's tile-border convention
           Item {
             visible: page.showLockState
             anchors.horizontalCenter: parent.horizontalCenter
@@ -492,16 +485,33 @@ FocusScope {
             }
           }
 
+        }
+      }
+
+      // ---- type bar -- mirrors the review card's prompt bar ----
+      Rectangle {
+        width: parent.width
+        visible: !page.headerless
+        implicitHeight: visible ? Style.space(40) : 0
+        color: "#ebedef"
+        Row {
+          anchors.centerIn: parent
+          spacing: Style.space(6)
           Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            // hide the level in a live review -- it leaks which of two
-            // look-alikes you're being asked (browsing keeps it)
-            text: (page.overlayMode && page.hideLevel)
-              ? page.typeLabel
-              : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
-            color: Qt.rgba(1, 1, 1, 0.82)
+            text: page.typeLabel
+            color: "#1a1a1a"
             font.family: page.fontFamily
-            font.pixelSize: Style.font.bodySmall
+            font.pixelSize: Style.font.subtitle
+            font.bold: true
+          }
+          Text {
+            // the level leaks which of two look-alikes a drilled review page
+            // is; a browse page keeps it
+            visible: !page.hideLevel && !!page.sd.level
+            text: "·  Level " + (page.sd.level || "?")
+            color: Qt.rgba(0, 0, 0, 0.5)
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.subtitle
           }
         }
       }
