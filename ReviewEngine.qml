@@ -49,6 +49,12 @@ FocusScope {
   readonly property real progress: totalSubjects > 0
     ? submittedCount / totalSubjects : 0
 
+  // never pull keyboard focus while off-screen -- onPhaseChanged fires as
+  // the engine builds in the background (e.g. a queue prefetched while you're
+  // on another page) and an invisible FocusScope that grabs focus leaves the
+  // visible page's keys dead
+  function _grabFocus() { if (engine.visible) engine.forceActiveFocus() }
+
   // re-entering the view before begin() has run again: clear a terminal
   // screen so its window-wide Enter/Esc -> exit() shortcut can't fire on
   // the keypress that's meant to start the next session
@@ -84,9 +90,13 @@ FocusScope {
   }
 
   function tryBuild() {
-    if (built || !service || phase === "review" || phase === "summary") return
+    // only while we're actually loading a batch -- onDetailReady fires this
+    // on every detail fetch anywhere in the app, and an empty id list would
+    // otherwise "succeed" and flip an idle engine to ready
+    if (built || !service || phase !== "loading") return
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
       .filter(function (x) { return isFinite(x) }).slice(0, 100)
+    if (ids.length === 0) return
     if (!ids.every(function (x) { return !!service.subjectDetail(x) })) return
 
     var it = ({})
@@ -183,7 +193,7 @@ FocusScope {
     while (next < queue.length && subjectComplete(items[queue[next].id])) next += 1
     if (next >= queue.length) {
       phase = "summary"
-      Qt.callLater(engine.forceActiveFocus)
+      Qt.callLater(engine._grabFocus)
     } else {
       pos = next
     }
@@ -205,7 +215,7 @@ FocusScope {
   onPhaseChanged: {
     if (phase === "ready" || phase === "loading"
         || phase === "summary" || phase === "error")
-      Qt.callLater(engine.forceActiveFocus)
+      Qt.callLater(engine._grabFocus)
     if (phase === "ready") readyIndex = 1
   }
 
@@ -409,7 +419,7 @@ FocusScope {
     vocabColor: engine.vocabColor
     onAnswered: function (correct) { engine.onAnswered(correct) }
     onAdvance: engine.onAdvance()
-    onWrapUp: { engine.phase = "summary"; Qt.callLater(engine.forceActiveFocus) }
+    onWrapUp: { engine.phase = "summary"; Qt.callLater(engine._grabFocus) }
     onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
   }
 

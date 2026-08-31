@@ -216,13 +216,26 @@ Item {
   }
 
   // Detail pages: full resources for one or more subject ids. The helper
-  // fetches /subjects?ids=... fresh and folds in study materials.
+  // serves cached subject records and only fetches ids it's never seen.
+  // A request that arrives while one's in flight is buffered, not dropped
+  // (that's how a subject page / Recent Lessons could hang on "Loading").
+  property var detailPendingIds: []
   function loadDetail(ids) {
-    if (!ready || detailProcess.running) return
+    if (!ready) return
     var list = (Array.isArray(ids) ? ids : [ids])
       .map(function (x) { return parseInt(String(x), 10) })
       .filter(function (x) { return isFinite(x) })
     if (list.length === 0) return
+    if (detailProcess.running) {
+      var merged = detailPendingIds.slice()
+      for (var i = 0; i < list.length; i++)
+        if (merged.indexOf(list[i]) < 0) merged.push(list[i])
+      detailPendingIds = merged
+      return
+    }
+    _startDetail(list)
+  }
+  function _startDetail(list) {
     detailError = ""
     detailProcess.pending = list
     detailProcess.command = ["python3", helperPath, "detail"].concat(
@@ -557,11 +570,16 @@ Item {
     stdout: StdioCollector { id: detailOut; waitForEnd: true }
     stderr: StdioCollector { id: detailErr; waitForEnd: true }
     onExited: function(exitCode) {
-      if (exitCode !== 0) {
+      if (exitCode !== 0)
         root.detailError = root.helperFailure(detailErr.text, exitCode)
-        return
+      else
+        root.applyDetail(detailOut.text, detailProcess.pending)
+      // drain anything that queued up while this ran
+      if (root.detailPendingIds.length > 0) {
+        var next = root.detailPendingIds
+        root.detailPendingIds = []
+        Qt.callLater(function () { root._startDetail(next) })
       }
-      root.applyDetail(detailOut.text, detailProcess.pending)
     }
   }
 

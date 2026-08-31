@@ -42,6 +42,9 @@ FocusScope {
   readonly property real progress: totalQuestions > 0
     ? clearedQuestions / totalQuestions : 0
 
+  // never pull focus while off-screen (background build on another page)
+  function _grabFocus() { if (session.visible) session.forceActiveFocus() }
+
   // re-entering the view before start() has run again: clear a terminal
   // screen so its window-wide Enter/Esc -> exit() shortcut can't fire on
   // the keypress meant to start the next session
@@ -68,9 +71,12 @@ FocusScope {
   }
 
   function tryBuild() {
-    if (built || !service) return
+    // onDetailReady fires this on every detail fetch app-wide; only act while
+    // we're loading our own batch
+    if (built || !service || phase !== "loading") return
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
       .filter(function (x) { return isFinite(x) })
+    if (ids.length === 0) return
     var ready = ids.every(function (x) { return !!service.subjectDetail(x) })
     if (!ready) return
 
@@ -129,7 +135,7 @@ FocusScope {
                         Object.keys(missedIds))
       if (!suppressSummary) {
         phase = "summary"
-        Qt.callLater(session.forceActiveFocus)
+        Qt.callLater(session._grabFocus)
       }
     } else {
       pos += 1
@@ -195,7 +201,7 @@ FocusScope {
     vocabColor: session.vocabColor
     onAnswered: function (correct) { session.onAnswered(correct) }
     onAdvance: session.onAdvance()
-    onWrapUp: { session.phase = "summary"; Qt.callLater(session.forceActiveFocus) }
+    onWrapUp: { session.phase = "summary"; Qt.callLater(session._grabFocus) }
     onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
   }
 

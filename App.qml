@@ -150,6 +150,28 @@ Item {
     if (root.service) root.service.loadDetail([n])
   }
 
+  // [ / ] on a subject page: walk the level's items in order. Replaces the
+  // current nav entry (rather than pushing) so Back still lands on the level,
+  // not on every item you stepped through. No-op if this subject isn't in the
+  // last-loaded level (e.g. you drilled here via a chip from another level).
+  function stepSubjectInLevel(dir) {
+    if (root.view !== "subject" || !service) return
+    var rows = (service.browseData && service.browseData.subjects) || []
+    if (!rows.length) return
+    var curId = Number(root.currentPage.id)
+    var idx = -1
+    for (var i = 0; i < rows.length; i++)
+      if (Number(rows[i].id) === curId) { idx = i; break }
+    if (idx < 0) return
+    var ni = idx + (dir > 0 ? 1 : -1)
+    if (ni < 0 || ni >= rows.length) return
+    var nextId = Number(rows[ni].id)
+    var stack = navStack.slice()
+    stack[stack.length - 1] = { view: "subject", id: nextId }
+    navStack = stack
+    service.loadDetail([nextId])
+  }
+
   // A single-prompt quiz for one subject -- the primitive the lesson flow
   // and review engine drive. `type` is "meaning" | "reading".
   function goQuiz(id, type) {
@@ -775,6 +797,7 @@ Item {
           vocabColor: root.vocabColor
           keyNav: true          // j/k sections, h/l chips, Enter, Esc
           onNavigate: function (subjectId) { root.goSubject(subjectId) }
+          onStepSubject: function (dir) { root.stepSubjectInLevel(dir) }
           onCloseRequested: root.leave()
           onVisibleChanged: if (visible) Qt.callLater(function () { if (subjectPage.visible) subjectPage.focusPage() })
         }

@@ -53,12 +53,15 @@ FocusScope {
   property string focusSection: ""
 
   // key-hint line shown in the (scrolling) header when keyNav is on
-  property string navHint: keyNav
-    ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
-    : ""
+  property string navHint: !keyNav ? ""
+    : overlayMode
+      ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
+      : "h / j / k / l  navigate   ·   [  ]  prev / next item   ·   Enter  fold / unfold   ·   Esc  back"
 
   signal navigate(int subjectId)
   signal closeRequested()
+  // [ / ] step to the previous / next item in this level (browse page only)
+  signal stepSubject(int direction)
 
   // ---- section navigation (item-info overlay) --------
   //   j/k        move the section ring
@@ -245,10 +248,16 @@ FocusScope {
 
   readonly property var sd: subject && subject.data ? subject.data : ({})
   readonly property string kind: subject ? String(subject.object || "") : ""
-  // WK's stylised radical picture (helper downloads the SVG for single-id
-  // lookups) -- shown on a light tile in the Name card, like the website
+  // the image-only radicals have no character -- the helper hands back the
+  // stroke-drawing SVG for those (recoloured light), shown big in the header
   readonly property string characterImagePath: subject && subject.character_image_path
     ? String(subject.character_image_path) : ""
+  readonly property bool showCharImage: kind === "radical" && characterImagePath !== ""
+
+  // unlock state, from the assignment (absent entirely => still locked)
+  readonly property var asg: subject && subject.assignment ? subject.assignment : ({})
+  readonly property bool itemLocked: !asg.id && !asg.unlocked_at
+  readonly property bool showLockState: !overlayMode && !!subject
   readonly property var study: subject && subject.study_material ? subject.study_material : ({})
 
   readonly property color typeColor: {
@@ -322,6 +331,14 @@ FocusScope {
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)
+      // [ / ] walk the level in order (standalone browse page only)
+      if (!page.overlayMode
+          && (e.text === "[" || e.text === "]"
+              || e.key === Qt.Key_BracketLeft || e.key === Qt.Key_BracketRight)) {
+        page.stepSubject((e.text === "]" || e.key === Qt.Key_BracketRight) ? 1 : -1)
+        e.accepted = true
+        return
+      }
       // j/k move the section ring, Enter toggles a fold (or opens the
       // highlighted chip on a chip section), h/l step the chip cursor,
       // Esc / f go back a page or close
@@ -392,7 +409,29 @@ FocusScope {
           width: parent.width - Style.space(64)
           spacing: Style.space(8)
 
+          // image-only radical: the stroke drawing stands in for the glyph,
+          // on a white tile like the website
+          Rectangle {
+            visible: page.showCharImage
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Style.font.displayLarge * 3.4
+            height: width
+            radius: Style.space(8)
+            color: "#fcfdfd"
+            Image {
+              anchors.centerIn: parent
+              width: parent.width * 0.74
+              height: width
+              fillMode: Image.PreserveAspectFit
+              source: page.showCharImage ? "file://" + page.characterImagePath : ""
+              sourceSize.width: 320
+              sourceSize.height: 320
+              smooth: true
+            }
+          }
+
           Text {
+            visible: !page.showCharImage
             anchors.horizontalCenter: parent.horizontalCenter
             // in the review overlay never fall back to the meaning
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
@@ -414,16 +453,42 @@ FocusScope {
             font.bold: true
           }
 
-          Text {
+          Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            // hide the level in a live review -- it leaks which of two
-            // look-alikes you're being asked (browsing keeps it)
-            text: (page.overlayMode && page.hideLevel)
-              ? page.typeLabel
-              : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
-            color: Qt.rgba(1, 1, 1, 0.82)
-            font.family: page.fontFamily
-            font.pixelSize: Style.font.bodySmall
+            spacing: Style.space(8)
+
+            Text {
+              // hide the level in a live review -- it leaks which of two
+              // look-alikes you're being asked (browsing keeps it)
+              text: (page.overlayMode && page.hideLevel)
+                ? page.typeLabel
+                : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
+              color: Qt.rgba(1, 1, 1, 0.82)
+              font.family: page.fontFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            // locked / unlocked chip, like the website's tile border
+            Rectangle {
+              visible: page.showLockState
+              anchors.verticalCenter: parent.verticalCenter
+              width: lockLbl.implicitWidth + Style.space(14)
+              height: lockLbl.implicitHeight + Style.space(6)
+              radius: Style.space(3)
+              color: page.itemLocked ? "transparent"
+                : Qt.rgba(1, 1, 1, 0.18)
+              border.width: page.itemLocked ? 1 : 0
+              border.color: Qt.rgba(1, 1, 1, 0.5)
+              Text {
+                id: lockLbl
+                anchors.centerIn: parent
+                text: page.itemLocked ? "LOCKED" : "UNLOCKED"
+                color: Qt.rgba(1, 1, 1, page.itemLocked ? 0.7 : 0.92)
+                font.family: page.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+            }
           }
         }
       }
@@ -490,27 +555,6 @@ FocusScope {
               color: page.fg
               font.family: page.fontFamily
               font.pixelSize: Style.font.body
-            }
-
-            // the radical picture, on a light tile like the website
-            Rectangle {
-              visible: page.kind === "radical" && page.characterImagePath !== ""
-              width: Style.space(132)
-              height: Style.space(132)
-              radius: Style.space(6)
-              color: "#fcfdfd"
-              Image {
-                anchors.centerIn: parent
-                width: parent.width - Style.space(28)
-                height: parent.height - Style.space(28)
-                fillMode: Image.PreserveAspectFit
-                source: page.characterImagePath !== ""
-                  ? "file://" + page.characterImagePath : ""
-                sourceSize.width: 264
-                sourceSize.height: 264
-                smooth: true
-                mipmap: true
-              }
             }
 
             Rectangle {

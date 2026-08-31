@@ -33,6 +33,7 @@ import http.client
 import json
 import math
 import os
+import re
 import socket
 import ssl
 import sys
@@ -925,7 +926,12 @@ def cmd_browse(args):
             "burned": burned,
             "srsStage": stage,
         })
-    rows.sort(key=lambda row: (order.get(row["object"], 3), row["slug"]))
+    # the website orders each section alphabetically by primary meaning,
+    # ignoring spaces / punctuation ("Afternoon Sun" before "After This")
+    def meaning_key(row):
+        text = (row.get("meaning") or row.get("slug") or "").lower()
+        return "".join(ch for ch in text if ch.isalnum())
+    rows.sort(key=lambda row: (order.get(row["object"], 3), meaning_key(row)))
     return {"ok": True, "configured": True, "error": "", "level": level,
             "subjects": rows, "progress": progress,
             "requests": api.requests, "fetchedAt": iso(now_utc())}
@@ -988,13 +994,18 @@ def fetch_file(url, dest):
 
 
 def ensure_radical_image(subject_id, data):
-    """WaniKani ships a stylised SVG for every radical (the picture the website
-    shows under the mnemonic -- handy for the image-only radicals, and a nice
-    memory hook for the rest). Download it once, and bake a visible colour in
-    where the source has `var(--color-text, #000)` (QtSvg has no CSS var()).
-    Returns a local path, or "" when there's nothing to show / the fetch fails
-    -- never raises, so a flaky download can't break the detail response."""
+    """The image-only radicals (no unicode character) carry a stroke-drawing
+    SVG in `character_images` -- for those it's the ONLY way to see the
+    radical, so download it and light it up for the dark header. Radicals
+    that DO have a character get nothing here: WK's `character_images` is just
+    a rendering of that same character (redundant with the header), and the
+    hand-drawn mnemonic illustrations from the website aren't in the API.
+    Never raises -- a flaky download can't break the detail response."""
+    if data.get("characters"):
+        return ""
     images = data.get("character_images") or []
+    # only the SVG is public (the PNG URLs 403); it uses a <style> class rule
+    # + clip-paths that QtSvg chokes on, so flatten it to plain stroked paths
     svg = next((img for img in images
                 if img.get("content_type") == "image/svg+xml" and img.get("url")), None)
     if not svg:
@@ -1003,10 +1014,9 @@ def ensure_radical_image(subject_id, data):
     if not dest.exists():
         try:
             fetch_file(svg["url"], dest)
-            text = dest.read_text(encoding="utf-8", errors="replace")
-            text = text.replace("var(--color-text, #000)", "#111111") \
-                       .replace("var(--color-text,#000)", "#111111")
-            dest.write_text(text, encoding="utf-8")
+            dest.write_text(_flatten_radical_svg(dest.read_text(encoding="utf-8",
+                                                               errors="replace")),
+                            encoding="utf-8")
         except Exception:
             try:
                 dest.unlink()
@@ -1014,6 +1024,32 @@ def ensure_radical_image(subject_id, data):
                 pass
             return ""
     return str(dest)
+
+
+def _flatten_radical_svg(text, color="#1a1a1a"):
+    """WK's radical SVGs carry the stroke spec in a `<style>` class rule and
+    trim a couple of strokes with clip-paths -- QtSvg supports neither, so it
+    drew them wrong. Inline the stroke as attributes on each path and drop the
+    <defs> / clip-paths (the clipping is a cosmetic end-trim)."""
+    width = "68"
+    cap = "square"
+    rule = re.search(r"\.b\s*\{([^}]*)\}", text)
+    if rule:
+        body = rule.group(1)
+        got_w = re.search(r"stroke-width:\s*([\d.]+)", body)
+        got_c = re.search(r"stroke-linecap:\s*([A-Za-z]+)", body)
+        if got_w:
+            width = got_w.group(1)
+        if got_c:
+            cap = got_c.group(1)
+    text = re.sub(r"<defs>.*?</defs>", "", text, flags=re.S)
+    text = re.sub(r'\s*style="[^"]*clip-path[^"]*"', "", text)
+    text = text.replace(
+        'class="b"',
+        'fill="none" stroke="%s" stroke-width="%s" stroke-linecap="%s"'
+        % (color, width, cap))
+    text = re.sub(r'\s*class="[ab]"', "", text)
+    return text
 
 
 def audio_pool(audios, voice, reading=""):
@@ -1195,12 +1231,17 @@ def cmd_detail(args):
         cache = {}
     items = dict(cache.get("items") or {})
 
-    fresh, _ = api.collection("/subjects?ids=" + ",".join(ids))
-    for resource in fresh:
-        rid = resource.get("id")
-        if rid is not None:
-            items[str(rid)] = resource
-    save_cache("detail", {"v": CACHE_VERSION, "items": items})
+    # subject records (mnemonics, readings, the component graph) are effectively
+    # immutable -- only hit /subjects for ids we've never cached. This is what
+    # makes reopening a big batch (Recent Lessons) fast the second time.
+    missing = [i for i in ids if i not in items]
+    if missing:
+        fresh, _ = api.collection("/subjects?ids=" + ",".join(missing))
+        for resource in fresh:
+            rid = resource.get("id")
+            if rid is not None:
+                items[str(rid)] = resource
+        save_cache("detail", {"v": CACHE_VERSION, "items": items})
 
     notes = {}
     try:
@@ -1225,6 +1266,8 @@ def cmd_detail(args):
             assignments[str(data.get("subject_id"))] = {
                 "id": row.get("id"),
                 "srs_stage": data.get("srs_stage"),
+                "unlocked_at": data.get("unlocked_at"),
+                "started_at": data.get("started_at"),
                 "passed_at": data.get("passed_at"),
                 "burned_at": data.get("burned_at"),
             }

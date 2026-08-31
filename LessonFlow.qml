@@ -39,6 +39,9 @@ FocusScope {
   readonly property var infoSubject: (phase === "info" && service && infoIndex < ids.length)
     ? service.subjectDetail(ids[infoIndex]) : null
 
+  // never pull focus while off-screen (background build on another page)
+  function _grabFocus() { if (flow.visible) flow.forceActiveFocus() }
+
   // re-entering the view before begin() has run again: clear a terminal
   // screen so its window-wide Enter/Esc -> exit() shortcut can't fire on
   // the keypress meant to start the next batch
@@ -59,7 +62,7 @@ FocusScope {
   }
 
   function checkReady() {
-    if (phase !== "loading" || !service) return
+    if (phase !== "loading" || !service || ids.length === 0) return
     if (ids.every(function (x) { return !!service.subjectDetail(x) }))
       phase = "ready"
   }
@@ -95,7 +98,7 @@ FocusScope {
       flow.startedCount += 1
       if (flow.startedCount >= flow.ids.length) {
         flow.phase = "summary"
-        Qt.callLater(flow.forceActiveFocus)
+        Qt.callLater(flow._grabFocus)
       }
     }
     function onLessonStartFailed(subjectId, message) {
