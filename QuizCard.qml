@@ -257,14 +257,16 @@ FocusScope {
     // SRS-transition chip as a subject finishes (reviews) -- centred in the
     // gap between the character's visual bottom and the prompt bar; floats,
     // so it never nudges the layout
+    FontMetrics { id: charMetrics; font: charText.font }
     Rectangle {
       id: srsChip
       anchors.horizontalCenter: parent.horizontalCenter
       y: {
-        // glyph bottom ~= text centre + ~0.42 of the font size (CJK fills
-        // most of the em); centre the chip between that and the prompt bar
-        var glyphBottom = header.y + charText.y + charText.height / 2
-                          + charText.font.pixelSize * 0.32
+        // glyph baseline sits `ascent` below the text top; a CJK glyph fills
+        // the em, so its ink bottom is ~0.12em past the baseline. Centre the
+        // chip in the gap between that and the prompt bar's top edge.
+        var glyphBottom = header.y + charText.y + charMetrics.ascent
+                          + charText.font.pixelSize * 0.12
         var barTop = header.y + header.height
         return (glyphBottom + barTop) / 2 - height / 2
       }
