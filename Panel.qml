@@ -248,7 +248,15 @@ Panel {
   }
 
   function openItem(item) {
-    if (item && item.url) Quickshell.execDetached(["xdg-open", String(item.url)])
+    // open the item's page in the plugin's own window, not the website
+    if (item && item.id !== undefined && item.id !== null) {
+      Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
+        "io.github.aphelion-studios.omakani",
+        JSON.stringify({ subject: Number(item.id) })])
+      root.close()
+    } else if (item && item.url) {
+      Quickshell.execDetached(["xdg-open", String(item.url)])
+    }
   }
   function openDashboard() {
     Quickshell.execDetached(["xdg-open", "https://www.wanikani.com/dashboard"])
@@ -263,6 +271,7 @@ Panel {
     Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
       "io.github.aphelion-studios.omakani",
       JSON.stringify({ session: modes[index] })])
+    root.close()   // get the dropdown out of the app's way
   }
 
   Timer {
@@ -447,14 +456,25 @@ Panel {
     precision: root.opened ? SystemClock.Seconds : SystemClock.Minutes
   }
 
+  // Only one per-monitor instance wins this target, so route through the bar's
+  // focused-monitor lookup -- otherwise the dropdown always opens on whichever
+  // monitor's copy happened to claim the handler.
+  function _focusedPanel() {
+    return (root.bar && typeof root.bar.findPanelWidget === "function")
+      ? root.bar.findPanelWidget(root.moduleName) : null
+  }
+
   IpcHandler {
     target: root.ipcTarget
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function show(): void { root.open() }
-    function hide(): void { root.close() }
-    function toggle(): void { root.toggle() }
-    function settings(): void { root.open(); root.settingsOpen = true }
+    function open(): void { var p = root._focusedPanel(); (p || root).open() }
+    function close(): void { var p = root._focusedPanel(); (p || root).close() }
+    function show(): void { var p = root._focusedPanel(); (p || root).open() }
+    function hide(): void { var p = root._focusedPanel(); (p || root).close() }
+    function toggle(): void { var p = root._focusedPanel(); (p || root).toggle() }
+    function settings(): void {
+      var p = root._focusedPanel() || root
+      p.open(); p.settingsOpen = true
+    }
     function refresh(): string { wk.refreshAll(); return "ok" }
     function status(): string {
       if (!wk.configured) return "not connected"
