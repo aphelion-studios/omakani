@@ -248,11 +248,6 @@ FocusScope {
 
   readonly property var sd: subject && subject.data ? subject.data : ({})
   readonly property string kind: subject ? String(subject.object || "") : ""
-  // the image-only radicals have no character -- the helper hands back the
-  // stroke-drawing SVG for those (recoloured light), shown big in the header
-  readonly property string characterImagePath: subject && subject.character_image_path
-    ? String(subject.character_image_path) : ""
-  readonly property bool showCharImage: kind === "radical" && characterImagePath !== ""
 
   // unlock state, from the assignment (absent entirely => still locked)
   readonly property var asg: subject && subject.assignment ? subject.assignment : ({})
@@ -409,29 +404,7 @@ FocusScope {
           width: parent.width - Style.space(64)
           spacing: Style.space(8)
 
-          // image-only radical: the stroke drawing stands in for the glyph,
-          // on a white tile like the website
-          Rectangle {
-            visible: page.showCharImage
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Style.font.displayLarge * 3.4
-            height: width
-            radius: Style.space(8)
-            color: "#fcfdfd"
-            Image {
-              anchors.centerIn: parent
-              width: parent.width * 0.74
-              height: width
-              fillMode: Image.PreserveAspectFit
-              source: page.showCharImage ? "file://" + page.characterImagePath : ""
-              sourceSize.width: 320
-              sourceSize.height: 320
-              smooth: true
-            }
-          }
-
           Text {
-            visible: !page.showCharImage
             anchors.horizontalCenter: parent.horizontalCenter
             // in the review overlay never fall back to the meaning
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
@@ -453,42 +426,70 @@ FocusScope {
             font.bold: true
           }
 
-          Row {
+          // locked / unlocked -- its own line, between the name and the type;
+          // solid outline for UNLOCKED, dashed for LOCKED (the website's tile
+          // border convention)
+          Item {
+            visible: page.showLockState
             anchors.horizontalCenter: parent.horizontalCenter
-            spacing: Style.space(8)
+            width: lockLbl.implicitWidth + Style.space(18)
+            height: lockLbl.implicitHeight + Style.space(8)
 
-            Text {
-              // hide the level in a live review -- it leaks which of two
-              // look-alikes you're being asked (browsing keeps it)
-              text: (page.overlayMode && page.hideLevel)
-                ? page.typeLabel
-                : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
-              color: Qt.rgba(1, 1, 1, 0.82)
-              font.family: page.fontFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-
-            // locked / unlocked chip, like the website's tile border
-            Rectangle {
-              visible: page.showLockState
-              anchors.verticalCenter: parent.verticalCenter
-              width: lockLbl.implicitWidth + Style.space(14)
-              height: lockLbl.implicitHeight + Style.space(6)
-              radius: Style.space(3)
-              color: page.itemLocked ? "transparent"
-                : Qt.rgba(1, 1, 1, 0.18)
-              border.width: page.itemLocked ? 1 : 0
-              border.color: Qt.rgba(1, 1, 1, 0.5)
-              Text {
-                id: lockLbl
-                anchors.centerIn: parent
-                text: page.itemLocked ? "LOCKED" : "UNLOCKED"
-                color: Qt.rgba(1, 1, 1, page.itemLocked ? 0.7 : 0.92)
-                font.family: page.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
+            Canvas {
+              id: lockBorder
+              anchors.fill: parent
+              onPaint: {
+                var ctx = getContext("2d")
+                ctx.reset()
+                var inset = 1
+                var x = inset, y = inset
+                var w = width - 2 * inset, h = height - 2 * inset
+                var r = h / 2
+                ctx.beginPath()
+                ctx.moveTo(x + r, y)
+                ctx.arcTo(x + w, y, x + w, y + h, r)
+                ctx.arcTo(x + w, y + h, x, y + h, r)
+                ctx.arcTo(x, y + h, x, y, r)
+                ctx.arcTo(x, y, x + w, y, r)
+                ctx.closePath()
+                if (!page.itemLocked) {
+                  ctx.fillStyle = Qt.rgba(1, 1, 1, 0.16)
+                  ctx.fill()
+                }
+                ctx.lineWidth = 1.5
+                ctx.strokeStyle = "#fcfdfd"
+                ctx.setLineDash(page.itemLocked ? [4, 3] : [])
+                ctx.stroke()
+              }
+              Component.onCompleted: requestPaint()
+              onWidthChanged: requestPaint()
+              onHeightChanged: requestPaint()
+              Connections {
+                target: page
+                function onItemLockedChanged() { lockBorder.requestPaint() }
               }
             }
+            Text {
+              id: lockLbl
+              anchors.centerIn: parent
+              text: page.itemLocked ? "LOCKED" : "UNLOCKED"
+              color: "#fcfdfd"
+              font.family: page.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+          }
+
+          Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            // hide the level in a live review -- it leaks which of two
+            // look-alikes you're being asked (browsing keeps it)
+            text: (page.overlayMode && page.hideLevel)
+              ? page.typeLabel
+              : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
+            color: Qt.rgba(1, 1, 1, 0.82)
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.bodySmall
           }
         }
       }

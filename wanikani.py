@@ -33,7 +33,6 @@ import http.client
 import json
 import math
 import os
-import re
 import socket
 import ssl
 import sys
@@ -993,65 +992,6 @@ def fetch_file(url, dest):
     os.replace(temporary, dest)
 
 
-def ensure_radical_image(subject_id, data):
-    """The image-only radicals (no unicode character) carry a stroke-drawing
-    SVG in `character_images` -- for those it's the ONLY way to see the
-    radical, so download it and light it up for the dark header. Radicals
-    that DO have a character get nothing here: WK's `character_images` is just
-    a rendering of that same character (redundant with the header), and the
-    hand-drawn mnemonic illustrations from the website aren't in the API.
-    Never raises -- a flaky download can't break the detail response."""
-    if data.get("characters"):
-        return ""
-    images = data.get("character_images") or []
-    # only the SVG is public (the PNG URLs 403); it uses a <style> class rule
-    # + clip-paths that QtSvg chokes on, so flatten it to plain stroked paths
-    svg = next((img for img in images
-                if img.get("content_type") == "image/svg+xml" and img.get("url")), None)
-    if not svg:
-        return ""
-    dest = cache_dir() / "radical_images" / (str(subject_id) + ".svg")
-    if not dest.exists():
-        try:
-            fetch_file(svg["url"], dest)
-            dest.write_text(_flatten_radical_svg(dest.read_text(encoding="utf-8",
-                                                               errors="replace")),
-                            encoding="utf-8")
-        except Exception:
-            try:
-                dest.unlink()
-            except OSError:
-                pass
-            return ""
-    return str(dest)
-
-
-def _flatten_radical_svg(text, color="#1a1a1a"):
-    """WK's radical SVGs carry the stroke spec in a `<style>` class rule and
-    trim a couple of strokes with clip-paths -- QtSvg supports neither, so it
-    drew them wrong. Inline the stroke as attributes on each path and drop the
-    <defs> / clip-paths (the clipping is a cosmetic end-trim)."""
-    width = "68"
-    cap = "square"
-    rule = re.search(r"\.b\s*\{([^}]*)\}", text)
-    if rule:
-        body = rule.group(1)
-        got_w = re.search(r"stroke-width:\s*([\d.]+)", body)
-        got_c = re.search(r"stroke-linecap:\s*([A-Za-z]+)", body)
-        if got_w:
-            width = got_w.group(1)
-        if got_c:
-            cap = got_c.group(1)
-    text = re.sub(r"<defs>.*?</defs>", "", text, flags=re.S)
-    text = re.sub(r'\s*style="[^"]*clip-path[^"]*"', "", text)
-    text = text.replace(
-        'class="b"',
-        'fill="none" stroke="%s" stroke-width="%s" stroke-linecap="%s"'
-        % (color, width, cap))
-    text = re.sub(r'\s*class="[ab]"', "", text)
-    return text
-
-
 def audio_pool(audios, voice, reading=""):
     """A subject's `pronunciation_audios`, ordered best-first for `voice`
     ('kyoko' / 'kenichi' / 'random' / '' = any), mp3 ahead of webm. When
@@ -1282,13 +1222,6 @@ def cmd_detail(args):
         entry = dict(subject)
         entry["study_material"] = notes.get(sid) or {}
         entry["assignment"] = assignments.get(sid) or {}
-        # the radical picture -- only for a focused lookup (the browser's
-        # subject page asks for one id), never a review / lesson batch where
-        # the serial downloads would stack up
-        if len(ids) == 1 and entry.get("object") == "radical":
-            path = ensure_radical_image(sid, entry.get("data") or {})
-            if path:
-                entry["character_image_path"] = path
         out[sid] = entry
 
     return {"ok": True, "configured": True, "error": "", "subjects": out,
