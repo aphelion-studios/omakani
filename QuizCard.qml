@@ -533,8 +533,8 @@ FocusScope {
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
         navHint: quiz._infoStack.length > 0
-          ? "j / k  section   ·   h / l  chip   ·   Enter  open   ·   Esc  back"
-          : "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  close"
+          ? "h / j / k / l  navigate   ·   Enter  open   ·   Esc  back"
+          : "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  close"
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
         onNavigate: function (id) { quiz._infoDrill(id) }
         onCloseRequested: quiz._infoBack()
