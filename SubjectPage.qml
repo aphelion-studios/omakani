@@ -168,7 +168,17 @@ FocusScope {
     }
   }
 
+  // the `subject` binding re-fires every time the detail cache re-merges
+  // (linked-chip hydration), handing back the *same* record -- guard on the
+  // id so a re-merge doesn't reset the scroll position or the focus ring
+  property int _loadedSubjectId: 0
   onSubjectChanged: {
+    var sid = (subject && subject.id) ? Number(subject.id) : 0
+    if (sid !== 0 && sid === _loadedSubjectId) {
+      Qt.callLater(hydrateLinks)   // still top up any newly-missing chips
+      return
+    }
+    _loadedSubjectId = sid
     flick.contentY = 0
     focusIndex = 0
     chipIndex = 0
@@ -179,7 +189,24 @@ FocusScope {
     // the browser page's first subject arrives after focusPage() already
     // ran on an empty scope -- re-grab so the keyboard works right away
     if (subject && keyNav && !overlayMode && visible)
-      Qt.callLater(function () { if (page.visible && !!page.subject) keys.forceActiveFocus() })
+      focusPoke.kick()
+  }
+
+  // Bulletproof focus grab: forceActiveFocus() called while `flick` is still
+  // hidden (subject not loaded yet) doesn't stick, and a single re-grab on
+  // arrival races the layout pass. Poke a few frames until it takes.
+  Timer {
+    id: focusPoke
+    interval: 16
+    repeat: true
+    property int ticks: 0
+    function kick() { ticks = 0; restart() }
+    onTriggered: {
+      ticks += 1
+      if (page.visible && page.keyNav && !page.overlayMode && !!page.subject)
+        keys.forceActiveFocus()
+      if (ticks >= 12 || !page.visible || keys.activeFocus) { stop(); ticks = 0 }
+    }
   }
 
   property bool _hydrating: false
@@ -256,7 +283,11 @@ FocusScope {
     return ""
   }
 
-  function focusPage() { keys.forceActiveFocus() }
+  function focusPage() {
+    keys.forceActiveFocus()
+    if (keyNav && !overlayMode) focusPoke.kick()
+  }
+  readonly property bool hasKeyFocus: keys.activeFocus
 
   readonly property bool hasAudio: kind === "vocabulary" || kind === "kana_vocabulary"
   function playAudio(voice) {
