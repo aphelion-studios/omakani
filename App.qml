@@ -137,8 +137,13 @@ Item {
     navStack = [{ view: "home" }]
   }
 
+  // the level the browser is showing -- held here (not derived from the nav
+  // stack) so it doesn't snap to 1 while you're on a subject page, which would
+  // reset the browser's chip cursor
+  property int browseLevel: 1
   function goBrowse(level) {
     var n = Math.max(1, Math.min(60, parseInt(String(level), 10) || 1))
+    root.browseLevel = n
     pushPage({ view: "browse", level: n })
     if (root.service) root.service.loadBrowse(n)
   }
@@ -148,6 +153,26 @@ Item {
     if (!isFinite(n)) return
     pushPage({ view: "subject", id: n })
     if (root.service) root.service.loadDetail([n])
+  }
+
+  // best-effort type name for the "Loading …" line -- from whatever's cached
+  // (a resolved detail record) or the last-loaded level's rows
+  function subjectKindLabel(id) {
+    var n = Number(id)
+    var obj = ""
+    if (service) {
+      var d = service.subjectDetail(n)
+      if (d && d.object) obj = String(d.object)
+      else {
+        var rows = (service.browseData && service.browseData.subjects) || []
+        for (var i = 0; i < rows.length; i++)
+          if (Number(rows[i].id) === n) { obj = String(rows[i].object || ""); break }
+      }
+    }
+    if (obj === "radical") return "radical"
+    if (obj === "kanji") return "kanji"
+    if (obj === "vocabulary" || obj === "kana_vocabulary") return "vocabulary"
+    return "subject"
   }
 
   // [ / ] on a subject page: walk the level's items in order. Replaces the
@@ -223,11 +248,15 @@ Item {
     enabled: root.service !== null
     function onReviewsReady(ids) {
       if (root.view !== "review") return
+      // a late second reviewsReady (a background refresh, a re-summon) must not
+      // rebuild a session that's already past its start screen
+      if (reviewEngine.phase !== "loading") return
       root.reviewIds = ids || []
       Qt.callLater(function () { reviewEngine.begin() })
     }
     function onLessonsReady(ids, total) {
       if (root.view !== "lesson") return
+      if (lessonFlow.phase !== "loading") return
       root.lessonIds = ids || []
       root.lessonTotal = total || 0
       Qt.callLater(function () { lessonFlow.begin() })
@@ -249,8 +278,14 @@ Item {
     // home screen the user never opened.
     var payload = null
     try { payload = payloadJson ? JSON.parse(payloadJson) : null } catch (e) { payload = null }
-    if (payload && (payload.session || payload.review || payload.lesson)) {
+    if (payload && (payload.session || payload.review || payload.lesson || payload.subject)) {
       Qt.callLater(function () {
+        if (payload.subject) {
+          // a dashboard chip -- keep a home under it so Esc lands somewhere useful
+          root.navStack = [{ view: "home" }]
+          root.goSubject(Number(payload.subject))
+          return
+        }
         root.navStack = []
         if (payload.session) root.openSessionMode(String(payload.session))
         else if (payload.review) root.goReview()
@@ -762,7 +797,7 @@ Item {
           visible: root.view === "browse"
           anchors.fill: parent
           service: root.service
-          level: root.view === "browse" ? root.currentPage.level : 1
+          level: root.browseLevel
           fg: root.fg
           pageBg: root.bg
           fontFamily: root.fontFamily
@@ -772,6 +807,7 @@ Item {
           vocabColor: root.vocabColor
           onOpenSubject: function (subjectId) { root.goSubject(subjectId) }
           onChangeLevel: function (newLevel) {
+            root.browseLevel = newLevel
             var next = root.navStack.slice()
             next[next.length - 1] = { view: "browse", level: newLevel }
             root.navStack = next
@@ -807,7 +843,8 @@ Item {
           anchors.centerIn: parent
           visible: root.view === "subject" && !subjectPage.subject
           text: (root.service && root.service.detailError)
-            ? root.service.detailError : "Loading subject…"
+            ? root.service.detailError
+            : "Loading " + root.subjectKindLabel(root.currentPage.id) + "…"
           color: Qt.rgba(1, 1, 1, 0.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.body

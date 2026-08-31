@@ -91,8 +91,17 @@ FocusScope {
   Component.onCompleted: Answer.useKana(Kana)
   // the queue can ask both halves of one subject back to back, so `subject`
   // doesn't change between them -- reset on the question type too, or the
-  // card stays stuck green/red on the previous answer
-  onSubjectChanged: reset()
+  // card stays stuck green/red on the previous answer.
+  // guard on the id: the `subject` binding re-fires whenever the detail cache
+  // re-merges (same record, new object) and an unguarded reset() there wipes
+  // what you're typing mid-answer
+  property var _lastSubjectId: null
+  onSubjectChanged: {
+    var sid = (subject && subject.id !== undefined) ? subject.id : null
+    if (sid === _lastSubjectId) return
+    _lastSubjectId = sid
+    reset()
+  }
   onQuestionTypeChanged: reset()
 
   readonly property string kind: subject ? String(subject.object || "") : ""

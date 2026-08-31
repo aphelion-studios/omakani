@@ -90,7 +90,21 @@ Item {
       flick.contentY = top + item.height + m - flick.height
   }
 
-  function scrollTop() { flick.contentY = 0; Qt.callLater(function () { flick.contentY = 0 }) }
+  // the grid reflows as chips resolve after the rows land, and a plain
+  // contentY=0 gets undone by that pass (the "Radicals (n/m)" heading ends up
+  // scrolled under the level bar) -- so pin it to 0 for a few frames
+  function scrollTop() { flick.contentY = 0; topPin.restart() }
+  Timer {
+    id: topPin
+    interval: 16
+    repeat: true
+    property int ticks: 0
+    onTriggered: {
+      flick.contentY = 0
+      ticks += 1
+      if (ticks >= 14 || !browser.visible || browser.cursor !== 0) { stop(); ticks = 0 }
+    }
+  }
   onLevelChanged: { cursor = 0; scrollTop() }
   onRowsChanged: {
     if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
@@ -305,7 +319,9 @@ Item {
                     browser.openSubject(modelData.id)
                   }
                   onCursoredChanged: if (cursored) Qt.callLater(function () {
-                    browser.ensureVisible(chipItem)
+                    // don't scroll the first chip up under the section heading
+                    if (chipItem.flatIndex === 0) browser.scrollTop()
+                    else browser.ensureVisible(chipItem)
                   })
                 }
               }

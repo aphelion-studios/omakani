@@ -67,6 +67,8 @@ FocusScope {
   }
 
   function begin() {
+    // don't tear down a run that's already going / finished
+    if (phase === "review" || phase === "summary") return
     items = ({})
     queue = []
     pos = 0
