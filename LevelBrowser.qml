@@ -189,7 +189,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         text: browser.onLevelBar
           ? "h / l  level   ·   j  grid"
-          : "h / j / k / l  navigate   ·   [ / ]  level   ·   Enter  open"
+          : "h / j / k / l  navigate   ·   [  ]  change level   ·   Enter  open"
         color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.55)
         font.family: browser.fontFamily
         font.pixelSize: Style.font.caption
