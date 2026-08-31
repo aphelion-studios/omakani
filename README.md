@@ -92,6 +92,24 @@ Notifications follow Do Not Disturb, stay quiet on vacation, and are silent
 until the plugin has taken its first reading (so a shell restart never dumps a
 backlog on you).
 
+## Radical illustrations (optional)
+
+WaniKani draws a small picture for many radicals — the "bat wing extended to
+your right…" illustration shown under the mnemonic. These are **not in the API**
+and are **not shipped with this plugin**. If you want them in the subject
+pages, fetch your account's set once:
+
+```bash
+./wanikani.py radical-images
+```
+
+It walks each radical's page on `wanikani.com` one at a time with a short delay
+and saves the illustrations into `~/.cache/omakani/radical_mnemonics/`
+(a few MB). Safe to re-run — it only fills gaps — so run it again after you
+level up. Radicals WaniKani hasn't illustrated just show their character, as
+before. The plugin reads this cache and shows nothing until you've run the
+command; the images stay local and are never redistributed.
+
 ## What it does on your system
 
 - **Runs `wanikani.py`** (Python standard library, no dependencies) in the
@@ -100,16 +118,18 @@ backlog on you).
   review statistics under `~/.cache/omakani/`) on a longer one.
 - **Reads and writes** `~/.config/omarchy/wanikani.json` (`0600`) — just your API
   token — and the cache directory above.
-- **Reaches** `api.wanikani.com` over HTTPS. No other network access, no
-  telemetry.
-- **Runs `notify-send`** for the events you've enabled.
-- **Never writes to your WaniKani account.** It is read-only.
+- **Reaches** `api.wanikani.com` over HTTPS. No telemetry. The only other
+  network access is when you run `radical-images` yourself, which fetches from
+  `wanikani.com` / `files.wanikani.com`.
+- **Runs `notify-send`** for the events you've enabled, `xdg-open` for external
+  links, and `mpv` to play pronunciation audio.
 
 ## From a terminal
 
 ```bash
 ./wanikani.py summary | jq
 ./wanikani.py dashboard | jq
+./wanikani.py radical-images          # one-time: fetch radical illustrations
 printf '%s\n' "$TOKEN" | ./wanikani.py set-token
 ./wanikani.py clear-token
 ```
@@ -118,6 +138,9 @@ printf '%s\n' "$TOKEN" | ./wanikani.py set-token
 
 MIT — see [LICENSE](LICENSE).
 
-`icon.svg` is WaniKani's own published `mask-icon` (from wanikani.com), used
-to identify the service. WaniKani and the Crabigator are trademarks of
-Tofugu LLC.
+The code is MIT. WaniKani's content is not: subject data, mnemonics,
+pronunciation audio and radical illustrations belong to Tofugu LLC and are
+accessed through your own subscription, cached locally, and never redistributed
+by this plugin. `icon.svg` is WaniKani's own published `mask-icon` (from
+wanikani.com), used to identify the service. WaniKani and the Crabigator are
+trademarks of Tofugu LLC.

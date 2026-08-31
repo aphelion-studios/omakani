@@ -1,2 +1,9 @@
 __pycache__/
 *.pyc
+
+# Scraped WaniKani radical illustrations live in the user's cache
+# (~/.cache/omakani/radical_mnemonics/), fetched from their own account by
+# `wanikani.py radical-images`. They are WaniKani's content and are never
+# committed or shipped with the plugin -- this is defensive in case the cache
+# is ever copied or symlinked into a checkout.
+radical_mnemonics/
