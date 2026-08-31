@@ -43,15 +43,28 @@ Item {
     && !service.vacation && service.reviewsNow > 0
 
   // ---- home screen keyboard nav --------------------------------------
+  // one flat list (primary buttons first, then the Extra Study pills) so
+  // j/k just walks the lot; `kind` splits them for rendering
   property int homeIndex: 0
   readonly property var homeActions: {
     var out = []
     if (!service || !service.configured) return out
-    if (startLessons) out.push({ text: "Start Lessons", act: "lesson", loud: true })
-    if (startReviews) out.push({ text: "Start Reviews", act: "review", loud: true })
-    out.push({ text: "Browse Subjects", act: "browse", loud: false })
+    if (startLessons) out.push({ text: "Start Lessons", act: "lesson", loud: true, kind: "primary" })
+    if (startReviews) out.push({ text: "Start Reviews", act: "review", loud: true, kind: "primary" })
+    out.push({ text: "Level Progress", act: "browse", loud: false, kind: "primary" })
+    var es = service.extraStudy || ({})
+    var rows = [
+      { text: "Recent Lessons", act: "es:recent-lessons", count: Number(es.recentLessons) || 0 },
+      { text: "Recent Mistakes", act: "es:mistakes", count: Number(es.recentMistakes) || 0 },
+      { text: "Burned Items", act: "es:burned", count: Number(es.burnedItems) || 0 }
+    ]
+    for (var i = 0; i < rows.length; i++)
+      if (rows[i].count > 0) out.push({ text: rows[i].text, act: rows[i].act,
+                                        count: rows[i].count, loud: false, kind: "extra" })
     return out
   }
+  readonly property var homePrimary: homeActions.filter(function (a) { return a.kind === "primary" })
+  readonly property var homeExtra: homeActions.filter(function (a) { return a.kind === "extra" })
   function homeMove(d) {
     if (homeActions.length === 0) return
     homeIndex = (homeIndex + d + homeActions.length) % homeActions.length
@@ -63,7 +76,8 @@ Item {
     if (!a) return
     if (a.act === "lesson") goLesson()
     else if (a.act === "review") goReview()
-    else goBrowse(service ? (service.level || 1) : 1)
+    else if (a.act === "browse") goBrowse(service ? (service.level || 1) : 1)
+    else if (a.act.indexOf("es:") === 0) openSessionMode(a.act.substring(3))
   }
 
   // Website type colours (vivid variants, tuned against the dark app ground).
@@ -89,10 +103,12 @@ Item {
     else if (view === "review") reviewEngine.forceActiveFocus()
     else if (view === "lesson") lessonFlow.forceActiveFocus()
     else {
-      // home -- a just-hidden child FocusScope can still be holding it, so
-      // reclaim on the next tick too
-      focusScope.forceActiveFocus()
-      Qt.callLater(function () { if (root.view === "home") focusScope.forceActiveFocus() })
+      // home -- a just-hidden child view can still be holding focus for a few
+      // frames; homeScope is a real sibling FocusScope so forcing focus onto
+      // it actually moves the shell's sub-focus pointer, and homePoke keeps
+      // re-grabbing until it sticks
+      homeScope.forceActiveFocus()
+      homePoke.kick()
     }
   }
 
@@ -511,6 +527,46 @@ Item {
         anchors.bottom: parent.bottom
 
         // -------------------------------------------------- HOME
+        // its own FocusScope, a sibling of every other view, so applyFocus()
+        // can pull the shell's sub-focus pointer off a view that just went
+        // invisible (a plain focusScope.forceActiveFocus() re-delegated right
+        // back into the hidden view, leaving the menu's Enter/Esc dead)
+        FocusScope {
+          id: homeScope
+          anchors.fill: parent
+          visible: root.view === "home"
+          Keys.enabled: root.view === "home"
+          Keys.onPressed: function (e) {
+            if (e.key === Qt.Key_Down || e.key === Qt.Key_Right || e.text === "j" || e.text === "l") {
+              root.homeMove(1); e.accepted = true
+            } else if (e.key === Qt.Key_Up || e.key === Qt.Key_Left || e.text === "k" || e.text === "h") {
+              root.homeMove(-1); e.accepted = true
+            } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+              root.homeActivate(); e.accepted = true
+            }
+          }
+          Keys.onEscapePressed: {
+            if (root.navStack.length > 1) root.popPage()
+            else root.requestClose()
+          }
+
+          // keep re-grabbing until it takes -- a view that just went invisible
+          // can hold focus for a few frames while its teardown settles
+          Timer {
+            id: homePoke
+            interval: 16
+            repeat: true
+            property int ticks: 0
+            function kick() { ticks = 0; restart() }
+            onTriggered: {
+              ticks += 1
+              if (root.view === "home") homeScope.forceActiveFocus()
+              if (ticks >= 12 || root.view !== "home" || homeScope.activeFocus) {
+                stop(); ticks = 0
+              }
+            }
+          }
+
         Column {
           visible: root.view === "home"
           anchors.centerIn: parent
@@ -544,7 +600,7 @@ Item {
             }
           }
 
-          // Start Lessons / Start Reviews (when waiting) + Browse subjects.
+          // Start Lessons / Start Reviews (when waiting) + Level Progress.
           // j/k/h/l or arrows move the cursor, Enter activates. The "loud"
           // ones are styled like the dashboard's Start buttons -- accent
           // fill, focus ring, breathing pulse.
@@ -554,7 +610,7 @@ Item {
             visible: !!root.service && root.service.configured
 
             Repeater {
-              model: root.homeActions
+              model: root.homePrimary
               delegate: Rectangle {
                 id: homeBtn
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -609,7 +665,74 @@ Item {
             }
           }
 
+          // ---- Extra Study (mirrors the dashboard block) ----
+          // only the buckets with something in them; each opens a no-sync
+          // quiz over that batch. Same homeIndex cursor, offset past the
+          // primary buttons.
+          Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Style.space(6)
+            visible: root.homeExtra.length > 0
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: "EXTRA STUDY"
+              color: Qt.darker(root.fg, 1.9)
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              bottomPadding: Style.space(2)
+            }
+
+            Repeater {
+              model: root.homeExtra
+              delegate: Rectangle {
+                id: esRow
+                anchors.horizontalCenter: parent.horizontalCenter
+                readonly property int globalIndex: root.homePrimary.length + index
+                readonly property bool lit: globalIndex === root.homeIndex || esHover.containsMouse
+                width: Style.space(280)
+                height: Style.space(34)
+                radius: Style.space(6)
+                color: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, lit ? 0.14 : 0.06)
+                border.width: lit ? 2 : 1
+                border.color: lit ? root.fg
+                  : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.18)
+                Behavior on color { ColorAnimation { duration: 110 } }
+
+                Text {
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(14)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: modelData.text
+                  color: root.fg
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+                Text {
+                  anchors.right: parent.right
+                  anchors.rightMargin: Style.space(14)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: modelData.count
+                  color: Qt.darker(root.fg, 1.35)
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                }
+                MouseArea {
+                  id: esHover
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onEntered: root.homeIndex = esRow.globalIndex
+                  onClicked: { root.homeIndex = esRow.globalIndex; root.homeActivate() }
+                }
+              }
+            }
+          }
+
         }
+        }   // homeScope
 
         // -------------------------------------------------- BROWSE
         LevelBrowser {

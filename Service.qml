@@ -195,11 +195,22 @@ Item {
   }
 
   // Level browser: the slim subjects for one level, from the dashboard's
-  // subjects cache (no API call unless the cache is cold).
+  // subjects cache (no API call unless the cache is cold). Stepping levels
+  // faster than the helper returns must NOT drop the request -- remember the
+  // level we want and fire it when the running job finishes, otherwise the
+  // browser is stuck showing "Nothing on level N yet."
+  property int browseWantedLevel: 0
+  property int browseLaunchedLevel: 0
   function loadBrowse(level) {
     var n = parseInt(String(level), 10)
-    if (!ready || browseProcess.running || !isFinite(n)) return
+    if (!ready || !isFinite(n)) return
+    browseWantedLevel = n
+    if (browseProcess.running) return   // picked up in browseProcess.onExited
+    _startBrowse(n)
+  }
+  function _startBrowse(n) {
     browseError = ""
+    browseLaunchedLevel = n
     browseProcess.command = ["python3", helperPath, "browse", String(n)]
     browseProcess.running = true
   }
@@ -528,11 +539,13 @@ Item {
     stdout: StdioCollector { id: browseOut; waitForEnd: true }
     stderr: StdioCollector { id: browseErr; waitForEnd: true }
     onExited: function(exitCode) {
-      if (exitCode !== 0) {
+      if (exitCode !== 0)
         root.browseError = root.helperFailure(browseErr.text, exitCode)
-        return
-      }
-      root.applyBrowse(browseOut.text)
+      else
+        root.applyBrowse(browseOut.text)
+      // a newer level was asked for while this one ran -- go get it
+      if (root.browseWantedLevel > 0 && root.browseWantedLevel !== root.browseLaunchedLevel)
+        Qt.callLater(function () { root._startBrowse(root.browseWantedLevel) })
     }
   }
 

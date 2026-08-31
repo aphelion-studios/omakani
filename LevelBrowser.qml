@@ -317,14 +317,30 @@ Item {
 
     // loading / empty state -- a sibling of the Flickable so it centres in
     // the viewport, not in the (possibly zero-height) scroll content
-    Text {
+    Column {
       anchors.centerIn: flick
       visible: browser.rows.length === 0
-      text: browser.loading ? "Loading level " + browser.level + "…"
-        : "Nothing on level " + browser.level + " yet."
-      color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.6)
-      font.family: browser.fontFamily
-      font.pixelSize: Style.font.body
+      spacing: Style.space(10)
+      readonly property string err: browser.service ? String(browser.service.browseError) : ""
+
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: browser.loading ? "Loading level " + browser.level + "…"
+          : parent.err !== "" ? "Couldn't load level " + browser.level
+          : "Nothing on level " + browser.level + " yet."
+        color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.6)
+        font.family: browser.fontFamily
+        font.pixelSize: Style.font.body
+      }
+      Text {
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: !browser.loading && parent.err !== ""
+        text: parent.err + "\n[  ]  try another level"
+        horizontalAlignment: Text.AlignHCenter
+        color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.4)
+        font.family: browser.fontFamily
+        font.pixelSize: Style.font.caption
+      }
     }
   }
 }

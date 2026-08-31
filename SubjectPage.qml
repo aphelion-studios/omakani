@@ -93,13 +93,20 @@ FocusScope {
     if (c) c.toggle()
   }
   function registerCard(c) { var a = navCards.slice(); a.push(c); navCards = a }
-  // visible section cards, top-to-bottom (Component.onCompleted fires
-  // bottom-up, so sort by on-screen position)
+  // fixed section order -- sorting the registered cards by on-screen Y raced
+  // the layout pass (Component.onCompleted fires before positions settle), so
+  // the ring sometimes started on Reading instead of Meaning
+  readonly property var _sectionRank: ({
+    meaning: 0, reading: 1, context: 2, composition: 3, foundin: 4, similar: 5
+  })
+  function _rankOf(key) {
+    var r = _sectionRank[key]
+    return r === undefined ? 9 : r
+  }
+  // visible section cards, in display order
   function visibleNav() {
     var v = navCards.filter(function (c) { return c && c.visible })
-    v.sort(function (a, b) {
-      return a.mapToItem(body, 0, 0).y - b.mapToItem(body, 0, 0).y
-    })
+    v.sort(function (a, b) { return page._rankOf(a.navKey) - page._rankOf(b.navKey) })
     return v
   }
   function focusedCard() {

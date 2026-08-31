@@ -117,6 +117,11 @@ FocusScope {
     onActivated: flow.phase === "ready" ? flow.startInfo() : flow.exit()
   }
 
+  // a focused item still gets key events while hidden -- don't eat keys once
+  // this isn't the visible view (keeps the home menu's Enter/Esc alive after
+  // wrapping out of a lesson)
+  Keys.enabled: flow.visible
+
   Keys.onPressed: function (e) {
     if (phase === "ready") {
       if (e.text === "d") { dryRun = !dryRun; e.accepted = true }

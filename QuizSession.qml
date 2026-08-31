@@ -136,6 +136,11 @@ FocusScope {
     }
   }
 
+  // a focused item still gets key events while hidden -- don't eat keys when
+  // this isn't the visible view (that's how the home menu's Enter/Esc went dead
+  // after wrapping a session)
+  Keys.enabled: session.visible
+
   Keys.onPressed: function (e) {
     if (phase === "summary" && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter
         || e.key === Qt.Key_Escape)) {
@@ -145,6 +150,15 @@ FocusScope {
       session.exit()
       e.accepted = true
     }
+  }
+
+  // Shortcuts fire window-wide, so Enter / Esc finish the summary even when the
+  // nested focus chain hasn't settled on this FocusScope (that's why "Enter to
+  // finish" did nothing on the Recent Mistakes done screen).
+  Shortcut {
+    sequences: ["Return", "Enter", "Esc"]
+    enabled: session.visible && (session.phase === "summary" || session.phase === "empty")
+    onActivated: session.exit()
   }
 
   Rectangle { anchors.fill: parent; color: session.pageBg }

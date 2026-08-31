@@ -181,6 +181,10 @@ FocusScope {
     infoRequested()
   }
 
+  // a focused item still gets key events while hidden -- don't eat keys when
+  // the card isn't the visible thing being driven
+  Keys.enabled: quiz.visible
+
   Keys.onPressed: function (e) {
     if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { submit(); e.accepted = true }
     else if (e.key === Qt.Key_Escape && infoOpen) { infoOpen = false; e.accepted = true }

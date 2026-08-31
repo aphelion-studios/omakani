@@ -212,6 +212,11 @@ FocusScope {
   // start screen: 0 = the dry-run toggle, 1 = the Start button
   property int readyIndex: 1
 
+  // a focused item still gets key events while hidden -- don't eat Enter/Esc
+  // (or the "ready" screen's catch-all) once this isn't the visible view, or
+  // the home menu you land on after wrapping out goes keyboard-dead
+  Keys.enabled: engine.visible
+
   Keys.onPressed: function (e) {
     if ((phase === "summary" || phase === "error")
         && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Escape)) {
