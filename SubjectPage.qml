@@ -10,7 +10,9 @@ import "Markup.js" as Markup
 // `subject` is a full resource from the helper's `detail` command
 // (data + study_material). `resolve(id)` returns an already-loaded resource
 // for a linked subject, or null; `navigate(id)` asks the app to open one.
-Item {
+// FocusScope root (like ReviewEngine) so a plain forceActiveFocus() from the
+// host reliably routes keys here, first show included.
+FocusScope {
   id: page
 
   property var subject: null
@@ -270,6 +272,8 @@ Item {
   FocusScope {
     id: keys
     anchors.fill: parent
+    // take focus whenever the page's FocusScope root is given focus
+    focus: true
     // a focused item still gets key events while hidden -- don't eat keys
     // when this page isn't the visible view
     Keys.enabled: page.visible
@@ -691,7 +695,7 @@ Item {
                 resource: page.resolve(modelData)
                 fontFamily: page.fontFamily
                 jpFamily: page.jpFamily
-                fg: page.fg
+                fg: "#fcfdfd"
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
@@ -725,7 +729,7 @@ Item {
                 resource: page.resolve(modelData)
                 fontFamily: page.fontFamily
                 jpFamily: page.jpFamily
-                fg: page.fg
+                fg: "#fcfdfd"
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
@@ -759,7 +763,7 @@ Item {
                 resource: page.resolve(modelData)
                 fontFamily: page.fontFamily
                 jpFamily: page.jpFamily
-                fg: page.fg
+                fg: "#fcfdfd"
                 radicalColor: page.radicalColor
                 kanjiColor: page.kanjiColor
                 vocabColor: page.vocabColor
