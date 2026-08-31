@@ -45,6 +45,10 @@ FocusScope {
   // (mirrors the quiz card's prompt bar). "" = no bar (the standalone page).
   property string promptWord: ""
   readonly property bool _readingPrompt: promptWord === "Reading"
+  // when > 0 (review overlay), pin the coloured header / prompt bar to these
+  // exact pixel heights so f doesn't change the band sizes vs the answer view
+  property real overlayHeaderH: 0
+  property real overlayBarH: 0
 
   // a review's item info collapses the half you're being tested on (like the
   // website) -- present but folded, so f can't hand you the answer at a
@@ -393,7 +397,9 @@ FocusScope {
       // ---------------------------------------------------- header band
       Rectangle {
         width: parent.width
-        implicitHeight: header.implicitHeight + Style.space(44)
+        implicitHeight: (page.overlayMode && page.overlayHeaderH > 0)
+          ? page.overlayHeaderH
+          : header.implicitHeight + Style.space(44)
         color: page.typeColor
 
         // key hint -- lives in the (scrolling) header so it doesn't sit over
@@ -412,6 +418,8 @@ FocusScope {
         Column {
           id: header
           anchors.centerIn: parent
+          anchors.verticalCenterOffset: (page.overlayMode && page.overlayHeaderH > 0)
+            ? -Style.space(4) : 0
           width: parent.width - Style.space(64)
           spacing: Style.space(8)
 
@@ -421,7 +429,10 @@ FocusScope {
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
             color: "#fcfdfd"
             font.family: page.jpFamily
-            font.pixelSize: Style.font.displayLarge * 2.4
+            // match the answer view's character sizing in a review overlay
+            font.pixelSize: (page.overlayMode && page.overlayHeaderH > 0)
+              ? Math.min(page.overlayHeaderH * 0.56, Style.font.displayLarge * 3)
+              : Style.font.displayLarge * 2.4
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
           }
 
@@ -511,7 +522,8 @@ FocusScope {
       Rectangle {
         width: parent.width
         visible: page.promptWord !== ""
-        implicitHeight: visible ? Style.space(38) : 0
+        implicitHeight: !visible ? 0
+          : page.overlayBarH > 0 ? page.overlayBarH : Style.space(38)
         color: page._readingPrompt ? Qt.rgba(0, 0, 0, 0.55) : "#ebedef"
         Row {
           anchors.centerIn: parent

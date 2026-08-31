@@ -241,7 +241,7 @@ FocusScope {
       anchors.right: parent.right
       height: Style.space(4)
       color: Qt.rgba(0, 0, 0, 0.45)
-      z: 10
+      z: 30   // stays as the top rail even over the item-info overlay
       Rectangle {
         anchors.left: parent.left
         anchors.top: parent.top
@@ -534,8 +534,11 @@ FocusScope {
       SubjectPage {
         id: infoPage
         anchors.fill: parent
-        anchors.topMargin: Style.space(6)
         overlayMode: true
+        // match the answer view's header + prompt bar exactly, so f doesn't
+        // resize those bands
+        overlayHeaderH: header.y + header.height
+        overlayBarH: promptBar.height
         // while drilled into a linked subject (a kanji chip, etc.) show it
         // fully -- the review folds only apply to the item you're on
         readonly property bool drilled: quiz._infoStack.length > 0

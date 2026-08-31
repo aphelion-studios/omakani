@@ -241,6 +241,10 @@ class Api:
             infos = socket.getaddrinfo(HOST, 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
         except OSError as error:
             raise ApiError("Could not resolve %s: %s" % (HOST, error)) from error
+        # IPv4 first: getaddrinfo hands back AAAA ahead of A here, and a box
+        # whose IPv6 route to Cloudflare is dead then burns ~1s per address
+        # failing over -- ~2s of dead weight on every single API call.
+        infos.sort(key=lambda info: 0 if info[0] == socket.AF_INET else 1)
         ordered = []
         for info in infos:
             address = (info[0], info[4])
