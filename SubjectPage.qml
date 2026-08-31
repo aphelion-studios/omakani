@@ -41,10 +41,10 @@ FocusScope {
   // the level leaks which look-alike you're being asked
   property bool hideLevel: false
 
-  // the review overlay's host (QuizCard) keeps its own real header + prompt
-  // bar on screen and only wants the scrolling card list from us -- skip our
-  // header entirely so the two can't drift a pixel
-  property bool headerless: false
+  // the "<Type> <Meaning|Reading>" bar under the header, in a review overlay.
+  // "" -> the bar shows the type (and level, unless hideLevel) instead.
+  property string promptWord: ""
+  readonly property bool _readingPrompt: promptWord === "Reading"
 
   // a review's item info collapses the half you're being tested on (like the
   // website) -- present but folded, so f can't hand you the answer at a
@@ -56,12 +56,6 @@ FocusScope {
   // which section the focus ring should land on when the overlay opens --
   // "" | "meaning" | "reading" (set to the tested half on a wrong answer)
   property string focusSection: ""
-
-  // key-hint line shown in the (scrolling) header when keyNav is on
-  property string navHint: !keyNav ? ""
-    : overlayMode
-      ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
-      : "h / j / k / l  navigate   ·   [  ]  prev / next item   ·   Enter  fold / unfold   ·   Esc  back"
 
   signal navigate(int subjectId)
   signal closeRequested()
@@ -390,28 +384,19 @@ FocusScope {
       width: flick.width
       spacing: 0
 
+      // in a review overlay QuizCard draws its 4px progress rail over the very
+      // top; leave the same gap so the coloured band lines up with the
+      // answer view
+      Item { width: 1; height: page.overlayMode ? Style.space(4) : 0 }
+
       // ---------------------------------------------------- header band
-      // same shallow proportion as the review card, so a chip page and the
-      // review item info read identically
+      // one shallow proportion everywhere -- browse page, item info, drilled
+      // linked subject -- all read identically
       readonly property real _bandH: Math.round(page.height * 0.26)
       Rectangle {
         width: parent.width
-        visible: !page.headerless
-        implicitHeight: visible ? body._bandH : 0
+        implicitHeight: body._bandH
         color: page.typeColor
-
-        // key hint -- lives in the (scrolling) header so it doesn't sit over
-        // the content when you scroll down
-        Text {
-          visible: page.keyNav && page.navHint !== ""
-          anchors.top: parent.top
-          anchors.right: parent.right
-          anchors.margins: Style.space(12)
-          text: page.navHint
-          color: "#fcfdfd"
-          font.family: page.fontFamily
-          font.pixelSize: Style.font.caption
-        }
 
         Column {
           id: header
@@ -488,26 +473,36 @@ FocusScope {
         }
       }
 
-      // ---- type bar -- mirrors the review card's prompt bar ----
+      // ---- type bar ----
+      // review overlay: "<Type> <Meaning|Reading>" (dark for a reading prompt,
+      // grey for meaning). Everywhere else: "<Type> · Level N" (level hidden
+      // in a live review, kept on a browse page).
       Rectangle {
+        id: typeBar
         width: parent.width
-        visible: !page.headerless
-        implicitHeight: visible ? Style.space(40) : 0
-        color: "#ebedef"
+        implicitHeight: Style.space(40)
+        color: page._readingPrompt ? Qt.rgba(0, 0, 0, 0.55) : "#ebedef"
+        readonly property color ink: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
         Row {
           anchors.centerIn: parent
           spacing: Style.space(6)
           Text {
             text: page.typeLabel
-            color: "#1a1a1a"
+            color: typeBar.ink
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.subtitle
+            font.bold: page.promptWord === ""
+          }
+          Text {
+            visible: page.promptWord !== ""
+            text: page.promptWord
+            color: typeBar.ink
             font.family: page.fontFamily
             font.pixelSize: Style.font.subtitle
             font.bold: true
           }
           Text {
-            // the level leaks which of two look-alikes a drilled review page
-            // is; a browse page keeps it
-            visible: !page.hideLevel && !!page.sd.level
+            visible: page.promptWord === "" && !page.hideLevel && !!page.sd.level
             text: "·  Level " + (page.sd.level || "?")
             color: Qt.rgba(0, 0, 0, 0.5)
             font.family: page.fontFamily
@@ -516,7 +511,7 @@ FocusScope {
         }
       }
 
-      Item { width: 1; height: Style.space(page.headerless ? 12 : 20) }
+      Item { width: 1; height: Style.space(20) }
 
       // ---------------------------------------------------- cards
       Column {

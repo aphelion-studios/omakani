@@ -1243,50 +1243,67 @@ Panel {
   // (`active`) the button switches to a loud accent style with a soft
   // pulse; otherwise it's the quiet outline style. `index` is the slot in
   // root.startActions.
-  component CountCard: Column {
+  // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩", the same accent
+  // button + white count pill the main window uses.
+  component CountCard: Rectangle {
     id: cc
     property int index: 0
     property string kind: ""
     property string label: ""
     property int count: 0
     property bool active: false
-    property string startText: ""
+    property string startText: ""   // unused now; kept so callers don't break
 
-    readonly property bool showDone: kind === "lessons" && count === 0
     readonly property bool cursored: root.hasCursor("start", index)
+    readonly property bool lit: cursored || startHover.containsMouse
 
-    spacing: Style.space(8)
-    // 0 reviews / 0 lessons -> not actionable (Done! keeps its own look)
-    opacity: (cc.active || cc.showDone) ? 1 : 0.5
+    implicitHeight: Style.space(40)
+    radius: Style.space(6)
+    clip: true
+    opacity: cc.active ? 1 : 0.45
+    color: cc.lit ? Qt.lighter(root.accent, 1.3) : root.accent
+    border.width: cc.lit ? 3 : 0
+    border.color: "#fcfdfd"
+    Behavior on color { ColorAnimation { duration: 110 } }
     onCursoredChanged: if (cursored) root.setCursorItem(cc)
 
-    // ---- queue name + count badge
-    Row {
-      spacing: Style.space(8)
+    // breathing highlight while the queue is available
+    Rectangle {
+      anchors.fill: parent
+      radius: parent.radius
+      color: Qt.lighter(root.accent, 1.35)
+      visible: cc.active && !cc.lit
+      opacity: 0
+      SequentialAnimation on opacity {
+        running: cc.active && cc.visible && !cc.lit
+        loops: Animation.Infinite
+        NumberAnimation { from: 0.0; to: 0.35; duration: 950; easing.type: Easing.InOutSine }
+        NumberAnimation { from: 0.35; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
+      }
+    }
 
+    Row {
+      anchors.centerIn: parent
+      spacing: Style.space(7)
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: cc.label
-        color: root.foreground
+        color: root.background
         font.family: root.fontFamily
-        font.pixelSize: Style.font.subtitle
+        font.pixelSize: Style.font.bodySmall
         font.bold: true
       }
-
       Rectangle {
         anchors.verticalCenter: parent.verticalCenter
-        implicitWidth: badgeText.implicitWidth + Style.space(14)
-        implicitHeight: Style.space(19)
+        width: Math.max(height, ccPill.implicitWidth + Style.space(10))
+        height: Style.space(18)
         radius: height / 2
-        color: cc.active
-          ? root.accent
-          : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
-
+        color: "#fcfdfd"
         Text {
-          id: badgeText
+          id: ccPill
           anchors.centerIn: parent
-          text: cc.showDone ? "Done!" : String(cc.count)
-          color: cc.active ? root.background : root.foreground
+          text: String(cc.count)
+          color: root.background
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true
@@ -1294,76 +1311,14 @@ Panel {
       }
     }
 
-    // ---- start button
-    Rectangle {
-      id: startBtn
-      width: parent.width
-      implicitHeight: Style.space(34)
-      radius: Style.space(5)
-      clip: true
-
-      readonly property bool lit: cc.cursored || startHover.containsMouse
-
-      color: cc.active
-        ? (lit ? Qt.lighter(root.accent, 1.3) : root.accent)
-        : (lit
-            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
-            : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08))
-      // a clear ring on hover / keyboard focus, for both button styles
-      border.width: lit ? 3 : (cc.active ? 0 : 1)
-      border.color: lit
-        ? (cc.active ? "#fcfdfd" : root.foreground)
-        : (cc.active
-            ? "transparent"
-            : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.22))
-      Behavior on color { ColorAnimation { duration: 110 } }
-
-      // "hey, look here!" breathing highlight while the queue is available --
-      // pauses while the button is focused/hovered so the ring reads clearly
-      Rectangle {
-        anchors.fill: parent
-        radius: parent.radius
-        color: Qt.lighter(root.accent, 1.35)
-        visible: cc.active && !startBtn.lit
-        opacity: 0
-        SequentialAnimation on opacity {
-          running: cc.active && startBtn.visible && !startBtn.lit
-          loops: Animation.Infinite
-          NumberAnimation { from: 0.0; to: 0.4; duration: 950; easing.type: Easing.InOutSine }
-          NumberAnimation { from: 0.4; to: 0.0; duration: 950; easing.type: Easing.InOutSine }
-        }
-      }
-
-      Row {
-        anchors.centerIn: parent
-        spacing: Style.space(5)
-
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          text: cc.startText
-          color: cc.active ? root.background : root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
-        }
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          text: "›"
-          color: cc.active ? root.background : root.foreground
-          opacity: cc.active ? 0.9 : 0.7
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-        }
-      }
-
-      MouseArea {
-        id: startHover
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: cc.active ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onContainsMouseChanged: if (containsMouse && cc.active) root.setCursor("start", cc.index)
-        onClicked: if (cc.active) root.openStart(cc.index)
-      }
+    MouseArea {
+      id: startHover
+      anchors.fill: parent
+      hoverEnabled: true
+      enabled: cc.active
+      cursorShape: Qt.PointingHandCursor
+      onContainsMouseChanged: if (containsMouse) root.setCursor("start", cc.index)
+      onClicked: root.openStart(cc.index)
     }
   }
 

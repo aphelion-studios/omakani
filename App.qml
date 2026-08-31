@@ -43,43 +43,76 @@ Item {
     && !service.vacation && service.reviewsNow > 0
 
   // ---- home screen keyboard nav --------------------------------------
-  // one flat list: [Lessons, Reviews, Level Progress] then the three Extra
-  // Study rows. Rows with a zero count render dimmed and can't be focused or
-  // activated. `count` -1 means "no pill" (Level Progress).
+  // laid out in rows: [Lessons | Reviews], then [Level Progress], then one
+  // Extra Study row each. j/k step rows (h/l step columns); a disabled item
+  // (zero count) can't be focused or activated, and j/k skips its whole row
+  // if nothing in it is reachable. `count` -1 means "no pill".
   property int homeIndex: 0
   readonly property var homeActions: {
     var out = []
     if (!service || !service.configured) return out
     var ok = !service.vacation
     var ln = service.lessonsNow, rn = service.reviewsNow
-    out.push({ text: "Lessons", act: "lesson", kind: "primary",
+    out.push({ text: "Lessons", act: "lesson", kind: "primary", row: 0, col: 0,
                count: ln, enabled: ok && ln > 0 })
-    out.push({ text: "Reviews", act: "review", kind: "primary",
+    out.push({ text: "Reviews", act: "review", kind: "primary", row: 0, col: 1,
                count: rn, enabled: ok && rn > 0 })
-    out.push({ text: "Level Progress", act: "browse", kind: "wide",
+    out.push({ text: "Level Progress", act: "browse", kind: "wide", row: 1, col: 0,
                count: -1, enabled: true })
     var es = service.extraStudy || ({})
     var rl = Number(es.recentLessons) || 0
     var rm = Number(es.recentMistakes) || 0
     var bi = Number(es.burnedItems) || 0
     out.push({ text: "Recent Lessons",  act: "es:recent-lessons", kind: "extra",
-               glyph: "󰌵", count: rl, enabled: rl > 0 })
+               row: 2, col: 0, glyph: "󰌵", count: rl, enabled: rl > 0 })
     out.push({ text: "Recent Mistakes", act: "es:mistakes", kind: "extra",
-               glyph: "󰀦", count: rm, enabled: rm > 0 })
+               row: 3, col: 0, glyph: "󰀦", count: rm, enabled: rm > 0 })
     out.push({ text: "Burned Items",    act: "es:burned", kind: "extra",
-               glyph: "󰈸", count: bi, enabled: bi > 0 })
+               row: 4, col: 0, glyph: "󰈸", count: bi, enabled: bi > 0 })
     return out
   }
   readonly property var homePrimary: homeActions.filter(function (a) { return a.kind === "primary" })
   readonly property var homeWide: homeActions.filter(function (a) { return a.kind === "wide" })
   readonly property var homeExtra: homeActions.filter(function (a) { return a.kind === "extra" })
-  function homeMove(d) {
-    var n = homeActions.length
-    if (n === 0) return
-    var i = homeIndex
-    for (var step = 0; step < n; step++) {
-      i = (i + d + n) % n
-      if (homeActions[i] && homeActions[i].enabled !== false) { homeIndex = i; return }
+  readonly property int _homeRows: {
+    var m = 0
+    for (var i = 0; i < homeActions.length; i++) m = Math.max(m, homeActions[i].row)
+    return homeActions.length > 0 ? m + 1 : 0
+  }
+  function _homeAt(row, col) {
+    for (var i = 0; i < homeActions.length; i++)
+      if (homeActions[i].row === row && homeActions[i].col === col) return i
+    return -1
+  }
+  // flat index of a reachable action in `row`, preferring column `want`
+  function _homeRowPick(row, want) {
+    var p = _homeAt(row, want)
+    if (p >= 0 && homeActions[p].enabled !== false) return p
+    for (var c = 0; c < 4; c++) {
+      var i = _homeAt(row, c)
+      if (i >= 0 && homeActions[i].enabled !== false) return i
+    }
+    return -1
+  }
+  function homeMoveV(dir) {
+    if (homeActions.length === 0) return
+    var cur = Math.max(0, Math.min(homeIndex, homeActions.length - 1))
+    var r = homeActions[cur].row, c = homeActions[cur].col
+    for (var step = 0; step < _homeRows; step++) {
+      r = (r + dir + _homeRows) % _homeRows
+      var t = _homeRowPick(r, r === 0 ? 1 : c)   // reviews-first on the top row
+      if (t >= 0) { homeIndex = t; return }
+    }
+  }
+  function homeMoveH(dir) {
+    if (homeActions.length === 0) return
+    var cur = Math.max(0, Math.min(homeIndex, homeActions.length - 1))
+    var r = homeActions[cur].row, c = homeActions[cur].col + dir
+    while (true) {
+      var i = _homeAt(r, c)
+      if (i < 0) return
+      if (homeActions[i].enabled !== false) { homeIndex = i; return }
+      c += dir
     }
   }
   function homeEnsureValid() {
@@ -542,13 +575,13 @@ Item {
         else root.requestClose()
       }
       Keys.onPressed: function (e) {
-        // On the home screen only; the browser and subject page own their keys.
+        // fallback for the home screen only (homeScope owns it normally)
         if (root.view !== "home") return
-        if (e.key === Qt.Key_Down || e.key === Qt.Key_Right || e.text === "j" || e.text === "l") {
-          root.homeMove(1); e.accepted = true
-        } else if (e.key === Qt.Key_Up || e.key === Qt.Key_Left || e.text === "k" || e.text === "h") {
-          root.homeMove(-1); e.accepted = true
-        } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+        if (e.key === Qt.Key_Down || e.text === "j") { root.homeMoveV(1); e.accepted = true }
+        else if (e.key === Qt.Key_Up || e.text === "k") { root.homeMoveV(-1); e.accepted = true }
+        else if (e.key === Qt.Key_Right || e.text === "l") { root.homeMoveH(1); e.accepted = true }
+        else if (e.key === Qt.Key_Left || e.text === "h") { root.homeMoveH(-1); e.accepted = true }
+        else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
           root.homeActivate(); e.accepted = true
         }
       }
@@ -624,10 +657,14 @@ Item {
           visible: root.view === "home"
           Keys.enabled: root.view === "home"
           Keys.onPressed: function (e) {
-            if (e.key === Qt.Key_Down || e.key === Qt.Key_Right || e.text === "j" || e.text === "l") {
-              root.homeMove(1); e.accepted = true
-            } else if (e.key === Qt.Key_Up || e.key === Qt.Key_Left || e.text === "k" || e.text === "h") {
-              root.homeMove(-1); e.accepted = true
+            if (e.key === Qt.Key_Down || e.text === "j") {
+              root.homeMoveV(1); e.accepted = true
+            } else if (e.key === Qt.Key_Up || e.text === "k") {
+              root.homeMoveV(-1); e.accepted = true
+            } else if (e.key === Qt.Key_Right || e.text === "l") {
+              root.homeMoveH(1); e.accepted = true
+            } else if (e.key === Qt.Key_Left || e.text === "h") {
+              root.homeMoveH(-1); e.accepted = true
             } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
               root.homeActivate(); e.accepted = true
             }
@@ -676,7 +713,7 @@ Item {
             width: Math.min(implicitWidth, parent.width)
           }
 
-          // greeting -- ようこそ, <name> !  /  Level N
+          // greeting -- ようこそ、<name>！  /  Level N
           Column {
             width: parent.width
             spacing: Style.space(2)
@@ -692,7 +729,7 @@ Item {
               text: {
                 if (!root.service) return "Connecting to the service…"
                 if (!root.service.configured) return "Add your API token from the bar widget first."
-                return "ようこそ, " + root.service.username + " !"
+                return "ようこそ、" + root.service.username + "！"
               }
             }
             Text {

@@ -525,17 +525,11 @@ FocusScope {
     }
 
     // ---- item info (f) ----
-    // for the item you're reviewing: start right under the real header +
-    // prompt bar so those bands are literally the same pixels as the answer
-    // view -- we only overlay the scrolling card list. When drilled into a
-    // linked subject, cover the header too and let SubjectPage draw its own
-    // (it's a different subject now).
+    // covers the whole card; SubjectPage draws the same compact header + type
+    // bar as a browse page (the progress rail / counts / toolbar stay on top).
     Rectangle {
       readonly property bool drilled: quiz._infoStack.length > 0
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.top: drilled ? parent.top : promptBar.bottom
-      anchors.bottom: parent.bottom
+      anchors.fill: parent
       visible: quiz.infoOpen
       color: quiz.pageBg
       z: 20
@@ -545,8 +539,9 @@ FocusScope {
         anchors.fill: parent
         overlayMode: true
         readonly property bool drilled: quiz._infoStack.length > 0
-        headerless: !drilled       // QuizCard keeps its own header for the
-                                   // item you're on; the drill shows its own
+        // the "<Type> <Meaning|Reading>" bar -- only for the item you're on;
+        // a drilled linked subject shows plain "<Type>"
+        promptWord: (quiz.restrictInfo && !drilled) ? quiz.promptWord : ""
         // in a review, keep the half you haven't earned yet folded: on a
         // reading question the Meaning pane stays folded until you've cleared
         // meaning this session, and vice versa -- even after a wrong answer
@@ -569,11 +564,6 @@ FocusScope {
         radicalColor: quiz.radicalColor
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
-        // the top-level review info stays clean (matches the mockup); a
-        // drilled linked subject shows the hint since it's less obvious there
-        navHint: quiz._infoStack.length > 0
-          ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
-          : ""
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
         onNavigate: function (id) { quiz._infoDrill(id) }
         onCloseRequested: quiz._infoBack()
