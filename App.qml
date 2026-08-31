@@ -90,6 +90,15 @@ Item {
       if (homeActions[i] && homeActions[i].enabled !== false) { homeIndex = i; return }
     homeIndex = 0
   }
+  // land on Reviews whenever any are due -- the WaniKani habit is to clear
+  // reviews before touching lessons. Otherwise the first actionable thing.
+  function homeDefault() {
+    for (var i = 0; i < homeActions.length; i++)
+      if (homeActions[i].act === "review" && homeActions[i].enabled !== false) {
+        homeIndex = i; return
+      }
+    homeEnsureValid()
+  }
   onHomeActionsChanged: Qt.callLater(homeEnsureValid)
   function homeActivate() {
     var a = homeActions[Math.max(0, Math.min(homeIndex, homeActions.length - 1))]
@@ -116,6 +125,7 @@ Item {
   onViewChanged: Qt.callLater(applyFocus)
   function applyFocus() {
     if (!opened) return
+    if (view === "home") homeDefault()
     if (view === "browse") levelBrowser.focusGrid()
     else if (view === "subject") subjectPage.focusPage()
     else if (view === "quiz") quizCard.forceActiveFocus()

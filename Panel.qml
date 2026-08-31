@@ -75,7 +75,7 @@ Panel {
   }
   function openStart(index) {
     var a = startActions[index]
-    if (!a) return
+    if (!a || a.active === false) return   // 0 reviews / 0 lessons -> dead
     if (a.payload) {
       Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
         "io.github.aphelion-studios.omakani", JSON.stringify(a.payload)])
@@ -149,6 +149,7 @@ Panel {
     return navActive && navSection === section && navIndex === index
   }
   function setCursor(section, index) {
+    if (!navEnabled(section, index)) return
     navActive = true
     navSection = section
     navIndex = index
@@ -158,9 +159,53 @@ Panel {
     scrollTimer.restart()
   }
 
-  function navReset() {
+  // ---- per-item enable (Start Lessons/Reviews and Extra Study go dead at 0)
+  function navEnabled(sec, idx) {
+    if (sec === "start") {
+      var a = startActions[idx]
+      return !!a && a.active !== false
+    }
+    if (sec === "extra") {
+      var es = wk.extraStudy || ({})
+      var c = [Number(es.recentLessons) || 0, Number(es.recentMistakes) || 0,
+               Number(es.burnedItems) || 0]
+      return (c[idx] || 0) > 0
+    }
+    return true
+  }
+  function navFirstEnabled(sec, count) {
+    for (var i = 0; i < count; i++) if (navEnabled(sec, i)) return i
+    return -1
+  }
+  function navLastEnabled(sec, count) {
+    for (var i = count - 1; i >= 0; i--) if (navEnabled(sec, i)) return i
+    return -1
+  }
+  function navStepEnabled(sec, from, dir, count) {
+    var i = from + dir
+    while (i >= 0 && i < count) { if (navEnabled(sec, i)) return i; i += dir }
+    return -1
+  }
+
+  function navReset() { navDefault() }
+  // open the dashboard with Reviews under the cursor whenever any are due
+  // (the WaniKani habit is reviews before lessons); otherwise the first
+  // thing that's actually actionable.
+  function navDefault() {
     navActive = false
-    navSection = navSections.length > 0 ? navSections[0].n : ""
+    var secs = navSections
+    if (secs.length === 0) { navSection = ""; navIndex = 0; return }
+    if (navSecAt("start") >= 0) {
+      for (var k = 0; k < startActions.length; k++)
+        if (startActions[k].kind === "reviews" && startActions[k].active !== false) {
+          navSection = "start"; navIndex = k; return
+        }
+    }
+    for (var s = 0; s < secs.length; s++) {
+      var t = navFirstEnabled(secs[s].n, secs[s].c)
+      if (t >= 0) { navSection = secs[s].n; navIndex = t; return }
+    }
+    navSection = secs[0].n
     navIndex = 0
   }
 
@@ -178,17 +223,25 @@ Panel {
     var cur = secs[si]
     var beforeSec = navSection, beforeIdx = navIndex
 
+    // step to the next section (in `dir`) that has a reachable item, and
+    // land on its first / last such item
+    var crossTo = function (dir) {
+      var ni = si
+      while (true) {
+        ni += dir
+        if (ni < 0 || ni >= secs.length) return
+        var tgt = dir > 0 ? navFirstEnabled(secs[ni].n, secs[ni].c)
+                          : navLastEnabled(secs[ni].n, secs[ni].c)
+        if (tgt >= 0) { navSection = secs[ni].n; navIndex = tgt; return }
+      }
+    }
+
     if (dy !== 0) {
       var down = dy > 0
-      if (cur.o === "v" && ((down && navIndex < cur.c - 1) || (!down && navIndex > 0))) {
-        navIndex += down ? 1 : -1
-      } else {
-        var ni = si + (down ? 1 : -1)
-        if (ni >= 0 && ni < secs.length) {
-          navSection = secs[ni].n
-          navIndex = down ? 0 : secs[ni].c - 1
-        }
-      }
+      var within = (cur.o === "v")
+        ? navStepEnabled(cur.n, navIndex, down ? 1 : -1, cur.c) : -1
+      if (within >= 0) navIndex = within
+      else crossTo(down ? 1 : -1)
     } else if (dx !== 0) {
       var right = dx > 0
       if (cur.n === "drillback") {
@@ -198,7 +251,8 @@ Panel {
       } else if (cur.n === "settings") {
         settingsAdjust(navIndex, right ? 1 : -1)
       } else if (cur.o === "h") {
-        navIndex = Math.max(0, Math.min(cur.c - 1, navIndex + (right ? 1 : -1)))
+        var step = navStepEnabled(cur.n, navIndex, right ? 1 : -1, cur.c)
+        if (step >= 0) navIndex = step
       } else if (right) {
         navActivate()
         return
@@ -218,15 +272,18 @@ Panel {
     var secs = navSections
     if (secs.length === 0) return
     navActive = true
-    var s = toBottom ? secs[secs.length - 1] : secs[0]
-    navSection = s.n
-    navIndex = toBottom ? s.c - 1 : 0
-    scrollTimer.restart()
+    var order = toBottom ? secs.slice().reverse() : secs
+    for (var i = 0; i < order.length; i++) {
+      var t = toBottom ? navLastEnabled(order[i].n, order[i].c)
+                       : navFirstEnabled(order[i].n, order[i].c)
+      if (t >= 0) { navSection = order[i].n; navIndex = t; scrollTimer.restart(); return }
+    }
   }
 
   function navActivate() {
     if (!navActive) { navActive = true; return }
     var s = navSection, i = navIndex
+    if (!navEnabled(s, i)) return
     if (s === "token") tokenField.forceActiveFocus()
     else if (s === "drillback") upcomingDrill = -1
     else if (s === "settingsdone") settingsOpen = false
@@ -1199,6 +1256,8 @@ Panel {
     readonly property bool cursored: root.hasCursor("start", index)
 
     spacing: Style.space(8)
+    // 0 reviews / 0 lessons -> not actionable (Done! keeps its own look)
+    opacity: (cc.active || cc.showDone) ? 1 : 0.5
     onCursoredChanged: if (cursored) root.setCursorItem(cc)
 
     // ---- queue name + count badge
@@ -1301,9 +1360,9 @@ Panel {
         id: startHover
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onContainsMouseChanged: if (containsMouse) root.setCursor("start", cc.index)
-        onClicked: root.openStart(cc.index)
+        cursorShape: cc.active ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onContainsMouseChanged: if (containsMouse && cc.active) root.setCursor("start", cc.index)
+        onClicked: if (cc.active) root.openStart(cc.index)
       }
     }
   }
@@ -1461,7 +1520,7 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: esr.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onContainsMouseChanged: if (containsMouse) root.setCursor("extra", esr.idx)
+      onContainsMouseChanged: if (containsMouse && esr.available) root.setCursor("extra", esr.idx)
       onClicked: if (esr.available) root.openExtraStudy(esr.idx)
     }
   }
