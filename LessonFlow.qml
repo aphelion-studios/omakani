@@ -39,6 +39,13 @@ FocusScope {
   readonly property var infoSubject: (phase === "info" && service && infoIndex < ids.length)
     ? service.subjectDetail(ids[infoIndex]) : null
 
+  // re-entering the view before begin() has run again: clear a terminal
+  // screen so its window-wide Enter/Esc -> exit() shortcut can't fire on
+  // the keypress meant to start the next batch
+  function rearm() {
+    if (phase === "summary" || phase === "error") { errorText = ""; phase = "loading" }
+  }
+
   function begin() {
     phase = ids.length === 0 ? "error" : "loading"
     errorText = ids.length === 0 ? "No lessons are waiting right now." : ""

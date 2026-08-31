@@ -42,6 +42,13 @@ FocusScope {
   readonly property real progress: totalQuestions > 0
     ? clearedQuestions / totalQuestions : 0
 
+  // re-entering the view before start() has run again: clear a terminal
+  // screen so its window-wide Enter/Esc -> exit() shortcut can't fire on
+  // the keypress meant to start the next session
+  function rearm() {
+    if (phase === "summary" || phase === "empty") phase = "loading"
+  }
+
   function start() {
     queue = []
     pos = 0

@@ -49,6 +49,17 @@ FocusScope {
   readonly property real progress: totalSubjects > 0
     ? submittedCount / totalSubjects : 0
 
+  // re-entering the view before begin() has run again: clear a terminal
+  // screen so its window-wide Enter/Esc -> exit() shortcut can't fire on
+  // the keypress that's meant to start the next session
+  function rearm() {
+    if (phase === "summary" || phase === "error") {
+      built = false
+      errorText = ""
+      phase = "loading"
+    }
+  }
+
   function begin() {
     items = ({})
     queue = []
