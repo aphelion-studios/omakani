@@ -33,6 +33,7 @@ import http.client
 import json
 import math
 import os
+import re
 import socket
 import ssl
 import sys
@@ -936,25 +937,23 @@ def cmd_browse(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
-def fetch_file(url, dest):
-    """Download a public file (a pronunciation-audio clip) straight to `dest`.
-    files.wanikani.com is a plain CloudFront/S3 origin -- no auth, no redirects,
-    so a single GET is enough. Written atomically.
-
-    Resolves the host and prefers IPv4: http.client tries a stalled AAAA for
-    ~8s before falling back on this box, which made the first play of each
-    clip feel broken (curl, which does happy-eyeballs, is instant)."""
+def http_get_bytes(url, headers=None, _hops=3):
+    """Plain HTTPS GET returning the body bytes. Resolves the host and prefers
+    IPv4: http.client (and urllib) try a stalled AAAA for ~8s before falling
+    back on this box, which made every fetch feel broken (curl, which does
+    happy-eyeballs, is instant). Follows a couple of redirects."""
     parsed = urllib.parse.urlparse(url)
     host = parsed.hostname
     port = parsed.port or 443
+    hdrs = {"User-Agent": USER_AGENT}
+    if headers:
+        hdrs.update(headers)
     try:
         infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
     except OSError as error:
         raise ApiError("could not resolve %s: %s" % (host, error)) from error
-    # IPv4 first, then anything else
-    infos.sort(key=lambda i: 0 if i[0] == socket.AF_INET else 1)
+    infos.sort(key=lambda i: 0 if i[0] == socket.AF_INET else 1)   # IPv4 first
 
-    blob = None
     last = None
     for family, _, _, _, sockaddr in infos:
         raw = socket.socket(family, socket.SOCK_STREAM)
@@ -966,14 +965,18 @@ def fetch_file(url, dest):
             connection.sock = secure
             try:
                 target = parsed.path + (("?" + parsed.query) if parsed.query else "")
-                connection.request("GET", target, headers={"User-Agent": USER_AGENT})
+                connection.request("GET", target or "/", headers=hdrs)
                 response = connection.getresponse()
                 body = response.read()
+                if response.status in (301, 302, 303, 307, 308) and _hops > 0:
+                    loc = response.getheader("Location")
+                    if loc:
+                        return http_get_bytes(urllib.parse.urljoin(url, loc),
+                                              headers, _hops - 1)
                 if response.status != 200:
-                    raise ApiError("audio download failed (HTTP %d)" % response.status,
+                    raise ApiError("GET %s -> HTTP %d" % (url, response.status),
                                    response.status)
-                blob = body
-                break
+                return body
             finally:
                 connection.close()
         except (OSError, ssl.SSLError) as error:
@@ -982,14 +985,156 @@ def fetch_file(url, dest):
                 raw.close()
             except OSError:
                 pass
-    if blob is None:
-        raise ApiError("audio download failed: %s" % (last or "no route"))
+    raise ApiError("GET %s failed: %s" % (url, last or "no route"))
 
+
+def fetch_file(url, dest):
+    """Download a public file (a pronunciation-audio clip) straight to `dest`,
+    written atomically. files.wanikani.com is a plain CloudFront/S3 origin."""
+    blob = http_get_bytes(url)
     dest.parent.mkdir(parents=True, exist_ok=True)
     temporary = dest.with_name(dest.name + ".tmp")
     with open(temporary, "wb") as handle:
         handle.write(blob)
     os.replace(temporary, dest)
+
+
+# --------------------------------------------------------- radical mnemonics
+
+# WaniKani's illustrated radical images ("Bat wing extended to your right...")
+# aren't in the API -- only the plain character renderings are. They ARE on
+# the public radical pages though (`<wk-mnemonic-image src="...">`), served
+# from the same open CDN as the audio. `radical-images` scrapes them once
+# into the cache; it's your own subscribed content, kept local, not
+# redistributed. Polite: one page at a time, with a delay.
+
+RADICAL_UA = ("Mozilla/5.0 (X11; Linux x86_64) omakani/%s (personal client)"
+              % USER_AGENT.split("/")[-1])
+MNEMONIC_DIR_NAME = "radical_mnemonics"
+
+
+def _web_bytes(url):
+    return http_get_bytes(url, headers={"User-Agent": RADICAL_UA})
+
+
+def flatten_style_svg(text):
+    """Inline a `<style>` sheet's simple class rules (`fill`, `opacity`,
+    `stroke*`) as attributes on the elements that use them, then drop the
+    <style>/<defs> -- QtSvg ignores CSS class selectors, so without this the
+    illustration renders flat black."""
+    rules = {}
+    for block in re.findall(r"<style[^>]*>(.*?)</style>", text, flags=re.S):
+        for sel, body in re.findall(r"\.([A-Za-z0-9_-]+)\s*\{([^}]*)\}", block):
+            props = {}
+            for name, value in re.findall(r"([a-z-]+)\s*:\s*([^;]+)", body):
+                value = value.strip().rstrip(";").strip()
+                if value.startswith("."):
+                    value = "0" + value            # ".5" -> "0.5" for QtSvg
+                props[name.strip()] = value
+            rules[sel] = props
+
+    def attrs_for(classlist):
+        merged = {}
+        for name in classlist.split():
+            merged.update(rules.get(name, {}))
+        return " ".join('%s="%s"' % (k, v) for k, v in merged.items())
+
+    def repl(match):
+        a = attrs_for(match.group(1))
+        return (" " + a) if a else ""
+
+    text = re.sub(r'\s*class="([^"]*)"', repl, text)
+    text = re.sub(r"<defs>\s*</defs>", "", text, flags=re.S)
+    text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.S)
+    return text
+
+
+def cmd_radical_images(args):
+    """Scrape every radical's illustrated mnemonic image from its public
+    wanikani.com page into cache/radical_mnemonics/<id>.svg, plus an
+    index.json (id -> alt text). Resumable: re-run to fill gaps, --force to
+    redo. Run it once from a terminal; the app only reads the cache."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    api = Api(token)
+    subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
+    radicals = [s for s in subjects.values()
+                if s.get("object") == "radical" and not data_of(s).get("hidden_at")]
+    radicals.sort(key=lambda s: data_of(s).get("level") or 0)
+
+    out_dir = cache_dir() / MNEMONIC_DIR_NAME
+    out_dir.mkdir(parents=True, exist_ok=True)
+    index_path = out_dir / "index.json"
+    try:
+        index = json.loads(index_path.read_text(encoding="utf-8"))
+    except Exception:
+        index = {}
+
+    force = bool(getattr(args, "force", False))
+    delay = max(0.0, float(getattr(args, "delay", 0.4) or 0.4))
+    tag_re = re.compile(r"<wk-mnemonic-image\b([^>]*)>")
+    src_re = re.compile(r'src="([^"]+)"')
+    alt_re = re.compile(r'aria-label="([^"]*)"')
+
+    total = len(radicals)
+    fetched = skipped = no_image = failed = 0
+    for i, subject in enumerate(radicals):
+        rid = str(subject.get("id"))
+        svg_path = out_dir / (rid + ".svg")
+        if not force and rid in index and (index[rid].get("none") or svg_path.exists()):
+            skipped += 1
+            continue
+        url = data_of(subject).get("document_url")
+        if not url:
+            failed += 1
+            continue
+        try:
+            html = _web_bytes(url).decode("utf-8", "replace")
+            tag = tag_re.search(html)
+            src = src_re.search(tag.group(1)) if tag else None
+            if not src:
+                index[rid] = {"none": True}
+                no_image += 1
+            else:
+                blob = _web_bytes(src.group(1))
+                body = blob.decode("utf-8", "replace")
+                if "<svg" not in body:
+                    failed += 1
+                else:
+                    svg_path.write_text(flatten_style_svg(body), encoding="utf-8")
+                    alt = alt_re.search(tag.group(1))
+                    index[rid] = {"alt": alt.group(1) if alt else ""}
+                    fetched += 1
+        except Exception:
+            failed += 1
+        if (i + 1) % 20 == 0:
+            index_path.write_text(json.dumps(index), encoding="utf-8")
+            sys.stderr.write("  %d / %d  (got %d, skip %d, none %d, fail %d)\n"
+                             % (i + 1, total, fetched, skipped, no_image, failed))
+        if delay:
+            time.sleep(delay)
+
+    index_path.write_text(json.dumps(index), encoding="utf-8")
+    return {"ok": True, "configured": True, "error": "", "total": total,
+            "fetched": fetched, "skipped": skipped, "noImage": no_image,
+            "failed": failed, "cacheDir": str(out_dir)}
+
+
+def radical_mnemonic(subject_id):
+    """(path, alt) for a radical's scraped mnemonic image, or ("", "")."""
+    out_dir = cache_dir() / MNEMONIC_DIR_NAME
+    svg_path = out_dir / (str(subject_id) + ".svg")
+    if not svg_path.exists():
+        return "", ""
+    alt = ""
+    try:
+        index = json.loads((out_dir / "index.json").read_text(encoding="utf-8"))
+        alt = str((index.get(str(subject_id)) or {}).get("alt") or "")
+    except Exception:
+        pass
+    return str(svg_path), alt
 
 
 def audio_pool(audios, voice, reading=""):
@@ -1222,6 +1367,11 @@ def cmd_detail(args):
         entry = dict(subject)
         entry["study_material"] = notes.get(sid) or {}
         entry["assignment"] = assignments.get(sid) or {}
+        if entry.get("object") == "radical":
+            path, alt = radical_mnemonic(sid)
+            if path:
+                entry["mnemonic_image_path"] = path
+                entry["mnemonic_image_alt"] = alt
         out[sid] = entry
 
     return {"ok": True, "configured": True, "error": "", "subjects": out,
@@ -1468,6 +1618,15 @@ def build_parser():
 
     clear_token = commands.add_parser("clear-token", help="forget the stored API token")
     clear_token.set_defaults(handler=cmd_clear_token)
+
+    radical_images = commands.add_parser(
+        "radical-images",
+        help="one-time scrape of radical mnemonic illustrations from the website")
+    radical_images.add_argument("--force", action="store_true",
+                                help="re-fetch even radicals already cached")
+    radical_images.add_argument("--delay", type=float, default=0.4,
+                                help="seconds between page fetches (default 0.4)")
+    radical_images.set_defaults(handler=cmd_radical_images)
 
     return parser
 

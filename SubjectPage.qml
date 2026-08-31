@@ -248,6 +248,12 @@ FocusScope {
 
   readonly property var sd: subject && subject.data ? subject.data : ({})
   readonly property string kind: subject ? String(subject.object || "") : ""
+  // WaniKani's illustrated radical mnemonic (scraped by `wanikani.py
+  // radical-images` -- not in the API); "" until that's been run
+  readonly property string mnemonicImagePath: subject && subject.mnemonic_image_path
+    ? String(subject.mnemonic_image_path) : ""
+  readonly property string mnemonicImageAlt: subject && subject.mnemonic_image_alt
+    ? String(subject.mnemonic_image_alt) : ""
 
   // unlock state, from the assignment (absent entirely => still locked)
   readonly property var asg: subject && subject.assignment ? subject.assignment : ({})
@@ -556,6 +562,26 @@ FocusScope {
               color: page.fg
               font.family: page.fontFamily
               font.pixelSize: Style.font.body
+            }
+
+            // the illustrated radical mnemonic, on a white tile like the site
+            Rectangle {
+              visible: page.kind === "radical" && page.mnemonicImagePath !== ""
+              width: Style.space(224)
+              height: Style.space(224)
+              radius: Style.space(6)
+              color: "#fcfdfd"
+              Image {
+                anchors.centerIn: parent
+                width: parent.width - Style.space(16)
+                height: width
+                fillMode: Image.PreserveAspectFit
+                source: page.mnemonicImagePath !== ""
+                  ? "file://" + page.mnemonicImagePath : ""
+                sourceSize.width: 420
+                sourceSize.height: 420
+                smooth: true
+              }
             }
 
             Rectangle {
