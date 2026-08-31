@@ -58,6 +58,7 @@ CACHE_VERSION = 2
 UPCOMING_DAYS = 5
 CRITICAL_THRESHOLD = 75          # percentage_correct below this -> critical
 RECENT_WINDOW_DAYS = 30
+RECENT_MISTAKE_HOURS = 24        # website's Recent Mistakes look-back
 RECENT_LIST_CAP = 30
 CRITICAL_LIST_CAP = 60
 
@@ -655,27 +656,35 @@ def critical_condition(review_stats, assignment_by_subject, subjects_by_id):
 def recent_mistakes(review_stats, assignment_by_subject, subjects_by_id):
     """The website's Recent Mistakes: items answered wrong in a review in the
     last 24 h and not yet recovered. Reconstructed without a review log --
-    a wrong answer bumps the statistic's updated_at and resets that component's
-    current streak to zero, so a fresh updated_at plus a zero streak is a miss
-    still inside the window. Radicals have no reading, so only their meaning
-    streak counts."""
-    cutoff = now_utc() - timedelta(hours=24)
+    a wrong answer bumps the statistic's data_updated_at and breaks that
+    component's
+    current streak (the follow-up correct answer that ends the review then
+    starts a new streak of 1). So inside the window, a component that has ever
+    been missed (`*_incorrect > 0`) and whose current streak is back down to
+    <= 1 is a miss you haven't yet re-passed. A streak still <= 1 with zero
+    lifetime incorrects is just a brand-new item's first review -- not a
+    mistake. Radicals have no reading, so only their meaning streak counts.
+    (Matches the math-man-123/wanikani-recent-mistakes heuristic.)"""
+    cutoff = now_utc() - timedelta(hours=RECENT_MISTAKE_HOURS)
     rows = []
     for stat in review_stats:
         data = data_of(stat)
         if data.get("hidden"):
             continue
-        updated = parse_stamp(data.get("updated_at"))
+        # review_statistic's `data` carries no updated_at -- the modification
+        # stamp lives on the envelope as data_updated_at, and WK bumps it on
+        # every review of the item.
+        updated = parse_stamp((stat or {}).get("data_updated_at"))
         if not updated or updated < cutoff:
-            continue
-        reviewed = (data.get("meaning_correct") or 0) + (data.get("meaning_incorrect") or 0)
-        if reviewed <= 0:
             continue
         subject_id = data.get("subject_id")
         is_radical = (subjects_by_id.get(subject_id) or {}).get("object") == "radical"
-        missed = (data.get("meaning_current_streak") == 0) or (
-            not is_radical and data.get("reading_current_streak") == 0)
-        if not missed:
+        missed_meaning = ((data.get("meaning_incorrect") or 0) > 0
+                          and (data.get("meaning_current_streak") or 0) <= 1)
+        missed_reading = (not is_radical
+                          and (data.get("reading_incorrect") or 0) > 0
+                          and (data.get("reading_current_streak") or 0) <= 1)
+        if not (missed_meaning or missed_reading):
             continue
         if (data_of(assignment_by_subject.get(subject_id)).get("srs_stage") or 0) < 1:
             continue
