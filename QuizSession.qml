@@ -52,6 +52,11 @@ FocusScope {
     if (phase === "summary" || phase === "empty") phase = "loading"
   }
 
+  // "<id>:meaning" / "<id>:reading" -> true, once cleared this session. Drives
+  // the f-info anti-cheat fold the same way the review engine's per-item
+  // mOK/rOK does.
+  property var _cleared: ({})
+
   function start() {
     queue = []
     pos = 0
@@ -60,6 +65,7 @@ FocusScope {
     totalAnswers = 0
     correctAnswers = 0
     missedIds = ({})
+    _cleared = ({})
     built = false
     _finished = false
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
@@ -111,6 +117,11 @@ FocusScope {
     if (correct) {
       correctAnswers += 1
       clearedQuestions += 1
+      if (current) {
+        var m = _cleared
+        m[current.id + ":" + current.type] = true
+        _cleared = m
+      }
     } else {
       missedIds[current.id] = true
       // requeue this question ~4 slots back
@@ -192,6 +203,12 @@ FocusScope {
     studyMaterial: subject && subject.study_material ? subject.study_material : null
     questionType: session.current ? session.current.type : "meaning"
     progress: session.progress
+    // f-info hides the half you're being tested on, like a real review
+    restrictInfo: true
+    meaningDone: session.current
+      ? session._cleared[session.current.id + ":meaning"] === true : false
+    readingDone: session.current
+      ? session._cleared[session.current.id + ":reading"] === true : false
     pageBg: session.pageBg
     fg: session.fg
     fontFamily: session.fontFamily

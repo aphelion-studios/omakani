@@ -456,9 +456,10 @@ FocusScope {
     anchors.right: parent.right
     anchors.topMargin: Style.space(12)
     anchors.rightMargin: Style.space(16)
-    visible: engine.phase === "review" && !card.infoOpen
+    // stays visible over the item-info overlay (matches the mockup)
+    visible: engine.phase === "review"
     spacing: Style.space(12)
-    z: 6
+    z: 26
 
     readonly property int pctAcc: engine.answerCount > 0
       ? Math.round(100 * engine.correctCount / engine.answerCount) : 100

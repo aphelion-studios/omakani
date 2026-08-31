@@ -480,6 +480,7 @@ FocusScope {
       anchors.bottomMargin: Style.space(18)
       anchors.horizontalCenter: parent.horizontalCenter
       spacing: Style.space(2)
+      z: 25   // stays above the item-info overlay so f / eye can close it
 
       Repeater {
         model: [
@@ -549,6 +550,8 @@ FocusScope {
           : quiz.effectiveType === "reading" ? (quiz.meaningDone ? "" : "meaning")
           : quiz.effectiveType === "meaning" ? (quiz.readingDone ? "" : "reading")
           : ""
+        // the "<Type> <Meaning|Reading>" bar -- only for the item you're on
+        promptWord: (quiz.restrictInfo && !drilled) ? quiz.promptWord : ""
         focusSection: (quiz.phase === "wrong" && !drilled) ? quiz.effectiveType : ""
         audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
         subject: quiz._infoSubject
@@ -560,9 +563,11 @@ FocusScope {
         radicalColor: quiz.radicalColor
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
+        // the top-level review info stays clean (matches the mockup); a
+        // drilled linked subject shows the hint since it's less obvious there
         navHint: quiz._infoStack.length > 0
           ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
-          : "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  close"
+          : ""
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
         onNavigate: function (id) { quiz._infoDrill(id) }
         onCloseRequested: quiz._infoBack()

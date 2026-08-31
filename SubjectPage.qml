@@ -41,6 +41,11 @@ FocusScope {
   // the level leaks which look-alike you're being asked
   property bool hideLevel: false
 
+  // in a review overlay, the "<Type> <Meaning|Reading>" bar under the header
+  // (mirrors the quiz card's prompt bar). "" = no bar (the standalone page).
+  property string promptWord: ""
+  readonly property bool _readingPrompt: promptWord === "Reading"
+
   // a review's item info collapses the half you're being tested on (like the
   // website) -- present but folded, so f can't hand you the answer at a
   // glance, but you can still open it. "" | "meaning" | "reading".
@@ -488,14 +493,41 @@ FocusScope {
 
           Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            // hide the level in a live review -- it leaks which of two
-            // look-alikes you're being asked (browsing keeps it)
+            // with the prompt bar the type sits there instead; hide the level
+            // in a live review -- it leaks which of two look-alikes you're
+            // being asked (browsing keeps it)
+            visible: page.promptWord === ""
             text: (page.overlayMode && page.hideLevel)
               ? page.typeLabel
               : page.typeLabel + "  ·  Level " + (page.sd.level || "?")
             color: Qt.rgba(1, 1, 1, 0.82)
             font.family: page.fontFamily
             font.pixelSize: Style.font.bodySmall
+          }
+        }
+      }
+
+      // ---- prompt bar (review overlay) -- "<Type> <Meaning|Reading>" ----
+      Rectangle {
+        width: parent.width
+        visible: page.promptWord !== ""
+        implicitHeight: visible ? Style.space(38) : 0
+        color: page._readingPrompt ? Qt.rgba(0, 0, 0, 0.55) : "#ebedef"
+        Row {
+          anchors.centerIn: parent
+          spacing: Style.space(6)
+          Text {
+            text: page.typeLabel
+            color: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.subtitle
+          }
+          Text {
+            text: page.promptWord
+            color: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.subtitle
+            font.bold: true
           }
         }
       }
@@ -910,7 +942,9 @@ FocusScope {
         }
       }
 
-      Item { width: 1; height: Style.space(32) }
+      // extra room in the review overlay so the last card clears the
+      // floating toolbar
+      Item { width: 1; height: Style.space(page.overlayMode ? 76 : 32) }
     }
   }
   }
