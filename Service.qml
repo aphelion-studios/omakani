@@ -225,13 +225,15 @@ Item {
   }
 
   // Play a subject's pronunciation. `voice` is "kyoko" | "kenichi" | "random"
-  // | "" (any). The helper downloads + caches the clip; we play it with mpv.
-  function playAudio(id, voice) {
+  // | "" (any); `reading` (optional kana) pins a multi-reading word to the
+  // reading that was just answered. The helper caches the clip; mpv plays it.
+  function playAudio(id, voice, reading) {
     var n = parseInt(String(id), 10)
     if (!ready || audioProcess.running || !isFinite(n)) return
     audioError = ""
     var cmd = ["python3", helperPath, "audio", String(n)]
     if (voice && voice !== "") cmd.push("--voice", String(voice))
+    if (reading && String(reading) !== "") cmd.push("--reading", String(reading))
     audioProcess.command = cmd
     audioProcess.running = true
   }

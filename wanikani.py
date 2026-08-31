@@ -978,10 +978,22 @@ def fetch_file(url, dest):
     os.replace(temporary, dest)
 
 
-def audio_pool(audios, voice):
+def audio_pool(audios, voice, reading=""):
     """A subject's `pronunciation_audios`, ordered best-first for `voice`
-    ('kyoko' / 'kenichi' / 'random' / '' = any), mp3 ahead of webm."""
+    ('kyoko' / 'kenichi' / 'random' / '' = any), mp3 ahead of webm. When
+    `reading` is given (a kana string), clips for that pronunciation are
+    kept and the rest dropped -- so a multi-reading word (近々 = ちかぢか /
+    きんきん) only ever plays back the reading that was just answered."""
     want = (voice or "").lower()
+    reading = (reading or "").strip()
+
+    if reading:
+        matched = [a for a in audios
+                   if str((a.get("metadata") or {}).get("pronunciation") or "").strip()
+                   == reading]
+        if matched:
+            audios = matched
+
     named = [a for a in audios if (a.get("metadata") or {}).get("voice_actor_name")]
     if want == "random" and named:
         import random
@@ -1034,7 +1046,8 @@ def cmd_audio(args):
         payload["error"] = "no pronunciation audio for that subject"
         return payload
 
-    chosen = audio_pool(audios, getattr(args, "voice", ""))[0]
+    chosen = audio_pool(audios, getattr(args, "voice", ""),
+                        getattr(args, "reading", ""))[0]
     url = chosen["url"]
     extension = ".mp3" if chosen.get("content_type") == "audio/mpeg" else ".webm"
     dest = (cache_dir() / "audio"
@@ -1402,6 +1415,8 @@ def build_parser():
     audio = commands.add_parser("audio", help="cache a subject's pronunciation audio, print its path")
     audio.add_argument("subject", type=int)
     audio.add_argument("--voice", choices=["kyoko", "kenichi", "random"], default="")
+    audio.add_argument("--reading", default="",
+                       help="kana reading to play (multi-reading words); others dropped")
     audio.set_defaults(handler=cmd_audio)
 
     preload_audio = commands.add_parser(

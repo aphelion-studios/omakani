@@ -157,9 +157,22 @@ FocusScope {
     submit()
   }
 
+  // the reading to hear: what was just typed on a reading prompt, else the
+  // primary accepted reading -- so 近々 (ちかぢか / きんきん) never plays back
+  // the reading you weren't asked
+  function playbackReading() {
+    if (readingPrompt && phase !== "input") {
+      var t = field.text.replace(/\s/g, "")
+      if (t !== "") return t
+    }
+    var rs = (d.readings || []).filter(function (r) { return r.accepted_answer !== false })
+    for (var i = 0; i < rs.length; i++) if (rs[i].primary) return rs[i].reading
+    return rs.length ? rs[0].reading : ""
+  }
+
   function playAudio() {
     if (canAudio && subject && subject.id)
-      service.playAudio(subject.id, "random")
+      service.playAudio(subject.id, "random", playbackReading())
   }
 
   function openInfo() {
@@ -257,16 +270,16 @@ FocusScope {
     // SRS-transition chip as a subject finishes (reviews) -- centred in the
     // gap between the character's visual bottom and the prompt bar; floats,
     // so it never nudges the layout
-    FontMetrics { id: charMetrics; font: charText.font }
     Rectangle {
       id: srsChip
       anchors.horizontalCenter: parent.horizontalCenter
       y: {
-        // glyph baseline sits `ascent` below the text top; a CJK glyph fills
-        // the em, so its ink bottom is ~0.12em past the baseline. Centre the
-        // chip in the gap between that and the prompt bar's top edge.
-        var glyphBottom = header.y + charText.y + charMetrics.ascent
-                          + charText.font.pixelSize * 0.12
+        // a CJK glyph fills ~the em and sits roughly centred on the text
+        // item's centre line; its ink bottom is ~0.46em below that centre
+        // (empirically tuned -- ascent-based estimates ran low here). Centre
+        // the chip between that and the prompt bar's top edge.
+        var glyphBottom = header.y + charText.y + charText.height / 2
+                          + charText.font.pixelSize * 0.46
         var barTop = header.y + header.height
         return (glyphBottom + barTop) / 2 - height / 2
       }
@@ -535,7 +548,7 @@ FocusScope {
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
         navHint: quiz._infoStack.length > 0
-          ? "h / j / k / l  navigate   ·   Enter  open   ·   Esc  back"
+          ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
           : "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  close"
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
         onNavigate: function (id) { quiz._infoDrill(id) }
