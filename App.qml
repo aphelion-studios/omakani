@@ -578,14 +578,6 @@ Item {
             }
           }
 
-          Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: !!root.service && root.service.configured
-            text: "Lessons and reviews land here next."
-            color: Qt.darker(root.fg, 1.9)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
         }
 
         // -------------------------------------------------- BROWSE
@@ -639,7 +631,7 @@ Item {
           visible: root.view === "subject" && !subjectPage.subject
           text: (root.service && root.service.detailError)
             ? root.service.detailError : "Loading subject…"
-          color: Qt.darker(root.fg, 1.5)
+          color: Qt.rgba(1, 1, 1, 0.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
         }

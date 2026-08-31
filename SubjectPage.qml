@@ -52,7 +52,7 @@ Item {
 
   // key-hint line shown in the (scrolling) header when keyNav is on
   property string navHint: keyNav
-    ? "j / k  section   ·   h / l  chip   ·   Enter  open · fold   ·   Esc  back"
+    ? "h / j / k / l  navigate   ·   Enter  fold / unfold   ·   Esc  back"
     : ""
 
   signal navigate(int subjectId)
@@ -174,6 +174,10 @@ Item {
     resetToken += 1     // cards drop manual folds, back to their defaults
     Qt.callLater(hydrateLinks)
     Qt.callLater(syncFocusToSection)
+    // the browser page's first subject arrives after focusPage() already
+    // ran on an empty scope -- re-grab so the keyboard works right away
+    if (subject && keyNav && !overlayMode && visible)
+      Qt.callLater(function () { if (page.visible && !!page.subject) keys.forceActiveFocus() })
   }
 
   property bool _hydrating: false
@@ -301,9 +305,12 @@ Item {
       else if (e.text === "p" && !page.overlayMode) { page.playAudio("random"); e.accepted = true }
     }
 
+  // while the subject is loading, show nothing here -- the host draws a
+  // plain "Loading subject…" so it doesn't flash an empty coloured header
   Flickable {
     id: flick
     anchors.fill: parent
+    visible: !!page.subject
     contentWidth: width
     contentHeight: body.implicitHeight
     boundsBehavior: Flickable.StopAtBounds
