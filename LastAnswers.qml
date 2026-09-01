@@ -2,16 +2,17 @@ import QtQuick
 import qs.Commons
 
 // The review session's completed items, opened with the ✓ toolbar button --
-// one card per finished subject, newest first, with a ✓ / ✗ per tested half
-// and the SRS transition it earned. Approximate by design: the engine tracks
-// per-half miss counts and the resulting stage, not every typed attempt, so a
-// half is simply right (never missed) or wrong (missed at least once).
+// one card per finished subject, newest first: every meaning guess you typed
+// (✓ / ✗), a divider, every reading guess, then the SRS transition the item
+// earned (green ↑ if you never missed, red ↓ if you did). Local only -- the
+// engine logs each typed answer as it comes in; cleared when the session ends.
 //
 // j / k (or the arrows) scroll; Esc / ✓ / f close.
 FocusScope {
   id: panel
 
-  // [{ id, mWrong, rWrong, needsR, stageName, up, pass }], oldest first
+  // [{ id, needsR, mGuesses:[{text,ok}], rGuesses:[{text,ok}],
+  //    stageName, up, pass }], oldest first
   property var log: []
   property var service: null
 
@@ -73,13 +74,6 @@ FocusScope {
     var ms = (s && s.data && s.data.meanings) || []
     for (var i = 0; i < ms.length; i++) if (ms[i].primary) return ms[i].meaning
     return ms.length ? ms[0].meaning : ""
-  }
-  function readingOf(id) {
-    var s = panel.service && panel.service.subjectDetail(id)
-    var rs = ((s && s.data && s.data.readings) || [])
-      .filter(function (r) { return r.accepted_answer !== false })
-    for (var i = 0; i < rs.length; i++) if (rs[i].primary) return rs[i].reading
-    return rs.length ? rs[0].reading : ""
   }
 
   Keys.enabled: panel.visible
@@ -153,10 +147,10 @@ FocusScope {
         delegate: Rectangle {
           id: card
           readonly property var row: modelData
-          readonly property bool mRight: !(row.mWrong > 0)
-          readonly property bool rRight: !(row.rWrong > 0)
+          readonly property var mGuesses: row.mGuesses || []
+          readonly property var rGuesses: row.rGuesses || []
           readonly property string chars: panel.charsOf(row.id)
-          width: Style.space(150)
+          width: Style.space(178)
           height: bodyCol.y + bodyCol.implicitHeight + Style.space(12)
           radius: Style.space(6)
           color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.05)
@@ -193,20 +187,40 @@ FocusScope {
             anchors.rightMargin: Style.space(10)
             spacing: Style.space(4)
 
-            PanelAnswerRow {
-              width: bodyCol.width
-              ok: card.mRight
-              label: panel.meaningOf(card.row.id)
-            }
-            PanelAnswerRow {
-              width: bodyCol.width
-              visible: card.row.needsR
-              ok: card.rRight
-              jp: true
-              label: panel.readingOf(card.row.id)
+            // every meaning guess, in the order they were typed
+            Repeater {
+              model: card.mGuesses
+              delegate: PanelAnswerRow {
+                width: bodyCol.width
+                ok: modelData.ok
+                label: modelData.text
+              }
             }
 
-            // SRS transition
+            // divider between the cumulative meaning and reading guesses
+            Item {
+              width: bodyCol.width
+              height: Style.space(9)
+              visible: card.row.needsR
+              Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: 1
+                color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.16)
+              }
+            }
+
+            Repeater {
+              model: card.rGuesses
+              delegate: PanelAnswerRow {
+                width: bodyCol.width
+                ok: modelData.ok
+                jp: true
+                label: modelData.text
+              }
+            }
+
+            // SRS transition -- green ↑ if never missed, red ↓ if it was
             Rectangle {
               width: srsRow.implicitWidth + Style.space(14)
               height: Style.space(22)

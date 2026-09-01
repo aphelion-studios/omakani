@@ -111,7 +111,8 @@ FocusScope {
       var s = service.subjectDetail(id)
       var kind = s ? String(s.object || "") : ""
       var needsR = (kind === "kanji" || kind === "vocabulary")
-      it[id] = { mOK: false, rOK: false, mWrong: 0, rWrong: 0, needsR: needsR, sent: false }
+      it[id] = { mOK: false, rOK: false, mWrong: 0, rWrong: 0, needsR: needsR,
+                 sent: false, mGuesses: [], rGuesses: [] }
       q.push({ id: id, type: "meaning" })
       if (needsR) q.push({ id: id, type: "reading" })
     })
@@ -165,21 +166,25 @@ FocusScope {
     var ns = engine.nextStage(cur, misses)
     engine.pill = { text: engine.srsName(ns), pass: misses === 0, up: ns > cur }
     engine.answerLog = engine.answerLog.concat([{
-      id: id, mWrong: rec.mWrong || 0, rWrong: rec.rWrong || 0,
-      needsR: rec.needsR === true, stageName: engine.srsName(ns),
-      up: ns > cur, pass: misses === 0
+      id: id, needsR: rec.needsR === true,
+      mGuesses: (rec.mGuesses || []).slice(),
+      rGuesses: (rec.rGuesses || []).slice(),
+      stageName: engine.srsName(ns), up: ns > cur, pass: misses === 0
     }])
     if (service)
       service.submitReview(id, rec.mWrong, rec.rWrong, engine.dryRun)
   }
 
-  function onAnswered(correct) {
+  function onAnswered(correct, text) {
     if (!current) return
     var id = current.id
     var type = current.type
     var it = items
     var rec = it[id]
     answerCount += 1
+    var guess = { text: String(text || ""), ok: correct === true }
+    if (type === "meaning") rec.mGuesses = (rec.mGuesses || []).concat([guess])
+    else rec.rGuesses = (rec.rGuesses || []).concat([guess])
     if (correct) {
       correctCount += 1
       if (type === "meaning") rec.mOK = true
@@ -429,7 +434,7 @@ FocusScope {
     radicalColor: engine.radicalColor
     kanjiColor: engine.kanjiColor
     vocabColor: engine.vocabColor
-    onAnswered: function (correct) { engine.onAnswered(correct) }
+    onAnswered: function (correct, text) { engine.onAnswered(correct, text) }
     onAdvance: engine.onAdvance()
     onWrapUp: { engine.phase = "summary"; Qt.callLater(engine._grabFocus) }
     onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
