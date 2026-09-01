@@ -120,9 +120,6 @@ Item {
     Keys.enabled: browser.visible
 
     Keys.onPressed: function (e) {
-      if (e.text === "[") { browser.stepLevel(-1); e.accepted = true; return }
-      if (e.text === "]") { browser.stepLevel(1); e.accepted = true; return }
-
       if (browser.onLevelBar) {
         if (e.text === "h" || e.key === Qt.Key_Left) { browser.stepLevel(-1); e.accepted = true }
         else if (e.text === "l" || e.key === Qt.Key_Right) { browser.stepLevel(1); e.accepted = true }
@@ -197,17 +194,6 @@ Item {
         }
       }
 
-      Text {
-        anchors.right: parent.right
-        anchors.rightMargin: Style.space(4)
-        anchors.verticalCenter: parent.verticalCenter
-        text: browser.onLevelBar
-          ? "h / l  level   ·   j  grid"
-          : "h / j / k / l  navigate   ·   [  ]  change level   ·   Enter  open"
-        color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.55)
-        font.family: browser.fontFamily
-        font.pixelSize: Style.font.caption
-      }
     }
 
     // ---- scrolling section list ----
