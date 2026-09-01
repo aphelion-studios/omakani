@@ -57,7 +57,7 @@ FocusScope {
   // keypress; this collapses them.
   property double _lastSubmit: 0
 
-  signal answered(bool correct)
+  signal answered(bool correct, string text)
   signal advance()
   signal wrapUp()
   signal infoRequested()
@@ -66,6 +66,7 @@ FocusScope {
   property bool reviewMode: false
 
   property alias infoPageItem: infoPage
+  readonly property alias fieldText: field.text
 
   // drilling into a linked subject (a kanji chip in Composition, etc.) from
   // the item-info overlay -- a small back stack; Esc pops one, then closes
@@ -130,6 +131,8 @@ FocusScope {
     phase = "input"
     nudge = ""
     infoOpen = false
+    lastOpen = false
+    kanaOpen = false
     _infoStack = []
     field.text = ""
     Qt.callLater(field.forceActiveFocus)
@@ -149,13 +152,16 @@ FocusScope {
       _converting = false
     }
     var res = Answer.check(subject, studyMaterial, effectiveType, field.text)
+    var typed = field.text.trim()
     if (res.status === "correct") {
       phase = "correct"
-      quiz.answered(true)
+      kanaOpen = false
+      quiz.answered(true, typed)
       Qt.callLater(quiz.forceActiveFocus)
     } else if (res.status === "incorrect") {
       phase = "wrong"
-      quiz.answered(false)
+      kanaOpen = false
+      quiz.answered(false, typed)
       shake.restart()
       Qt.callLater(quiz.forceActiveFocus)
     } else {
@@ -188,6 +194,29 @@ FocusScope {
   function playAudio() {
     if (canAudio && subject && subject.id)
       service.playAudio(subject.id, "random", playbackReading())
+  }
+
+  // the Kana Chart buttons -- drop a kana in at the caret, or rub one out.
+  // bypasses the romaji->kana onTextChanged pass (the char is already kana).
+  function insertKana(s) {
+    if (phase !== "input") return
+    var p = field.cursorPosition
+    var t = field.text
+    _converting = true
+    field.text = t.slice(0, p) + s + t.slice(p)
+    field.cursorPosition = p + s.length
+    _converting = false
+    Qt.callLater(field.forceActiveFocus)
+  }
+  function kanaBackspace() {
+    if (phase !== "input" || field.cursorPosition <= 0) return
+    var p = field.cursorPosition
+    var t = field.text
+    _converting = true
+    field.text = t.slice(0, p - 1) + t.slice(p)
+    field.cursorPosition = p - 1
+    _converting = false
+    Qt.callLater(field.forceActiveFocus)
   }
 
   function openInfo() {
@@ -238,12 +267,8 @@ FocusScope {
     enabled: quiz.visible && quiz.reviewMode && quiz.phase !== "input" && !quiz.anyOverlay
     onActivated: quiz.openLast()
   }
-  // k = the ひ Kana Chart reference
-  Shortcut {
-    sequences: ["k"]
-    enabled: quiz.visible && quiz.phase !== "input" && !quiz.anyOverlay
-    onActivated: quiz.openKana()
-  }
+  // no key for the Kana Chart -- it's a can't-type aid, opened with the ひ
+  // button; a shortcut for it would just be a literal keystroke in the field
   // w = wrap up the session (the hourglass), between questions only
   Shortcut {
     sequences: ["w"]
@@ -422,9 +447,6 @@ FocusScope {
           horizontalAlignment: TextInput.AlignHCenter
           verticalAlignment: TextInput.AlignVCenter
           readOnly: quiz.phase !== "input"
-          placeholderText: quiz.phase !== "input" ? ""
-            : quiz.readingPrompt ? "答え" : "Your Response"
-          placeholderTextColor: "#9a9a9a"
           onAccepted: quiz.submit()
           onTextChanged: {
             if (quiz._converting || !quiz.readingPrompt || quiz.phase !== "input") return
@@ -440,6 +462,18 @@ FocusScope {
               quiz._converting = false
             }
           }
+        }
+
+        // placeholder behind the cursor -- "答え" on a reading prompt, else
+        // "Your Response"; clears the instant you type. (An explicit Text: the
+        // TextField's own placeholderText doesn't render under this style.)
+        Text {
+          anchors.centerIn: parent
+          visible: quiz.phase === "input" && field.text === ""
+          text: quiz.readingPrompt ? "答え" : "Your Response"
+          color: "#9a9a9a"
+          font.family: quiz.readingPrompt ? quiz.jpFamily : quiz.fontFamily
+          font.pixelSize: Style.font.title
         }
 
         // submit chevron
@@ -496,12 +530,11 @@ FocusScope {
       anchors.topMargin: Style.space(10)
       anchors.horizontalCenter: parent.horizontalCenter
       visible: quiz.phase !== "input" && quiz.nudge === ""
-      // same order as the toolbar buttons below: wrap, last, info, kana, audio
+      // same order as the toolbar buttons: wrap, last, info, audio
       text: {
         var parts = ["Enter to continue", "w  wrap up"]
         if (quiz.reviewMode) parts.push("a  answers")
         parts.push(quiz.phase === "correct" ? "f  item info" : "f  see why")
-        parts.push("k  kana")
         if (quiz.phase === "correct" && quiz.canAudio) parts.push("p  audio")
         return parts.join("   ·   ")
       }
@@ -510,63 +543,83 @@ FocusScope {
       font.pixelSize: Style.font.caption
     }
 
-    // ---- toolbar: grey button row, like the website's ----
-    Row {
+    // ---- toolbar + the docked kana keyboard, pinned to the bottom ----
+    // stacked so the keyboard rides directly under the buttons (like the
+    // website) and the toolbar lifts to make room when it opens
+    Column {
+      id: bottomStack
       anchors.bottom: parent.bottom
       anchors.bottomMargin: Style.space(18)
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(2)
+      spacing: Style.space(10)
       z: 25   // stays above the item-info overlay so f / eye can close it
 
-      Repeater {
-        // website order: wrap · last answers · info · kana · audio
-        model: [
-          { g: "󰅐", act: "wrap",  show: true,             on: true },
-          { g: "󰄬", act: "last",  show: quiz.reviewMode,   on: quiz.answerLog.length > 0 },
-          { g: "󰈈", act: "info",  show: true,             on: quiz.phase !== "input" },
-          { g: "ひ", act: "kana",  show: true,             on: true },
-          // the glyph alone (quiet vs loud speaker) signals playback
-          { g: (quiz.service && quiz.service.audioPlaying) ? "󰕾" : "󰕿",
-            act: "audio", show: quiz.isVocab, on: quiz.canAudio }
-        ]
-        delegate: Rectangle {
-          visible: modelData.show
-          width: Style.space(58)
-          height: Style.space(34)
-          radius: Style.space(4)
-          readonly property bool on: modelData.on
-          readonly property bool active: (modelData.act === "info" && quiz.infoOpen)
-            || (modelData.act === "last" && quiz.lastOpen)
-            || (modelData.act === "kana" && quiz.kanaOpen)
-          color: active ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.2)
-            : !on ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.05)
-            : tbHover.containsMouse ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
-            : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.09)
-          border.width: 1
-          border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, (on || active) ? 0.22 : 0.1)
-          Text {
-            anchors.centerIn: parent
-            text: modelData.g
-            color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, (on || active) ? 0.9 : 0.3)
-            // ひ is a CJK glyph -- the UI font can't draw it
-            font.family: modelData.act === "kana" ? quiz.jpFamily : quiz.fontFamily
-            font.pixelSize: Style.font.body
-          }
-          MouseArea {
-            id: tbHover
-            anchors.fill: parent
-            hoverEnabled: true
-            enabled: parent.on
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-              if (modelData.act === "wrap") quiz.wrapUp()
-              else if (modelData.act === "info") quiz.infoOpen ? quiz.closeOverlays() : quiz.openInfo()
-              else if (modelData.act === "last") quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast()
-              else if (modelData.act === "kana") quiz.kanaOpen ? quiz.closeOverlays() : quiz.openKana()
-              else if (modelData.act === "audio") quiz.playAudio()
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(2)
+
+        Repeater {
+          // website order: wrap · last answers · info · kana · audio
+          model: [
+            { g: "󰅐", act: "wrap",  show: true,             on: true },
+            { g: "󰄬", act: "last",  show: quiz.reviewMode,   on: quiz.answerLog.length > 0 },
+            { g: "󰈈", act: "info",  show: true,             on: quiz.phase !== "input" },
+            { g: "ひ", act: "kana",  show: true,             on: quiz.phase === "input" },
+            // the glyph alone (quiet vs loud speaker) signals playback
+            { g: (quiz.service && quiz.service.audioPlaying) ? "󰕾" : "󰕿",
+              act: "audio", show: quiz.isVocab, on: quiz.canAudio }
+          ]
+          delegate: Rectangle {
+            visible: modelData.show
+            width: Style.space(58)
+            height: Style.space(34)
+            radius: Style.space(4)
+            readonly property bool on: modelData.on
+            readonly property bool active: (modelData.act === "info" && quiz.infoOpen)
+              || (modelData.act === "last" && quiz.lastOpen)
+              || (modelData.act === "kana" && quiz.kanaOpen)
+            color: active ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.2)
+              : !on ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.05)
+              : tbHover.containsMouse ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
+              : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.09)
+            border.width: 1
+            border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, (on || active) ? 0.22 : 0.1)
+            Text {
+              anchors.centerIn: parent
+              text: modelData.g
+              color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, (on || active) ? 0.9 : 0.3)
+              // ひ is a CJK glyph -- the UI font can't draw it
+              font.family: modelData.act === "kana" ? quiz.jpFamily : quiz.fontFamily
+              font.pixelSize: Style.font.body
+            }
+            MouseArea {
+              id: tbHover
+              anchors.fill: parent
+              hoverEnabled: true
+              enabled: parent.on
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                if (modelData.act === "wrap") quiz.wrapUp()
+                else if (modelData.act === "info") quiz.infoOpen ? quiz.closeOverlays() : quiz.openInfo()
+                else if (modelData.act === "last") quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast()
+                else if (modelData.act === "kana") quiz.kanaOpen ? quiz.closeOverlays() : quiz.openKana()
+                else if (modelData.act === "audio") quiz.playAudio()
+              }
             }
           }
         }
+      }
+
+      KanaChart {
+        id: kanaPanel
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: quiz.kanaOpen && quiz.phase === "input"
+        width: Math.min(quiz.width - Style.space(48), Style.space(780))
+        fg: quiz.fg
+        fontFamily: quiz.fontFamily
+        jpFamily: quiz.jpFamily
+        onKanaPicked: function (k) { quiz.insertKana(k) }
+        onBackspacePressed: quiz.kanaBackspace()
       }
     }
 
@@ -640,22 +693,6 @@ FocusScope {
       }
     }
 
-    // ---- ひ Kana Chart (k) ----
-    Rectangle {
-      anchors.fill: parent
-      visible: quiz.kanaOpen
-      color: quiz.pageBg
-      z: 22
-      KanaChart {
-        anchors.fill: parent
-        visible: parent.visible
-        pageBg: quiz.pageBg
-        fg: quiz.fg
-        fontFamily: quiz.fontFamily
-        jpFamily: quiz.jpFamily
-        onCloseRequested: quiz.closeOverlays()
-      }
-    }
   }
 
   onInfoOpenChanged: {
