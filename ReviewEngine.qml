@@ -35,6 +35,9 @@ FocusScope {
 
   // per-subject: { mOK, rOK, mWrong, rWrong, needsR, sent }
   property var items: ({})
+  // completed items in finish order, for the ✓ "Last Answers" panel:
+  // [{ id, mWrong, rWrong, needsR, stageName, up, pass }]
+  property var answerLog: []
   property var queue: []                // [{ id, type }]
   property int pos: 0
   property int totalSubjects: 0
@@ -70,6 +73,7 @@ FocusScope {
     // don't tear down a run that's already going / finished
     if (phase === "review" || phase === "summary") return
     items = ({})
+    answerLog = []
     queue = []
     pos = 0
     totalSubjects = 0
@@ -160,6 +164,11 @@ FocusScope {
     var misses = (rec.mWrong || 0) + (rec.rWrong || 0)
     var ns = engine.nextStage(cur, misses)
     engine.pill = { text: engine.srsName(ns), pass: misses === 0, up: ns > cur }
+    engine.answerLog = engine.answerLog.concat([{
+      id: id, mWrong: rec.mWrong || 0, rWrong: rec.rWrong || 0,
+      needsR: rec.needsR === true, stageName: engine.srsName(ns),
+      up: ns > cur, pass: misses === 0
+    }])
     if (service)
       service.submitReview(id, rec.mWrong, rec.rWrong, engine.dryRun)
   }
@@ -412,6 +421,7 @@ FocusScope {
       ? engine.items[engine.current.id].rOK === true : false
     srsPill: engine.pill
     reviewMode: true
+    answerLog: engine.answerLog
     pageBg: engine.pageBg
     fg: engine.fg
     fontFamily: engine.fontFamily
@@ -431,7 +441,7 @@ FocusScope {
     anchors.left: parent.left
     anchors.topMargin: Style.space(10)
     anchors.leftMargin: Style.space(12)
-    visible: engine.phase === "review" && engine.dryRun && !card.infoOpen
+    visible: engine.phase === "review" && engine.dryRun && !card.anyOverlay
     width: dryBadge.implicitWidth + Style.space(16)
     height: Style.space(22)
     radius: Style.space(4)
