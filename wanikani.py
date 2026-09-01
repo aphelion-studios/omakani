@@ -36,6 +36,7 @@ import os
 import re
 import socket
 import ssl
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -1141,6 +1142,81 @@ def radical_mnemonic(subject_id):
     return str(svg_path), alt
 
 
+# -------------------------------------------------------------- audio playback
+
+# A fresh `mpv` per clip has to open the PipeWire/ALSA device cold, and the
+# first ~100 ms of the clip is gone before the sink is running. Keep one idle
+# mpv alive with its device warm and feed it clips over its JSON IPC socket.
+#
+# "Warm" needs two things: --audio-stream-silence keeps the sink running (it
+# writes silence) instead of tearing the device down at EOF / while idle, and
+# a looping silent lavfi source loaded at spawn opens the sink straight away
+# so even the very first real clip of a session starts clean.
+
+_MPV_SILENCE = "av://lavfi:anullsrc=r=48000:cl=stereo"
+
+def _mpv_socket_path():
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    return os.path.join(base, "omakani-mpv.sock")
+
+
+def _mpv_send(obj):
+    """Send one IPC command; True on success."""
+    sock_path = _mpv_socket_path()
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(1.0)
+            s.connect(sock_path)
+            s.sendall((json.dumps(obj) + "\n").encode("utf-8"))
+        return True
+    except OSError:
+        return False
+
+
+def _mpv_spawn():
+    sock_path = _mpv_socket_path()
+    try:
+        os.unlink(sock_path)
+    except OSError:
+        pass
+    try:
+        subprocess.Popen(
+            ["mpv", "--idle=yes", "--no-config", "--no-terminal", "--no-video",
+             "--vo=null", "--no-ytdl", "--ao=pipewire,pulse,alsa",
+             "--really-quiet", "--force-window=no",
+             "--keep-open=yes", "--keep-open-pause=no",
+             "--audio-stream-silence=yes",
+             "--audio-buffer=0.15", "--input-ipc-server=" + sock_path,
+             _MPV_SILENCE],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, start_new_session=True)
+    except FileNotFoundError:
+        return False
+    for _ in range(60):
+        if _mpv_send({"command": ["get_version"]}):
+            return True
+        time.sleep(0.03)
+    return False
+
+
+def mpv_ensure():
+    """Bring the idle mpv up if it isn't already; keep the device warm so the
+    next clip starts clean."""
+    if _mpv_send({"command": ["get_version"]}):
+        return True
+    return _mpv_spawn()
+
+
+def mpv_play(path):
+    if not _mpv_send({"command": ["loadfile", str(path), "replace"]}):
+        if not _mpv_spawn():
+            return False
+        _mpv_send({"command": ["loadfile", str(path), "replace"]})
+    # unpause in case a previous clip left it paused at EOF
+    _mpv_send({"command": ["set_property", "pause", False]})
+    return True
+
+
 def audio_pool(audios, voice, reading=""):
     """A subject's `pronunciation_audios`, ordered best-first for `voice`
     ('kyoko' / 'kenichi' / 'random' / '' = any), mp3 ahead of webm. When
@@ -1218,9 +1294,11 @@ def cmd_audio(args):
     if not dest.exists() or dest.stat().st_size == 0:
         fetch_file(url, dest)
 
+    played = mpv_play(dest)
     meta = chosen.get("metadata") or {}
-    return {"ok": True, "configured": True, "error": "",
-            "path": str(dest), "url": url,
+    return {"ok": True, "configured": True, "error": "" if played
+            else "couldn't reach mpv",
+            "path": str(dest), "url": url, "played": played,
             "voiceActor": meta.get("voice_actor_name") or "",
             "gender": meta.get("gender") or "",
             "contentType": chosen.get("content_type") or "",
@@ -1242,6 +1320,7 @@ def cmd_preload_audio(args):
         return {"ok": True, "configured": True, "error": "",
                 "fetched": 0, "cached": 0, "skipped": 0}
 
+    mpv_ensure()   # warm the audio device before the first p of the session
     api = Api(token)
     cache = load_cache("detail")
     items = dict(cache.get("items") or {}) if cache.get("v") == CACHE_VERSION else {}

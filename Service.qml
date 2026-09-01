@@ -79,10 +79,12 @@ Item {
   property string detailError: ""
 
   // Pronunciation audio: the helper caches the clip and hands back a path,
-  // then we hand that to mpv. `audioError` surfaces "no audio for this one".
-  // `audioPlaying` follows the mpv process so the UI can show a live icon.
+  // the helper feeds it to a persistent idle mpv (device stays warm, so the
+  // clip start isn't clipped). `audioError` surfaces "no audio for this one".
+  // `audioPlaying` is a short pulse for the speaker icon -- the daemon plays
+  // out of process so we can't watch it directly.
   readonly property bool audioBusy: audioProcess.running
-  readonly property bool audioPlaying: mpvProcess.running
+  property bool audioPlaying: false
   property string audioError: ""
   property string lastVoiceActor: ""
 
@@ -281,17 +283,17 @@ Item {
       return
     }
     lastVoiceActor = String(payload.voiceActor || "")
-    // run mpv as a tracked process (not execDetached) so `audioPlaying`
-    // knows when the clip is done. --no-config / --no-ytdl / explicit ao:
-    // a user mpv.conf or the ytdl hook can stall a bare mpv on a short clip.
-    if (mpvProcess.running) mpvProcess.running = false
-    mpvProcess.command = ["mpv", "--no-config", "--no-terminal",
-                          "--no-video", "--vo=null", "--no-ytdl",
-                          "--ao=pipewire,pulse,alsa",
-                          "--really-quiet", "--idle=no",
-                          String(payload.path)]
-    mpvProcess.running = true
+    // the helper already handed the clip to the persistent mpv; just pulse
+    // the icon for roughly a clip's length
+    audioPlaying = true
+    audioPulse.restart()
     audioPlayed(lastVoiceActor)
+  }
+
+  Timer {
+    id: audioPulse
+    interval: 1500
+    onTriggered: root.audioPlaying = false
   }
 
   function applyBrowse(raw) {
@@ -596,13 +598,6 @@ Item {
       }
       root.applyAudio(audioOut.text)
     }
-  }
-
-  // the actual clip playback -- `running` drives `audioPlaying`
-  Process {
-    id: mpvProcess
-    running: false
-    command: []
   }
 
   Process {
