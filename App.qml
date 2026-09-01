@@ -238,6 +238,23 @@ Item {
     return "subject"
   }
 
+  // primary meaning for the breadcrumb ("OmaKani | Stamp"). Detail record
+  // first, then the last-loaded level's slim rows, then a plain fallback.
+  function subjectName(id) {
+    var n = Number(id)
+    if (service) {
+      var d = service.subjectDetail(n)
+      var ms = d && d.data ? (d.data.meanings || []) : []
+      for (var i = 0; i < ms.length; i++)
+        if (ms[i].primary) return ms[i].meaning
+      if (ms.length) return ms[0].meaning
+      var rows = (service.browseData && service.browseData.subjects) || []
+      for (var j = 0; j < rows.length; j++)
+        if (Number(rows[j].id) === n && rows[j].meaning) return String(rows[j].meaning)
+    }
+    return "Subject"
+  }
+
   // [ / ] on a subject page: walk the level's items in order. Replaces the
   // current nav entry (rather than pushing) so Back still lands on the level,
   // not on every item you stepped through. No-op if this subject isn't in the
@@ -612,7 +629,10 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           text: {
             if (root.view === "browse") return "OmaKani  |  Level " + root.currentPage.level
-            if (root.view === "subject") return "OmaKani  |  Subject"
+            if (root.view === "subject") return "OmaKani  |  " + root.subjectName(root.currentPage.id)
+            if (root.view === "review") return "OmaKani  |  Reviews"
+            if (root.view === "lesson") return "OmaKani  |  Lessons"
+            if (root.view === "session") return "OmaKani  |  " + root.sessionTitle
             return "OmaKani"
           }
           color: Qt.darker(root.fg, 1.6)
