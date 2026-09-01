@@ -485,7 +485,9 @@ FocusScope {
         readonly property color ink: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
         Row {
           anchors.centerIn: parent
-          spacing: Style.space(6)
+          // roomy, even gaps around the "·" in level mode; tight next to a
+          // prompt word ("Vocabulary Meaning")
+          spacing: page.promptWord === "" ? Style.space(10) : Style.space(6)
           Text {
             text: page.typeLabel
             color: typeBar.ink
@@ -503,7 +505,14 @@ FocusScope {
           }
           Text {
             visible: page.promptWord === "" && !page.hideLevel && !!page.sd.level
-            text: "·  Level " + (page.sd.level || "?")
+            text: "·"
+            color: Qt.rgba(0, 0, 0, 0.5)
+            font.family: page.fontFamily
+            font.pixelSize: Style.font.subtitle
+          }
+          Text {
+            visible: page.promptWord === "" && !page.hideLevel && !!page.sd.level
+            text: "Level " + (page.sd.level || "?")
             color: Qt.rgba(0, 0, 0, 0.5)
             font.family: page.fontFamily
             font.pixelSize: Style.font.subtitle
