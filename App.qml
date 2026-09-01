@@ -336,21 +336,15 @@ Item {
     if (service) service.refreshAll()
 
     // a summon payload routes straight to a view (the dashboard's Start
-    // Reviews / Start Lessons / Extra Study). It clears the stack first so
-    // Esc / Back from that view closes the app rather than landing on a
-    // home screen the user never opened.
+    // Reviews / Lessons / Extra Study / a chip). A home page stays under it
+    // so Esc from that flow backs out to the menu; a second Esc closes.
     var payload = null
     try { payload = payloadJson ? JSON.parse(payloadJson) : null } catch (e) { payload = null }
     if (payload && (payload.session || payload.review || payload.lesson || payload.subject)) {
       Qt.callLater(function () {
-        if (payload.subject) {
-          // a dashboard chip -- keep a home under it so Esc lands somewhere useful
-          root.navStack = [{ view: "home" }]
-          root.goSubject(Number(payload.subject))
-          return
-        }
-        root.navStack = []
-        if (payload.session) root.openSessionMode(String(payload.session))
+        root.navStack = [{ view: "home" }]
+        if (payload.subject) root.goSubject(Number(payload.subject))
+        else if (payload.session) root.openSessionMode(String(payload.session))
         else if (payload.review) root.goReview()
         else root.goLesson()
       })
