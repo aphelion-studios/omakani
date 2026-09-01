@@ -589,36 +589,35 @@ Item {
         height: Style.space(44)
         z: 2
 
-        Row {
+        Text {
           anchors.left: parent.left
           anchors.leftMargin: Style.space(18)
           anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(12)
-
-          Text {
-            visible: root.navStack.length > 1
-            text: "‹ Back"
-            color: root.fg
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            MouseArea {
-              anchors.fill: parent
-              anchors.margins: -Style.space(6)
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.popPage()
-            }
+          visible: root.navStack.length > 1
+          text: "‹ Back"
+          color: root.fg
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.body
+          MouseArea {
+            anchors.fill: parent
+            anchors.margins: -Style.space(6)
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.popPage()
           }
+        }
 
-          Text {
-            text: {
-              if (root.view === "browse") return "OmaKani  /  Level " + root.currentPage.level
-              if (root.view === "subject") return "OmaKani  /  Subject"
-              return "OmaKani"
-            }
-            color: Qt.darker(root.fg, 1.6)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
+        // breadcrumb -- centred in the strip in every view
+        Text {
+          anchors.horizontalCenter: parent.horizontalCenter
+          anchors.verticalCenter: parent.verticalCenter
+          text: {
+            if (root.view === "browse") return "OmaKani  |  Level " + root.currentPage.level
+            if (root.view === "subject") return "OmaKani  |  Subject"
+            return "OmaKani"
           }
+          color: Qt.darker(root.fg, 1.6)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
         }
 
         Text {
