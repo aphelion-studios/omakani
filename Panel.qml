@@ -540,6 +540,8 @@ Panel {
     function debug(): string {
       return JSON.stringify({
         configured: wk.configured,
+        username: wk.username,
+        level: wk.level,
         dashboardLoaded: wk.dashboardLoaded,
         dashboardBusy: wk.dashboardBusy,
         lastError: wk.lastError,
@@ -683,6 +685,24 @@ Panel {
               h: Style.space(60)
               // never let a large-font theme push it past the card
               width: Math.min(implicitWidth, parent.width - Style.space(8))
+            }
+
+            // greeting -- same as the main window, for cohesion
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              visible: wk.configured && wk.username !== ""
+              text: "ようこそ、" + wk.username + "！"
+              color: root.dim
+              font.family: root.jpFamily
+              font.pixelSize: Style.font.bodySmall
+            }
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              visible: wk.configured && wk.level > 0
+              text: "Level " + wk.level
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
 
             Text {
