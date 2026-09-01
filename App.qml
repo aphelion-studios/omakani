@@ -484,6 +484,18 @@ Item {
             + " nav=" + ip.visibleNav().map(function (x) { return x.navKey }).join(",")
           : "")
     }
+    // testing: toggle the ✓ Last Answers / ひ Kana Chart overlays
+    function rover(what: string): string {
+      var c = root.view === "review" ? reviewEngine.cardItem
+        : root.view === "session" ? quizSession.cardItem
+        : root.view === "lesson" ? lessonFlow.cardItem : null
+      if (!c) return "no card"
+      if (what === "last") c.lastOpen ? c.closeOverlays() : c.openLast()
+      else if (what === "kana") c.kanaOpen ? c.closeOverlays() : c.openKana()
+      else c.closeOverlays()
+      return "lastOpen=" + c.lastOpen + " kanaOpen=" + c.kanaOpen
+        + " log=" + (c.answerLog ? c.answerLog.length : 0)
+    }
     function lstep(what: string): string {
       if (root.view !== "lesson") return "not in lesson"
       if (what === "begin") lessonFlow.startInfo()
