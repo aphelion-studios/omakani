@@ -111,7 +111,11 @@ function toKana(input) {
     var one = s.substr(i, 1);
     if (TABLE[three]) { out += TABLE[three]; i += 3; continue; }
     if (TABLE[two]) { out += TABLE[two]; i += 2; continue; }
-    if (TABLE[one]) { out += TABLE[one]; i += 1; continue; }
+    // a bare "n" only reaches here when it's followed by "y" but no full
+    // nya/nyu/nyo has been typed yet (a standalone ん before any other
+    // consonant was already handled above) -- leave it as a literal "n" so
+    // "ny" -> "nya" can still become にゃ, not んや
+    if (TABLE[one] && one !== "n") { out += TABLE[one]; i += 1; continue; }
 
     // nothing matched -- pass the character through
     out += c;
