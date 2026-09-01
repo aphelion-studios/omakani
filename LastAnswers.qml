@@ -111,14 +111,15 @@ FocusScope {
     font.bold: true
   }
 
-  // empty state -- nothing submitted yet this session
+  // empty state -- nothing completed yet this session
   Text {
     anchors.centerIn: parent
     visible: panel.rows.length === 0
-    text: "No items finished yet."
+    horizontalAlignment: Text.AlignHCenter
+    text: "Nothing finished yet.\n\nAn item lands here once you've cleared\nboth its halves this session."
     color: Qt.darker(panel.fg, 1.6)
     font.family: panel.fontFamily
-    font.pixelSize: Style.font.body
+    font.pixelSize: Style.font.bodySmall
   }
 
   Flickable {

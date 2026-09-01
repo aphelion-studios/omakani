@@ -261,11 +261,13 @@ FocusScope {
     enabled: quiz.visible && quiz.phase !== "input" && quiz.canAudio && !quiz.anyOverlay
     onActivated: quiz.playAudio()
   }
-  // a = the ✓ Last Answers panel (reviews only)
+  // a toggles the ✓ Last Answers panel -- settled phase only, since "a" is a
+  // letter you type on a meaning prompt (use the ✓ button while answering)
   Shortcut {
     sequences: ["a"]
-    enabled: quiz.visible && quiz.reviewMode && quiz.phase !== "input" && !quiz.anyOverlay
-    onActivated: quiz.openLast()
+    enabled: quiz.visible && quiz.reviewMode && quiz.phase !== "input"
+      && !quiz.infoOpen && !quiz.kanaOpen
+    onActivated: quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast()
   }
   // no key for the Kana Chart -- it's a can't-type aid, opened with the ひ
   // button; a shortcut for it would just be a literal keystroke in the field
@@ -448,6 +450,21 @@ FocusScope {
           verticalAlignment: TextInput.AlignVCenter
           readOnly: quiz.phase !== "input"
           onAccepted: quiz.submit()
+
+          // a plain blinking caret (the default cursor doesn't flash here)
+          cursorDelegate: Rectangle {
+            width: 2
+            color: "#141414"
+            visible: field.cursorVisible
+            SequentialAnimation on opacity {
+              running: field.cursorVisible
+              loops: Animation.Infinite
+              NumberAnimation { to: 1; duration: 0 }
+              PauseAnimation { duration: 520 }
+              NumberAnimation { to: 0; duration: 0 }
+              PauseAnimation { duration: 520 }
+            }
+          }
           onTextChanged: {
             if (quiz._converting || !quiz.readingPrompt || quiz.phase !== "input") return
             var raw = field.text
@@ -467,8 +484,12 @@ FocusScope {
         // placeholder behind the cursor -- "答え" on a reading prompt, else
         // "Your Response"; clears the instant you type. (An explicit Text: the
         // TextField's own placeholderText doesn't render under this style.)
+        // nudged left so the caret (fixed at the field centre) sits inside
+        // the word -- "Your Re|sponse", not "Your R|esponse".
         Text {
-          anchors.centerIn: parent
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.horizontalCenter: parent.horizontalCenter
+          anchors.horizontalCenterOffset: quiz.readingPrompt ? 0 : -Style.space(4)
           visible: quiz.phase === "input" && field.text === ""
           text: quiz.readingPrompt ? "答え" : "Your Response"
           color: "#9a9a9a"
@@ -562,7 +583,7 @@ FocusScope {
           // website order: wrap · last answers · info · kana · audio
           model: [
             { g: "󰅐", act: "wrap",  show: true,             on: true },
-            { g: "󰄬", act: "last",  show: quiz.reviewMode,   on: quiz.answerLog.length > 0 },
+            { g: "󰄬", act: "last",  show: quiz.reviewMode,   on: quiz.reviewMode },
             { g: "󰈈", act: "info",  show: true,             on: quiz.phase !== "input" },
             { g: "ひ", act: "kana",  show: true,             on: quiz.phase === "input" },
             // the glyph alone (quiet vs loud speaker) signals playback
