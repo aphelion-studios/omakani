@@ -496,6 +496,16 @@ Item {
       return "lastOpen=" + c.lastOpen + " kanaOpen=" + c.kanaOpen
         + " log=" + (c.answerLog ? c.answerLog.length : 0)
     }
+    // testing: a Kana Chart keypress ("<>" for backspace)
+    function kkey(s: string): string {
+      var c = root.view === "review" ? reviewEngine.cardItem
+        : root.view === "session" ? quizSession.cardItem
+        : root.view === "lesson" ? lessonFlow.cardItem : null
+      if (!c) return "no card"
+      if (s === "<>") c.kanaBackspace()
+      else c.insertKana(s)
+      return c.fieldText
+    }
     function lstep(what: string): string {
       if (root.view !== "lesson") return "not in lesson"
       if (what === "begin") lessonFlow.startInfo()
