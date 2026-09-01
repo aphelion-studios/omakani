@@ -546,14 +546,16 @@ FocusScope {
         // reading question the Meaning pane stays folded until you've cleared
         // meaning this session, and vice versa -- even after a wrong answer
         // (you still haven't done the other half). The half you were just
-        // tested on is shown, with the ring on it if you missed.
+        // tested on is shown, with the ring on it.
         reviewFolds: quiz.restrictInfo && !drilled
         hideLevel: quiz.restrictInfo
         collapse: (!quiz.restrictInfo || drilled) ? ""
           : quiz.effectiveType === "reading" ? (quiz.meaningDone ? "" : "meaning")
           : quiz.effectiveType === "meaning" ? (quiz.readingDone ? "" : "reading")
           : ""
-        focusSection: (quiz.phase === "wrong" && !drilled) ? quiz.effectiveType : ""
+        // land the ring on the half you were just tested on -- whether you
+        // missed it or nailed it -- so f drops you straight onto that card
+        focusSection: (quiz.phase !== "input" && !drilled) ? quiz.effectiveType : ""
         audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
         subject: quiz._infoSubject
         service: quiz.service
