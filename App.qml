@@ -343,6 +343,18 @@ Item {
     function onLessonsReady(ids, total) {
       if (root.view !== "lesson") return
       if (lessonFlow.phase !== "loading") return
+      if (lessonFlow.doneIds.length > 0) {
+        // continuing an in-progress sitting: feed the next batch, minus
+        // whatever's already been learned this session
+        var done = lessonFlow.doneIds
+        var fresh = (ids || []).filter(function (x) { return done.indexOf(Number(x)) < 0 })
+        var next = fresh.slice(0, lessonFlow.batchSize())
+        Qt.callLater(function () {
+          if (next.length === 0) lessonFlow.phase = "summary"
+          else lessonFlow.continueBatch(next)
+        })
+        return
+      }
       root.lessonIds = ids || []
       root.lessonTotal = total || 0
       Qt.callLater(function () { lessonFlow.begin() })
