@@ -124,7 +124,10 @@ FocusScope {
       .filter(function (x) { return isFinite(x) })
     if (ids.length === 0) { phase = "empty"; return }
     phase = "loading"
-    if (service) service.loadDetail(ids)
+    if (service) {
+      service.loadDetail(ids)
+      service.preloadAudio(ids)   // warm the audio daemon + cache the batch
+    }
     tryBuild()
   }
 

@@ -32,6 +32,9 @@ FocusScope {
   // the padding inside a card -- same on every edge (the user liked the gap
   // to the left of the ✓/✗; this mirrors it on the right)
   readonly property real cardPad: Style.space(11)
+  // one vertical rhythm for the whole card: header->first line == line->line ==
+  // last line->footer == the gap inside the footer band
+  readonly property real cardRowGap: Style.space(7)
 
   signal closeRequested()
   // f jumps straight to item info (the panels swap, like the website)
@@ -159,9 +162,10 @@ FocusScope {
             headText.implicitWidth, measure.implicitWidth,
             showChip ? srsMeasure.implicitWidth : 0)
           width: innerW + pad * 2
-          // header · pad · body · pad · (footer)   -- pad matched top & bottom
-          height: cardHead.height + pad + bodyCol.implicitHeight + pad
-                  + (showChip ? srsFooter.height : 0)
+          // header · gap · body · gap · (footer) -- one rhythm top, between the
+          // lines, and down to the footer
+          height: cardHead.height + panel.cardRowGap + bodyCol.implicitHeight
+                  + panel.cardRowGap + (showChip ? srsFooter.height : 0)
           radius: Style.space(7)
           color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.05)
           border.width: 1
@@ -189,12 +193,9 @@ FocusScope {
             id: srsMeasure
             visible: false
             spacing: Style.space(4)
-            Text {
+            Item {
               visible: !card.staticChip
-              text: "↑"
-              font.family: panel.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+              width: Style.space(14); height: width
             }
             Text {
               text: card.row.stageName || "Apprentice"
@@ -238,8 +239,8 @@ FocusScope {
           Column {
             id: bodyCol
             x: card.pad
-            y: cardHead.height + card.pad
-            spacing: Style.space(4)
+            y: cardHead.height + panel.cardRowGap
+            spacing: panel.cardRowGap
 
             // every meaning guess, in the order they were typed
             Repeater {
@@ -251,17 +252,13 @@ FocusScope {
             }
 
             // divider between the meaning and reading guesses -- only when
-            // both halves have actually been attempted
-            Item {
+            // both halves have actually been attempted. A bare 1px line so the
+            // column's own spacing gives it equal air above and below.
+            Rectangle {
               width: card.innerW
-              height: Style.space(9)
+              height: 1
               visible: card.mGuesses.length > 0 && card.rGuesses.length > 0
-              Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width
-                height: 1
-                color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.25)
-              }
+              color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.25)
             }
 
             Repeater {
@@ -294,15 +291,26 @@ FocusScope {
             Row {
               anchors.centerIn: parent
               spacing: Style.space(4)
-              Text {
+              // the arrow in a white disc, like the website (real transitions
+              // only -- Extra Study's static stage has no direction)
+              Rectangle {
                 visible: !card.staticChip
-                text: card.row.up ? "↑" : "↓"
-                color: srsFooter.ink
-                font.family: panel.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(14)
+                height: width
+                radius: width / 2
+                color: "#fcfdfd"
+                Text {
+                  anchors.centerIn: parent
+                  text: card.row.up ? "↑" : "↓"
+                  color: srsFooter.color
+                  font.family: panel.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
               }
               Text {
+                anchors.verticalCenter: parent.verticalCenter
                 text: card.row.stageName
                 color: srsFooter.ink
                 font.family: panel.fontFamily
