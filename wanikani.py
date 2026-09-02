@@ -942,6 +942,72 @@ def cmd_browse(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def cmd_search(args):
+    """Subjects matching a query, across every level. Matches the query against
+    each subject's characters, slug and every meaning; ranks exact > prefix >
+    substring, then radical > kanji > vocab, then by level. Cheap: it reuses
+    the same delta-synced slim `subjects` cache the browser already builds."""
+    config = load_config()
+    token = api_token(config)
+    if not token:
+        return unconfigured()
+    api = Api(token)
+    subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
+    assignments_by_id, _ = sync_collection(api, "assignments", "/assignments")
+    assignment_by_subject = {}
+    for assignment in assignments_by_id.values():
+        assignment_by_subject[data_of(assignment).get("subject_id")] = assignment
+
+    query = (args.query or "").strip().lower()
+    if not query:
+        return {"ok": True, "configured": True, "error": "", "query": "", "results": []}
+
+    order = {"radical": 0, "kanji": 1, "vocabulary": 2, "kana_vocabulary": 2}
+    hits = []
+    for subject in subjects.values():
+        data = data_of(subject)
+        if data.get("hidden_at"):
+            continue
+        chars = data.get("characters") or ""
+        slug = (data.get("slug") or "")
+        meanings = data.get("meanings") or []
+        m_texts = [str(m.get("meaning") or "") for m in meanings]
+        primary = next((m.get("meaning") for m in meanings if m.get("primary")),
+                       m_texts[0] if m_texts else "")
+        score = None
+        for hay in [chars, slug] + m_texts:
+            low = hay.lower()
+            if not low:
+                continue
+            cand = 0 if low == query else 1 if low.startswith(query) \
+                else 2 if query in low else None
+            if cand is not None and (score is None or cand < score):
+                score = cand
+        if score is None:
+            continue
+        a_data = data_of(assignment_by_subject.get(subject.get("id")))
+        hits.append({
+            "id": subject.get("id"),
+            "object": subject.get("object"),
+            "characters": chars,
+            "meaning": primary or "",
+            "level": data.get("level") or 0,
+            "unlocked": bool(a_data.get("unlocked_at")),
+            "passed": bool(a_data.get("passed_at")) or (a_data.get("srs_stage") or 0) >= 5,
+            "srsStage": a_data.get("srs_stage") or 0,
+            "_score": score,
+        })
+
+    hits.sort(key=lambda row: (
+        row["_score"], order.get(row["object"], 3), row["level"],
+        (row["meaning"] or "").lower()))
+    hits = hits[:100]
+    for row in hits:
+        row.pop("_score", None)
+    return {"ok": True, "configured": True, "error": "", "query": query,
+            "results": hits, "requests": api.requests, "fetchedAt": iso(now_utc())}
+
+
 def http_get_bytes(url, headers=None, _hops=3):
     """Plain HTTPS GET returning the body bytes. Resolves the host and prefers
     IPv4: http.client (and urllib) try a stalled AAAA for ~8s before falling
@@ -1665,6 +1731,10 @@ def build_parser():
     detail = commands.add_parser("detail", help="full records for the given subject ids")
     detail.add_argument("ids", nargs="+")
     detail.set_defaults(handler=cmd_detail)
+
+    search = commands.add_parser("search", help="subjects matching a query, across every level")
+    search.add_argument("query")
+    search.set_defaults(handler=cmd_search)
 
     audio = commands.add_parser("audio", help="cache a subject's pronunciation audio, print its path")
     audio.add_argument("subject", type=int)

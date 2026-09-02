@@ -78,6 +78,13 @@ Item {
   property string browseError: ""
   property string detailError: ""
 
+  // cross-level subject search (browser page). `searchResults` is the last
+  // query's hits; empty query -> the browser shows its per-level view.
+  property var searchResults: []
+  property string searchQuery: ""
+  property string searchError: ""
+  readonly property bool searchBusy: searchProcess.running
+
   // Pronunciation audio: the helper caches the clip and hands back a path,
   // the helper feeds it to a persistent idle mpv (device stays warm, so the
   // clip start isn't clipped). `audioError` surfaces "no audio for this one".
@@ -217,6 +224,28 @@ Item {
     browseProcess.running = true
   }
 
+  // subject search across all levels. Only the latest query matters, so a
+  // request during a running job just updates the wanted query and re-fires
+  // on exit (the browser debounces keystrokes on its side too).
+  property string searchWanted: ""
+  property string searchLaunched: ""
+  function search(query) {
+    var q = String(query || "").trim()
+    searchWanted = q
+    if (q === "") { searchQuery = ""; searchResults = []; searchError = ""; return }
+    if (searchProcess.running) return
+    _startSearch(q)
+  }
+  function _startSearch(q) {
+    searchError = ""
+    searchLaunched = q
+    searchProcess.command = ["python3", helperPath, "search", q]
+    searchProcess.running = true
+  }
+  function clearSearch() {
+    searchWanted = ""; searchQuery = ""; searchResults = []; searchError = ""
+  }
+
   // Detail pages: full resources for one or more subject ids. The helper
   // serves cached subject records and only fetches ids it's never seen.
   // A request that arrives while one's in flight is buffered, not dropped
@@ -304,6 +333,16 @@ Item {
     }
     browseData = payload
     browseReady(Number(payload.level) || 0)
+  }
+
+  function applySearch(raw) {
+    var payload = Model.parsePayload(raw)
+    if (payload.ok === false) {
+      searchError = String(payload.error || "Search failed")
+      return
+    }
+    searchQuery = String(payload.query || "")
+    searchResults = payload.results || []
   }
 
   // ---- review engine ----
@@ -561,6 +600,23 @@ Item {
       // a newer level was asked for while this one ran -- go get it
       if (root.browseWantedLevel > 0 && root.browseWantedLevel !== root.browseLaunchedLevel)
         Qt.callLater(function () { root._startBrowse(root.browseWantedLevel) })
+    }
+  }
+
+  Process {
+    id: searchProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: searchOut; waitForEnd: true }
+    stderr: StdioCollector { id: searchErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0)
+        root.searchError = root.helperFailure(searchErr.text, exitCode)
+      else
+        root.applySearch(searchOut.text)
+      // the query changed while this ran (or was cleared) -- catch up
+      if (root.searchWanted !== "" && root.searchWanted !== root.searchLaunched)
+        Qt.callLater(function () { root._startSearch(root.searchWanted) })
     }
   }
 
