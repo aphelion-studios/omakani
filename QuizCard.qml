@@ -55,8 +55,6 @@ FocusScope {
   // the two reference overlays: Last Answers (reviews only) and Kana Chart
   property bool lastOpen: false
   property bool kanaOpen: false
-  // the ? hotkeys reference card (not a mode -- keys stay live under it)
-  property bool hotkeysOpen: false
   readonly property bool anyOverlay: infoOpen || lastOpen || kanaOpen
   // recent finished items, fed by the review engine; [] in Extra Study
   property var answerLog: []
@@ -320,7 +318,7 @@ FocusScope {
 
   Keys.onPressed: function (e) {
     if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { submit(); e.accepted = true }
-    else if (e.key === Qt.Key_Escape && hotkeysOpen) { hotkeysOpen = false; e.accepted = true }
+    else if (e.key === Qt.Key_Escape && hotkeys.open) { hotkeys.close(); e.accepted = true }
     else if (e.key === Qt.Key_Escape && anyOverlay) { closeOverlays(); e.accepted = true }
   }
 
@@ -356,7 +354,7 @@ FocusScope {
   Shortcut {
     sequences: ["?"]
     enabled: quiz.visible
-    onActivated: quiz.hotkeysOpen = !quiz.hotkeysOpen
+    onActivated: hotkeys.toggle()
   }
   // w -- wrap up the session (the hourglass), between questions only
   Shortcut {
@@ -570,7 +568,7 @@ FocusScope {
                        && !quiz.infoOpen && !quiz.kanaOpen) {
               quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast(); e.accepted = true
             } else if (e.key === Qt.Key_Question) {
-              quiz.hotkeysOpen = !quiz.hotkeysOpen; e.accepted = true
+              hotkeys.toggle(); e.accepted = true
             }
           }
 
@@ -842,106 +840,25 @@ FocusScope {
     }
 
     // ---- keyboard button + hotkeys card (bottom-right, like the website) ----
-    Rectangle {
-      id: hotkeyBtn
-      anchors.right: parent.right
-      anchors.bottom: parent.bottom
-      anchors.margins: Style.space(14)
-      width: Style.space(34)
-      height: Style.space(30)
-      radius: Style.space(4)
+    HotkeysOverlay {
+      id: hotkeys
+      anchors.fill: parent
       z: 40
-      color: (hkHover.containsMouse || quiz.hotkeysOpen)
-        ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.18)
-        : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.08)
-      border.width: 1
-      border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, quiz.hotkeysOpen ? 0.22 : 0.1)
-      Text {
-        anchors.centerIn: parent
-        text: "󰌌"
-        color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, quiz.hotkeysOpen ? 0.9 : 0.45)
-        font.family: quiz.fontFamily
-        font.pixelSize: Style.font.body
-      }
-      MouseArea {
-        id: hkHover
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: quiz.hotkeysOpen = !quiz.hotkeysOpen
-      }
-    }
-
-    Rectangle {
-      id: hotkeyCard
-      anchors.right: hotkeyBtn.right
-      anchors.bottom: hotkeyBtn.top
-      anchors.bottomMargin: Style.space(6)
-      visible: quiz.hotkeysOpen
-      z: 40
-      width: hkCol.implicitWidth + Style.space(28)
-      height: hkCol.implicitHeight + Style.space(24)
-      radius: Style.space(6)
-      color: Qt.darker(quiz.pageBg, 1.15)
-      border.width: 1
-      border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
-
-      Column {
-        id: hkCol
-        anchors.centerIn: parent
-        spacing: Style.space(4)
-
-        Text {
-          text: "Hotkeys"
-          color: Qt.darker(quiz.fg, 1.5)
-          font.family: quiz.fontFamily
-          font.pixelSize: Style.font.caption
-          font.bold: true
-          bottomPadding: Style.space(3)
-        }
-
-        Repeater {
-          model: {
-            var m = [
-              { k: "F", d: "Item Info" },
-              { k: "E", d: "Fold / Unfold All (in Item Info)" },
-              { k: "J", d: "Audio Pronunciation" },
-              { k: "/", d: "Hiragana IME Chart" }
-            ]
-            if (quiz.showLastAnswers) m.push({ k: ",", d: "Last Answers" })
-            m.push({ k: "W", d: "Wrap Up Session" })
-            m.push({ k: "↵", d: "Continue" })
-            m.push({ k: "?", d: "Toggle this menu" })
-            return m
-          }
-          delegate: Row {
-            spacing: Style.space(8)
-            Rectangle {
-              width: Style.space(20)
-              height: Style.space(18)
-              radius: Style.space(3)
-              anchors.verticalCenter: parent.verticalCenter
-              color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.1)
-              border.width: 1
-              border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
-              Text {
-                anchors.centerIn: parent
-                text: modelData.k
-                color: quiz.fg
-                font.family: quiz.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-            }
-            Text {
-              anchors.verticalCenter: parent.verticalCenter
-              text: modelData.d
-              color: Qt.darker(quiz.fg, 1.2)
-              font.family: quiz.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-          }
-        }
+      fg: quiz.fg
+      pageBg: quiz.pageBg
+      fontFamily: quiz.fontFamily
+      rows: {
+        var m = [
+          { k: "F", d: "Item Info" },
+          { k: "E", d: "Fold / Unfold All (in Item Info)" },
+          { k: "J", d: "Audio Pronunciation" },
+          { k: "/", d: "Hiragana IME Chart" }
+        ]
+        if (quiz.showLastAnswers) m.push({ k: ",", d: "Last Answers" })
+        m.push({ k: "W", d: "Wrap Up Session" })
+        m.push({ k: "↵", d: "Continue" })
+        m.push({ k: "?", d: "Toggle this menu" })
+        return m
       }
     }
 
