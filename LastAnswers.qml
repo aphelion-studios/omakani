@@ -29,13 +29,13 @@ FocusScope {
   readonly property color okColor: "#93c01f"
   readonly property color noColor: "#fc0234"
 
-  // horizontal padding inside a card -- the user liked the gap to the left of
-  // the ✓/✗; this mirrors it on the right, and sits below the header / above
-  // the SRS band
+  // horizontal padding inside a card, and the gap between the coloured header
+  // and the first guess line / the last line and the SRS band
   readonly property real cardPad: Style.space(11)
-  // gap between guess lines, and below the coloured header (kept tight so the
-  // header doesn't float above the answers)
-  readonly property real rowGap: Style.space(4)
+  // one vertical rhythm: the gap between guess lines, AND the top/bottom
+  // padding inside the coloured header band and the SRS band (around the
+  // character / the ↑ chip)
+  readonly property real bandPad: Style.space(4)
 
   signal closeRequested()
   // f jumps straight to item info (the panels swap, like the website)
@@ -163,10 +163,9 @@ FocusScope {
             headText.implicitWidth, measure.implicitWidth,
             showChip ? srsMeasure.implicitWidth : 0)
           width: innerW + pad * 2
-          // header · rowGap · body · pad · (footer) -- header sits as close to
-          // the first line as the lines sit to each other; the SRS band keeps
-          // its own breathing room
-          height: cardHead.height + panel.rowGap + bodyCol.implicitHeight
+          // header · pad · body · pad · (footer) -- the coloured bands hug
+          // their content (bandPad), the gaps to the body use pad
+          height: cardHead.height + card.pad + bodyCol.implicitHeight
                   + card.pad + (showChip ? srsFooter.height : 0)
           radius: Style.space(7)
           color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.05)
@@ -207,13 +206,16 @@ FocusScope {
             }
           }
 
-          // type-coloured header -- rounded to match the card's top corners
+          // type-coloured header -- rounded to match the card's top corners.
+          // hugs the character with bandPad above and below (same rhythm as the
+          // guess lines and the SRS band)
           Rectangle {
             id: cardHead
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: Style.space(44)
+            height: (headMetrics.tightBoundingRect.height || Style.space(24))
+                    + panel.bandPad * 2
             topLeftRadius: card.radius
             topRightRadius: card.radius
             color: panel.colorFor(card.row.id)
@@ -241,8 +243,8 @@ FocusScope {
           Column {
             id: bodyCol
             x: card.pad
-            y: cardHead.height + panel.rowGap
-            spacing: panel.rowGap
+            y: cardHead.height + card.pad
+            spacing: panel.bandPad
 
             // every meaning guess, in the order they were typed
             Repeater {
@@ -286,7 +288,8 @@ FocusScope {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: Style.space(26)
+            // same bandPad above and below its content as the header has
+            height: srsRow.implicitHeight + panel.bandPad * 2
             bottomLeftRadius: card.radius
             bottomRightRadius: card.radius
             color: card.staticChip
@@ -295,6 +298,7 @@ FocusScope {
             readonly property color ink: card.staticChip
               ? Qt.darker(panel.fg, 1.1) : "#fcfdfd"
             Row {
+              id: srsRow
               anchors.centerIn: parent
               spacing: Style.space(4)
               // the arrow in a white disc, like the website (real transitions

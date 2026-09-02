@@ -435,17 +435,15 @@ FocusScope {
   // while the subject is loading, show nothing here -- the host draws a
   // plain "Loading subject…" so it doesn't flash an empty coloured header
 
-  // The coloured band + type bar. In a review overlay they're pinned (a child
-  // of `keys`, over the scroll area) so scrolling the cards never drags the
-  // header away; on the standalone browse page they scroll with everything
-  // else (parented into `headSlot` inside the Flickable).
+  // The coloured band + type bar, pinned over the scroll area (both the review
+  // overlay and the standalone browse page) so scrolling the cards never drags
+  // the header away.
   Column {
     id: headBlock
-    parent: page.overlayMode ? keys : headSlot
     anchors.top: parent.top
     anchors.left: parent.left
     anchors.right: parent.right
-    z: page.overlayMode ? 5 : 0
+    z: 5
     visible: !!page.subject
 
     // in a review overlay QuizCard draws its 4px progress rail over the very
@@ -593,12 +591,10 @@ FocusScope {
       }
     }
 
-  // ---- scrolling area ----
+  // ---- scrolling area: the cards, below the pinned header ----
   Flickable {
     id: flick
-    // overlay: start below the pinned header. browse: fill, the header scrolls
-    // inside as headSlot's content.
-    anchors.top: page.overlayMode ? headBlock.bottom : parent.top
+    anchors.top: headBlock.bottom
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.bottom: parent.bottom
@@ -612,14 +608,6 @@ FocusScope {
       id: body
       width: flick.width
       spacing: 0
-
-      // holds the header on the browse page (0-height in the overlay, where
-      // the header is pinned outside the Flickable instead)
-      Item {
-        id: headSlot
-        width: parent.width
-        height: page.overlayMode ? 0 : childrenRect.height
-      }
 
       Item { width: 1; height: Style.space(20) }
 
