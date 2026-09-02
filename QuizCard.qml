@@ -44,11 +44,19 @@ FocusScope {
 
   // "input" -> "correct" | "wrong" ; Enter from a settled phase advances
   property string phase: "input"
+  // nudge: transient yellow line under the field (retry reasons, ~1.6s)
+  // tip: yellow line that stays up while the card is settled (WK's
+  //      "multiple meanings" / "a bit off" hints)
   property string nudge: ""
+  property string tip: ""
   property bool infoOpen: false
-  // the two reference overlays: ✓ Last Answers (reviews only) and ひ Kana Chart
+  // E: item info opened with every hidden section revealed
+  property bool _infoRevealAll: false
+  // the two reference overlays: Last Answers (reviews only) and Kana Chart
   property bool lastOpen: false
   property bool kanaOpen: false
+  // the ? hotkeys reference card (not a mode -- keys stay live under it)
+  property bool hotkeysOpen: false
   readonly property bool anyOverlay: infoOpen || lastOpen || kanaOpen
   // recent finished items, fed by the review engine; [] in Extra Study
   property var answerLog: []
@@ -130,7 +138,9 @@ FocusScope {
   function reset() {
     phase = "input"
     nudge = ""
+    tip = ""
     infoOpen = false
+    _infoRevealAll = false
     lastOpen = false
     kanaOpen = false
     _infoStack = []
@@ -156,6 +166,7 @@ FocusScope {
     if (res.status === "correct") {
       phase = "correct"
       kanaOpen = false
+      tip = settleTip(res)
       quiz.answered(true, typed)
       Qt.callLater(quiz.forceActiveFocus)
     } else if (res.status === "incorrect") {
@@ -169,6 +180,23 @@ FocusScope {
       shake.restart()
       nudgeTimer.restart()
     }
+  }
+
+  // the yellow line to leave up after a correct answer, matching the website:
+  // a fuzzy-accepted typo, or a heads-up that the item has more than one
+  // accepted meaning / reading than the one you gave.
+  function settleTip(res) {
+    if (res && res.fuzzy)
+      return "Your answer was a bit off. Check the " + effectiveType
+        + " to make sure you are correct."
+    var arr = effectiveType === "reading" ? (d.readings || []) : (d.meanings || [])
+    var n = 0
+    for (var i = 0; i < arr.length; i++)
+      if (arr[i] && arr[i].accepted_answer !== false) n += 1
+    if (n > 1)
+      return "Did you know this item has multiple possible "
+        + (effectiveType === "reading" ? "readings" : "meanings") + "?"
+    return ""
   }
 
   // test / automation hook: fill the field and submit
@@ -198,6 +226,11 @@ FocusScope {
 
   // the Kana Chart buttons -- drop a kana in at the caret, or rub one out.
   // bypasses the romaji->kana onTextChanged pass (the char is already kana).
+  // keep the kana keyboard focused (for its h/j/k/l nav) while it's open;
+  // otherwise a mouse pick should hand focus back to the field
+  function _kanaRefocus() {
+    Qt.callLater(kanaOpen ? kanaPanel.forceActiveFocus : field.forceActiveFocus)
+  }
   function insertKana(s) {
     if (phase !== "input") return
     var p = field.cursorPosition
@@ -206,7 +239,7 @@ FocusScope {
     field.text = t.slice(0, p) + s + t.slice(p)
     field.cursorPosition = p + s.length
     _converting = false
-    Qt.callLater(field.forceActiveFocus)
+    _kanaRefocus()
   }
   function kanaBackspace() {
     if (phase !== "input" || field.cursorPosition <= 0) return
@@ -216,12 +249,13 @@ FocusScope {
     field.text = t.slice(0, p - 1) + t.slice(p)
     field.cursorPosition = p - 1
     _converting = false
-    Qt.callLater(field.forceActiveFocus)
+    _kanaRefocus()
   }
 
-  function openInfo() {
+  function openInfo(revealAll) {
     if (phase === "input") return   // no peeking before you answer
     lastOpen = false; kanaOpen = false
+    _infoRevealAll = (revealAll === true)
     infoOpen = true
     infoRequested()
   }
@@ -235,7 +269,7 @@ FocusScope {
     kanaOpen = true
   }
   function closeOverlays() {
-    infoOpen = false; lastOpen = false; kanaOpen = false
+    infoOpen = false; _infoRevealAll = false; lastOpen = false; kanaOpen = false
     Qt.callLater(quiz.forceActiveFocus)
   }
 
@@ -245,33 +279,48 @@ FocusScope {
 
   Keys.onPressed: function (e) {
     if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { submit(); e.accepted = true }
+    else if (e.key === Qt.Key_Escape && hotkeysOpen) { hotkeysOpen = false; e.accepted = true }
     else if (e.key === Qt.Key_Escape && anyOverlay) { closeOverlays(); e.accepted = true }
   }
 
-  // f / p work once the answer is in -- as window shortcuts so they fire
-  // regardless of which child holds focus. Disabled during input (you're
-  // typing) so they don't eat a literal f / p.
+  // Reviews / lessons follow wanikani.com's hotkeys so the muscle memory
+  // carries over (the rest of the plugin keeps the vim-style keys). F / E / J
+  // are letters you'd type in a meaning answer, so they only fire once the
+  // answer is in; / , ? never appear in an answer, so they're always live.
   Shortcut {
     sequences: ["f"]
     enabled: quiz.visible && quiz.phase !== "input" && !quiz.anyOverlay
-    onActivated: quiz.openInfo()
+    onActivated: quiz.openInfo(false)
   }
   Shortcut {
-    sequences: ["p"]
+    sequences: ["e"]
+    enabled: quiz.visible && quiz.phase !== "input" && !quiz.lastOpen && !quiz.kanaOpen
+    onActivated: quiz.openInfo(true)
+  }
+  Shortcut {
+    sequences: ["j"]
     enabled: quiz.visible && quiz.phase !== "input" && quiz.canAudio && !quiz.anyOverlay
     onActivated: quiz.playAudio()
   }
-  // a toggles the ✓ Last Answers panel -- settled phase only, since "a" is a
-  // letter you type on a meaning prompt (use the ✓ button while answering)
+  // / -- the kana keyboard, an input aid, so only while you're answering
   Shortcut {
-    sequences: ["a"]
-    enabled: quiz.visible && quiz.reviewMode && quiz.phase !== "input"
-      && !quiz.infoOpen && !quiz.kanaOpen
+    sequences: ["/"]
+    enabled: quiz.visible && quiz.phase === "input" && !quiz.infoOpen && !quiz.lastOpen
+    onActivated: quiz.kanaOpen ? quiz.closeOverlays() : quiz.openKana()
+  }
+  // , -- Last Answers (WK's "Last Session Data")
+  Shortcut {
+    sequences: [","]
+    enabled: quiz.visible && quiz.reviewMode && !quiz.infoOpen && !quiz.kanaOpen
     onActivated: quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast()
   }
-  // no key for the Kana Chart -- it's a can't-type aid, opened with the ひ
-  // button; a shortcut for it would just be a literal keystroke in the field
-  // w = wrap up the session (the hourglass), between questions only
+  // ? -- toggle the hotkeys card
+  Shortcut {
+    sequences: ["?"]
+    enabled: quiz.visible
+    onActivated: quiz.hotkeysOpen = !quiz.hotkeysOpen
+  }
+  // w -- wrap up the session (the hourglass), between questions only
   Shortcut {
     sequences: ["w"]
     enabled: quiz.visible && quiz.phase !== "input" && !quiz.anyOverlay
@@ -353,10 +402,11 @@ FocusScope {
         var glyphBottom = header.y + charText.y + charText.height / 2
                           + charText.font.pixelSize * 0.46
         var barTop = header.y + header.height
-        return (glyphBottom + barTop) / 2 - height / 2
+        // +nudge: the midpoint still read a touch high
+        return (glyphBottom + barTop) / 2 - height / 2 + Style.space(3)
       }
       z: 15
-      visible: !!quiz.srsPill && quiz.phase === "correct" && !quiz.infoOpen
+      visible: !!quiz.srsPill && quiz.phase === "correct" && !quiz.anyOverlay
       width: pillRow.implicitWidth + Style.space(20)
       height: Style.space(28)
       radius: Style.space(5)
@@ -451,6 +501,20 @@ FocusScope {
           readOnly: quiz.phase !== "input"
           onAccepted: quiz.submit()
 
+          // the always-live hotkeys ( / , ? ) -- a focused TextField eats them
+          // before a window Shortcut can, so catch them here first
+          Keys.priority: Keys.BeforeItem
+          Keys.onPressed: function (e) {
+            if (e.key === Qt.Key_Slash && !quiz.infoOpen && !quiz.lastOpen) {
+              quiz.kanaOpen ? quiz.closeOverlays() : quiz.openKana(); e.accepted = true
+            } else if (e.key === Qt.Key_Comma && quiz.reviewMode
+                       && !quiz.infoOpen && !quiz.kanaOpen) {
+              quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast(); e.accepted = true
+            } else if (e.key === Qt.Key_Question) {
+              quiz.hotkeysOpen = !quiz.hotkeysOpen; e.accepted = true
+            }
+          }
+
           // a plain blinking caret (the default cursor doesn't flash here)
           cursorDelegate: Rectangle {
             width: 2
@@ -533,47 +597,47 @@ FocusScope {
       }
     }
 
-    // ---- nudge line ----
+    // ---- yellow tip / nudge line, WK-style ----
+    // `nudge` is a transient retry reason; `tip` stays up while the card is
+    // settled (multiple meanings / readings, "a bit off"). No key-command
+    // crib here any more -- the ? hotkeys card covers that.
     Text {
       anchors.top: fieldWrap.bottom
-      anchors.topMargin: Style.space(10)
+      anchors.topMargin: Style.space(12)
       anchors.horizontalCenter: parent.horizontalCenter
-      visible: quiz.nudge !== ""
-      text: quiz.nudge
+      width: Math.min(parent.width - Style.space(80), Style.space(560))
+      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
+      visible: text !== ""
+      text: quiz.nudge !== "" ? quiz.nudge : quiz.tip
       color: "#e6c14a"
       font.family: quiz.fontFamily
       font.pixelSize: Style.font.bodySmall
     }
 
-    // ---- settled hint ----
-    Text {
-      anchors.top: fieldWrap.bottom
-      anchors.topMargin: Style.space(10)
-      anchors.horizontalCenter: parent.horizontalCenter
-      visible: quiz.phase !== "input" && quiz.nudge === ""
-      // same order as the toolbar buttons: wrap, last, info, audio
-      text: {
-        var parts = ["Enter to continue", "w  wrap up"]
-        if (quiz.reviewMode) parts.push("a  answers")
-        parts.push(quiz.phase === "correct" ? "f  item info" : "f  see why")
-        if (quiz.phase === "correct" && quiz.canAudio) parts.push("p  audio")
-        return parts.join("   ·   ")
-      }
-      color: Qt.darker(quiz.fg, 1.5)
-      font.family: quiz.fontFamily
-      font.pixelSize: Style.font.caption
-    }
-
-    // ---- toolbar + the docked kana keyboard, pinned to the bottom ----
-    // stacked so the keyboard rides directly under the buttons (like the
-    // website) and the toolbar lifts to make room when it opens
+    // ---- the docked kana keyboard + toolbar, pinned to the bottom ----
+    // keyboard sits ABOVE the buttons; the panels above anchor to this stack's
+    // top so the buttons never sit on top of them
     Column {
       id: bottomStack
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: Style.space(18)
+      anchors.bottomMargin: Style.space(14)
       anchors.horizontalCenter: parent.horizontalCenter
       spacing: Style.space(10)
-      z: 25   // stays above the item-info overlay so f / eye can close it
+      z: 25
+
+      KanaChart {
+        id: kanaPanel
+        anchors.horizontalCenter: parent.horizontalCenter
+        visible: quiz.kanaOpen && quiz.phase === "input"
+        width: Math.min(quiz.width - Style.space(48), Style.space(780))
+        fg: quiz.fg
+        fontFamily: quiz.fontFamily
+        jpFamily: quiz.jpFamily
+        onKanaPicked: function (k) { quiz.insertKana(k) }
+        onBackspacePressed: quiz.kanaBackspace()
+        onCloseRequested: quiz.closeOverlays()
+      }
 
       Row {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -630,26 +694,18 @@ FocusScope {
           }
         }
       }
-
-      KanaChart {
-        id: kanaPanel
-        anchors.horizontalCenter: parent.horizontalCenter
-        visible: quiz.kanaOpen && quiz.phase === "input"
-        width: Math.min(quiz.width - Style.space(48), Style.space(780))
-        fg: quiz.fg
-        fontFamily: quiz.fontFamily
-        jpFamily: quiz.jpFamily
-        onKanaPicked: function (k) { quiz.insertKana(k) }
-        onBackspacePressed: quiz.kanaBackspace()
-      }
     }
 
     // ---- item info (f) ----
-    // covers the whole card; SubjectPage draws the same compact header + type
-    // bar as a browse page (the progress rail / counts / toolbar stay on top).
+    // fills down to just above the toolbar so the buttons never sit on top of
+    // it; the progress rail / counts float over on their own z
     Rectangle {
       readonly property bool drilled: quiz._infoStack.length > 0
-      anchors.fill: parent
+      anchors.top: parent.top
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: bottomStack.top
+      anchors.bottomMargin: Style.space(8)
       visible: quiz.infoOpen
       color: quiz.pageBg
       z: 20
@@ -667,9 +723,9 @@ FocusScope {
         // meaning this session, and vice versa -- even after a wrong answer
         // (you still haven't done the other half). The half you were just
         // tested on is shown, with the ring on it.
-        reviewFolds: quiz.restrictInfo && !drilled
-        hideLevel: quiz.restrictInfo
-        collapse: (!quiz.restrictInfo || drilled) ? ""
+        reviewFolds: quiz.restrictInfo && !drilled && !quiz._infoRevealAll
+        hideLevel: quiz.restrictInfo && !quiz._infoRevealAll
+        collapse: (!quiz.restrictInfo || drilled || quiz._infoRevealAll) ? ""
           : quiz.effectiveType === "reading" ? (quiz.meaningDone ? "" : "meaning")
           : quiz.effectiveType === "meaning" ? (quiz.readingDone ? "" : "reading")
           : ""
@@ -692,14 +748,15 @@ FocusScope {
       }
     }
 
-    // ---- ✓ Last Answers (a) ----
-    // fills the answer area only -- the character header, prompt bar and
-    // toolbar stay put, like item info
+    // ---- ✓ Last Answers ----
+    // fills the answer area only -- the character header + prompt bar stay put
+    // above, and it stops above the toolbar
     Rectangle {
       anchors.top: promptBar.bottom
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.bottom: parent.bottom
+      anchors.bottom: bottomStack.top
+      anchors.bottomMargin: Style.space(8)
       visible: quiz.lastOpen
       color: quiz.pageBg
       z: 21
@@ -716,6 +773,110 @@ FocusScope {
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
         onCloseRequested: quiz.closeOverlays()
+      }
+    }
+
+    // ---- keyboard button + hotkeys card (bottom-right, like the website) ----
+    Rectangle {
+      id: hotkeyBtn
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      anchors.margins: Style.space(14)
+      width: Style.space(34)
+      height: Style.space(30)
+      radius: Style.space(4)
+      z: 40
+      color: (hkHover.containsMouse || quiz.hotkeysOpen)
+        ? Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.18)
+        : Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.08)
+      border.width: 1
+      border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, quiz.hotkeysOpen ? 0.22 : 0.1)
+      Text {
+        anchors.centerIn: parent
+        text: "󰌌"
+        color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, quiz.hotkeysOpen ? 0.9 : 0.45)
+        font.family: quiz.fontFamily
+        font.pixelSize: Style.font.body
+      }
+      MouseArea {
+        id: hkHover
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: quiz.hotkeysOpen = !quiz.hotkeysOpen
+      }
+    }
+
+    Rectangle {
+      id: hotkeyCard
+      anchors.right: hotkeyBtn.right
+      anchors.bottom: hotkeyBtn.top
+      anchors.bottomMargin: Style.space(6)
+      visible: quiz.hotkeysOpen
+      z: 40
+      width: hkCol.implicitWidth + Style.space(28)
+      height: hkCol.implicitHeight + Style.space(24)
+      radius: Style.space(6)
+      color: Qt.darker(quiz.pageBg, 1.15)
+      border.width: 1
+      border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
+
+      Column {
+        id: hkCol
+        anchors.centerIn: parent
+        spacing: Style.space(4)
+
+        Text {
+          text: "Hotkeys"
+          color: Qt.darker(quiz.fg, 1.5)
+          font.family: quiz.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+          bottomPadding: Style.space(3)
+        }
+
+        Repeater {
+          model: {
+            var m = [
+              { k: "F", d: "Item Info" },
+              { k: "E", d: "Expand Hidden Item Info" },
+              { k: "J", d: "Audio Pronunciation" },
+              { k: "/", d: "Hiragana IME Chart" }
+            ]
+            if (quiz.reviewMode) m.push({ k: ",", d: "Last Answers" })
+            m.push({ k: "W", d: "Wrap Up Session" })
+            m.push({ k: "↵", d: "Continue" })
+            m.push({ k: "?", d: "Toggle this menu" })
+            return m
+          }
+          delegate: Row {
+            spacing: Style.space(8)
+            Rectangle {
+              width: Style.space(20)
+              height: Style.space(18)
+              radius: Style.space(3)
+              anchors.verticalCenter: parent.verticalCenter
+              color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.1)
+              border.width: 1
+              border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.16)
+              Text {
+                anchors.centerIn: parent
+                text: modelData.k
+                color: quiz.fg
+                font.family: quiz.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.d
+              color: Qt.darker(quiz.fg, 1.2)
+              font.family: quiz.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+          }
+        }
       }
     }
 
