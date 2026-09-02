@@ -41,6 +41,12 @@ FocusScope {
   // the level leaks which look-alike you're being asked
   property bool hideLevel: false
 
+  // in a review overlay the host passes the quiz header's exact pixel height so
+  // the info band lines up with the answer view (the overlay is shorter than a
+  // full page, so the plain 0.26 proportion would draw a smaller band). 0 ->
+  // use the standalone proportion.
+  property real bandHeight: 0
+
   // the "<Type> <Meaning|Reading>" bar under the header, in a review overlay.
   // "" -> the bar shows the type (and level, unless hideLevel) instead.
   property string promptWord: ""
@@ -61,6 +67,8 @@ FocusScope {
   signal closeRequested()
   // [ / ] step to the previous / next item in this level (browse page only)
   signal stepSubject(int direction)
+  // , swaps to the Last Answers panel (review overlay only), like the website
+  signal lastAnswersRequested()
 
   // ---- section navigation (item-info overlay) --------
   //   j/k        move the section ring
@@ -284,9 +292,10 @@ FocusScope {
   readonly property color cardBg: Qt.lighter(pageBg, 1.7)
   readonly property color muted: Qt.darker(fg, 1.5)
   readonly property color faint: Qt.darker(fg, 1.9)
-  // mnemonic links (e.g. "rendaku") -- the theme's accent, the same colour
-  // foot gives URLs, instead of RichText's unreadable default blue
-  readonly property color linkColor: Color.accent
+  // mnemonic links (e.g. "rendaku") -- RichText's default blue is unreadable on
+  // the dark card. foot doesn't recolour inline URLs, only underlines them, so
+  // match that: the theme foreground, underline kept (Qt underlines <a> for us).
+  readonly property color linkColor: page.fg
 
   function primaryMeaning() {
     var list = sd.meanings || []
@@ -353,6 +362,9 @@ FocusScope {
         else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
           page.activateFocused(); e.accepted = true; return
         }
+        else if (e.text === "," && page.overlayMode) {
+          page.lastAnswersRequested(); e.accepted = true; return
+        }
         else if ((e.text === "f" && page.overlayMode) || e.key === Qt.Key_Escape) {
           page.closeRequested(); e.accepted = true; return
         }
@@ -394,8 +406,10 @@ FocusScope {
 
       // ---------------------------------------------------- header band
       // one shallow proportion everywhere -- browse page, item info, drilled
-      // linked subject -- all read identically
-      readonly property real _bandH: Math.round(page.height * 0.26)
+      // linked subject -- all read identically. In a review overlay the host
+      // hands us the quiz header's own height so the two line up exactly.
+      readonly property real _bandH: page.bandHeight > 0
+        ? page.bandHeight : Math.round(page.height * 0.26)
       Rectangle {
         width: parent.width
         implicitHeight: body._bandH
@@ -409,7 +423,14 @@ FocusScope {
           spacing: Style.space(8)
 
           Text {
+            id: headerChar
             anchors.horizontalCenter: parent.horizontalCenter
+            // centre the glyph's ink, not its advance box -- lone narrow
+            // radicals (刂 etc.) have lopsided side bearings
+            anchors.horizontalCenterOffset: headerCharM.advanceWidth > 0
+              ? (headerCharM.advanceWidth / 2 - headerCharM.tightBoundingRect.x
+                 - headerCharM.tightBoundingRect.width / 2)
+              : 0
             // just the character (the meaning lives in the Meaning card and
             // the type in the bar below) -- charless radicals fall back to
             // the name so the band isn't empty on a browse page
@@ -418,6 +439,11 @@ FocusScope {
             font.family: page.jpFamily
             font.pixelSize: Math.min(body._bandH * 0.56, Style.font.displayLarge * 3)
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
+          }
+          TextMetrics {
+            id: headerCharM
+            font: headerChar.font
+            text: headerChar.text
           }
 
           // locked / unlocked (browse only) -- solid outline for UNLOCKED,
@@ -739,8 +765,12 @@ FocusScope {
 
               Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: (page.service && page.service.audioError !== "")
-                  ? page.service.audioError : "or press  p"
+                readonly property bool hasErr: page.service && page.service.audioError !== ""
+                // "or press p" only where p actually plays audio -- the browse
+                // page. In a review overlay audio is J (and j navigates the
+                // open info panel), so the hint would just mislead.
+                visible: hasErr || !page.overlayMode
+                text: hasErr ? page.service.audioError : "or press  p"
                 color: page.faint
                 font.family: page.fontFamily
                 font.pixelSize: Style.font.caption
