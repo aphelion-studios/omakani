@@ -111,8 +111,7 @@ FocusScope {
       var s = service.subjectDetail(id)
       var kind = s ? String(s.object || "") : ""
       var needsR = (kind === "kanji" || kind === "vocabulary")
-      it[id] = { mOK: false, rOK: false, mWrong: 0, rWrong: 0, needsR: needsR,
-                 sent: false, mGuesses: [], rGuesses: [] }
+      it[id] = { mOK: false, rOK: false, mWrong: 0, rWrong: 0, needsR: needsR, sent: false }
       q.push({ id: id, type: "meaning" })
       if (needsR) q.push({ id: id, type: "reading" })
     })
@@ -155,6 +154,37 @@ FocusScope {
     return Math.max(1, cur - adj * penalty)
   }
 
+  // --- Last Answers log ---------------------------------------------------
+  // one card per subject the moment its first answer lands; every guess is
+  // appended (meaning list, then reading list); the SRS chip is stamped on
+  // once the subject is done. Newest-touched subject first. Cleared by begin().
+  function _logTouch(id, needsR, type, guess) {
+    var log = engine.answerLog.slice()
+    var e = null
+    for (var i = 0; i < log.length; i++) if (log[i].id === id) { e = log[i]; break }
+    if (!e) {
+      e = { id: id, needsR: needsR === true, mGuesses: [], rGuesses: [],
+            done: false, pass: true, up: true, stageName: "" }
+      log.unshift(e)
+    }
+    if (type === "meaning") e.mGuesses = e.mGuesses.concat([guess])
+    else e.rGuesses = e.rGuesses.concat([guess])
+    engine.answerLog = log
+  }
+  function _logFinish(id, misses, ns, cur) {
+    var log = engine.answerLog.slice()
+    for (var i = 0; i < log.length; i++) {
+      if (log[i].id === id) {
+        log[i].done = true
+        log[i].pass = misses === 0
+        log[i].up = ns > cur
+        log[i].stageName = engine.srsName(ns)
+        break
+      }
+    }
+    engine.answerLog = log
+  }
+
   function finishIfComplete(rec, id) {
     if (!subjectComplete(rec) || rec.sent) return
     rec.sent = true
@@ -165,12 +195,7 @@ FocusScope {
     var misses = (rec.mWrong || 0) + (rec.rWrong || 0)
     var ns = engine.nextStage(cur, misses)
     engine.pill = { text: engine.srsName(ns), pass: misses === 0, up: ns > cur }
-    engine.answerLog = engine.answerLog.concat([{
-      id: id, needsR: rec.needsR === true,
-      mGuesses: (rec.mGuesses || []).slice(),
-      rGuesses: (rec.rGuesses || []).slice(),
-      stageName: engine.srsName(ns), up: ns > cur, pass: misses === 0
-    }])
+    engine._logFinish(id, misses, ns, cur)
     if (service)
       service.submitReview(id, rec.mWrong, rec.rWrong, engine.dryRun)
   }
@@ -182,9 +207,7 @@ FocusScope {
     var it = items
     var rec = it[id]
     answerCount += 1
-    var guess = { text: String(text || ""), ok: correct === true }
-    if (type === "meaning") rec.mGuesses = (rec.mGuesses || []).concat([guess])
-    else rec.rGuesses = (rec.rGuesses || []).concat([guess])
+    engine._logTouch(id, rec.needsR, type, { text: String(text || ""), ok: correct === true })
     if (correct) {
       correctCount += 1
       if (type === "meaning") rec.mOK = true

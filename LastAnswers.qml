@@ -1,18 +1,19 @@
 import QtQuick
 import qs.Commons
 
-// The review session's completed items, opened with the ✓ toolbar button --
-// one card per finished subject, newest first: every meaning guess you typed
-// (✓ / ✗), a divider, every reading guess, then the SRS transition the item
-// earned (green ↑ if you never missed, red ↓ if you did). Local only -- the
-// engine logs each typed answer as it comes in; cleared when the session ends.
+// The review session's answered items, opened with the ✓ toolbar button --
+// a card appears the moment a subject's first answer lands, then fills in:
+// every meaning guess you typed (✓ / ✗), a divider, every reading guess, and
+// once the subject is done the SRS transition it earned (green ↑ if you never
+// missed, red ↓ if you did). Local only -- the engine logs each typed answer
+// as it comes in; cleared when the session ends.
 //
 // j / k (or the arrows) scroll; Esc / ✓ / f close.
 FocusScope {
   id: panel
 
   // [{ id, needsR, mGuesses:[{text,ok}], rGuesses:[{text,ok}],
-  //    stageName, up, pass }], oldest first
+  //    done, pass, up, stageName }], newest-touched first
   property var log: []
   property var service: null
 
@@ -53,8 +54,8 @@ FocusScope {
     }
   }
 
-  // newest completion first, so the item you just cleared is top-left
-  readonly property var rows: (log || []).slice().reverse()
+  // the engine already keeps this newest-touched first
+  readonly property var rows: log || []
 
   function kindOf(id) {
     var s = panel.service && panel.service.subjectDetail(id)
@@ -198,16 +199,17 @@ FocusScope {
               }
             }
 
-            // divider between the cumulative meaning and reading guesses
+            // divider between the meaning and reading guesses -- only when
+            // both halves have actually been attempted
             Item {
               width: bodyCol.width
               height: Style.space(9)
-              visible: card.row.needsR
+              visible: card.mGuesses.length > 0 && card.rGuesses.length > 0
               Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
                 height: 1
-                color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.16)
+                color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.25)
               }
             }
 
@@ -221,8 +223,10 @@ FocusScope {
               }
             }
 
-            // SRS transition -- green ↑ if never missed, red ↓ if it was
+            // SRS transition -- shown once the subject is done: green ↑ if
+            // you never missed it, red ↓ if you did
             Rectangle {
+              visible: card.row.done === true
               width: srsRow.implicitWidth + Style.space(14)
               height: Style.space(22)
               radius: Style.space(4)
