@@ -681,36 +681,14 @@ Item {
           font.pixelSize: Style.font.bodySmall
         }
 
-        Row {
+        Text {
           anchors.right: parent.right
           anchors.rightMargin: Style.space(18)
           anchors.verticalCenter: parent.verticalCenter
-          spacing: Style.space(14)
-
-          // settings gear -- only from the home screen
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            visible: root.view === "home"
-            text: "󰒓"
-            color: gearHover.containsMouse ? root.fg : Qt.darker(root.fg, 1.5)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            MouseArea {
-              id: gearHover
-              anchors.fill: parent
-              anchors.margins: -Style.space(6)
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.goSettings()
-            }
-          }
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "Esc to " + (root.navStack.length > 1 ? "go back" : "close")
-            color: Qt.darker(root.fg, 1.9)
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
+          text: "Esc to " + (root.navStack.length > 1 ? "go back" : "close")
+          color: Qt.darker(root.fg, 1.9)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
         }
       }
 
@@ -745,9 +723,12 @@ Item {
               root.homeActivate(); e.accepted = true
             } else if (e.text === "," || e.text === "s") {
               root.goSettings(); e.accepted = true
+            } else if (e.text === "?") {
+              homeHotkeys.toggle(); e.accepted = true
             }
           }
           Keys.onEscapePressed: {
+            if (homeHotkeys.open) { homeHotkeys.close(); return }
             if (root.navStack.length > 1) root.popPage()
             else root.requestClose()
           }
@@ -1026,6 +1007,26 @@ Item {
             }
           }
 
+        }
+
+        // ? hotkeys + settings gear, bottom-right of the home screen
+        HotkeysOverlay {
+          id: homeHotkeys
+          anchors.fill: parent
+          fg: root.fg
+          pageBg: root.bg
+          fontFamily: root.fontFamily
+          title: "Keys"
+          extraButton: ({ glyph: "󰒓" })
+          onExtraClicked: root.goSettings()
+          rows: [
+            { k: "↑↓", d: "Move between rows" },
+            { k: "←→", d: "Lessons / Reviews" },
+            { k: "↵", d: "Open" },
+            { k: "󰒓", d: "Settings" },
+            { k: "Esc", d: "Close the window" },
+            { k: "?", d: "Toggle this menu" }
+          ]
         }
         }   // homeScope
 

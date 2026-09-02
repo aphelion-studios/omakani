@@ -47,7 +47,9 @@ FocusScope {
     Keys.enabled: page.visible
     Keys.onPressed: function (e) {
       var r = page.rows[page.cursor]
-      if (e.key === Qt.Key_Escape) { page.closeRequested(); e.accepted = true }
+      if (e.text === "?") { keyHints.toggle(); e.accepted = true }
+      else if (e.key === Qt.Key_Escape && keyHints.open) { keyHints.close(); e.accepted = true }
+      else if (e.key === Qt.Key_Escape) { page.closeRequested(); e.accepted = true }
       else if (e.text === "j" || e.key === Qt.Key_Down) {
         page.cursor = Math.min(page.rows.length - 1, page.cursor + 1)
         Qt.callLater(ensureVisible); e.accepted = true
@@ -63,6 +65,7 @@ FocusScope {
       }
     }
     function ensureVisible() {
+      if (page.cursor === 0) { flick.contentY = 0; return }   // show the header
       var it = rowRepeater.itemAt(page.cursor)
       if (!it) return
       var top = it.mapToItem(col, 0, 0).y
@@ -255,6 +258,22 @@ FocusScope {
           font.pixelSize: Style.font.caption
         }
       }
+    }
+
+    HotkeysOverlay {
+      id: keyHints
+      anchors.fill: parent
+      fg: page.fg
+      pageBg: page.pageBg
+      fontFamily: page.fontFamily
+      title: "Keys"
+      rows: [
+        { k: "j k", d: "Move between settings" },
+        { k: "h l", d: "Change the value" },
+        { k: "↵", d: "Toggle / cycle" },
+        { k: "Esc", d: "Back" },
+        { k: "?", d: "Toggle this menu" }
+      ]
     }
   }
 }
