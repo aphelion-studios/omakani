@@ -1,10 +1,11 @@
 import QtQuick
 import qs.Commons
 
-// The review session's answered items, opened with the ✓ toolbar button --
-// a card appears the moment a subject's first answer lands, then fills in:
-// every meaning guess you typed (✓ / ✗), a divider, every reading guess, and
-// once the subject is done the SRS transition it earned (green ↑ if you never
+// The review session's answered items, dropped into the answer area by the ✓
+// toolbar button (the character header, prompt bar and toolbar stay put). A
+// card appears the moment a subject's first answer lands, then fills in: every
+// meaning guess you typed (✓ / ✗), a divider, every reading guess, and once
+// the subject is done the SRS transition it earned (green ↑ if you never
 // missed, red ↓ if you did). Local only -- the engine logs each typed answer
 // as it comes in; cleared when the session ends.
 //
@@ -28,9 +29,14 @@ FocusScope {
   readonly property color okColor: "#93c01f"
   readonly property color noColor: "#fc0234"
 
+  // the padding inside a card -- same on every edge (the user liked the gap
+  // to the left of the ✓/✗; this mirrors it on the right)
+  readonly property real cardPad: Style.space(11)
+
   signal closeRequested()
 
-  // one ✓/✗ line inside a card (meaning, then reading)
+  // one ✓/✗ line inside a card (meaning, then reading). Sizes to its content
+  // so the card can measure its widest row.
   component PanelAnswerRow: Row {
     id: arow
     property bool ok: true
@@ -45,8 +51,6 @@ FocusScope {
       font.bold: true
     }
     Text {
-      width: arow.width - Style.space(22)
-      elide: Text.ElideRight
       text: arow.label
       color: Qt.darker(panel.fg, 1.15)
       font.family: arow.jp ? panel.jpFamily : panel.fontFamily
@@ -79,7 +83,7 @@ FocusScope {
 
   Keys.enabled: panel.visible
   Keys.onPressed: function (e) {
-    var step = Style.space(120)
+    var step = Style.space(90)
     if (e.key === Qt.Key_Escape || e.text === "f") {
       panel.closeRequested(); e.accepted = true
     } else if (e.key === Qt.Key_Down || e.text === "j") {
@@ -100,24 +104,12 @@ FocusScope {
 
   Rectangle { anchors.fill: parent; color: panel.pageBg }
 
-  Text {
-    id: titleText
-    anchors.top: parent.top
-    anchors.topMargin: Style.space(24)
-    anchors.horizontalCenter: parent.horizontalCenter
-    text: "Last Answers"
-    color: panel.fg
-    font.family: panel.fontFamily
-    font.pixelSize: Style.font.heading
-    font.bold: true
-  }
-
-  // empty state -- nothing completed yet this session
+  // empty state -- nothing answered yet this session
   Text {
     anchors.centerIn: parent
     visible: panel.rows.length === 0
     horizontalAlignment: Text.AlignHCenter
-    text: "Nothing finished yet.\n\nAn item lands here once you've cleared\nboth its halves this session."
+    text: "No answers yet.\n\nEach item shows up here as soon as you\nanswer it, this session."
     color: Qt.darker(panel.fg, 1.6)
     font.family: panel.fontFamily
     font.pixelSize: Style.font.bodySmall
@@ -125,17 +117,14 @@ FocusScope {
 
   Flickable {
     id: flick
-    anchors.top: titleText.bottom
-    anchors.topMargin: Style.space(18)
-    anchors.left: parent.left
-    anchors.right: parent.right
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: Style.space(92)
-    anchors.leftMargin: Style.space(24)
-    anchors.rightMargin: Style.space(24)
+    anchors.fill: parent
+    anchors.topMargin: Style.space(16)
+    anchors.bottomMargin: Style.space(16)
+    anchors.leftMargin: Style.space(20)
+    anchors.rightMargin: Style.space(20)
     visible: panel.rows.length > 0
     contentWidth: width
-    contentHeight: flow.implicitHeight + Style.space(24)
+    contentHeight: flow.implicitHeight + Style.space(8)
     clip: true
     boundsBehavior: Flickable.StopAtBounds
 
@@ -152,13 +141,42 @@ FocusScope {
           readonly property var mGuesses: row.mGuesses || []
           readonly property var rGuesses: row.rGuesses || []
           readonly property string chars: panel.charsOf(row.id)
-          width: Style.space(178)
-          height: bodyCol.y + bodyCol.implicitHeight + Style.space(12)
+          readonly property bool showChip: row.done === true
+          // width tracks the widest thing in the card -- the header text or
+          // the longest guess row -- with equal padding on both sides.
+          // `measure` (hidden) does the sizing so the visible divider can span
+          // the full inner width without a binding loop.
+          readonly property real innerW: Math.max(headText.implicitWidth, measure.implicitWidth)
+          width: innerW + panel.cardPad * 2
+          height: bodyCol.y + bodyCol.implicitHeight + panel.cardPad
           radius: Style.space(6)
           color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.05)
           border.width: 1
           border.color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.1)
           clip: true
+
+          // hidden width probe: every guess row plus the SRS chip
+          Column {
+            id: measure
+            visible: false
+            Repeater {
+              model: card.mGuesses
+              delegate: PanelAnswerRow { ok: modelData.ok; label: modelData.text }
+            }
+            Repeater {
+              model: card.rGuesses
+              delegate: PanelAnswerRow { ok: modelData.ok; jp: true; label: modelData.text }
+            }
+            Item {
+              visible: card.showChip
+              implicitWidth: chipMeasure.implicitWidth + Style.space(14)
+              implicitHeight: 1
+              Row { id: chipMeasure
+                Text { text: "↑"; font.family: panel.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+                Text { text: card.row.stageName; font.family: panel.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
+              }
+            }
+          }
 
           // type-coloured header with the characters
           Rectangle {
@@ -166,13 +184,11 @@ FocusScope {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: Style.space(46)
+            height: Style.space(44)
             color: panel.colorFor(card.row.id)
             Text {
+              id: headText
               anchors.centerIn: parent
-              width: parent.width - Style.space(16)
-              horizontalAlignment: Text.AlignHCenter
-              elide: Text.ElideRight
               text: card.chars || panel.meaningOf(card.row.id)
               color: "#fcfdfd"
               font.family: card.chars ? panel.jpFamily : panel.fontFamily
@@ -182,18 +198,14 @@ FocusScope {
 
           Column {
             id: bodyCol
-            y: cardHead.height + Style.space(10)
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: Style.space(10)
-            anchors.rightMargin: Style.space(10)
+            x: panel.cardPad
+            y: cardHead.height + Style.space(9)
             spacing: Style.space(4)
 
             // every meaning guess, in the order they were typed
             Repeater {
               model: card.mGuesses
               delegate: PanelAnswerRow {
-                width: bodyCol.width
                 ok: modelData.ok
                 label: modelData.text
               }
@@ -202,7 +214,7 @@ FocusScope {
             // divider between the meaning and reading guesses -- only when
             // both halves have actually been attempted
             Item {
-              width: bodyCol.width
+              width: card.innerW
               height: Style.space(9)
               visible: card.mGuesses.length > 0 && card.rGuesses.length > 0
               Rectangle {
@@ -216,7 +228,6 @@ FocusScope {
             Repeater {
               model: card.rGuesses
               delegate: PanelAnswerRow {
-                width: bodyCol.width
                 ok: modelData.ok
                 jp: true
                 label: modelData.text
@@ -226,7 +237,7 @@ FocusScope {
             // SRS transition -- shown once the subject is done: green ↑ if
             // you never missed it, red ↓ if you did
             Rectangle {
-              visible: card.row.done === true
+              visible: card.showChip
               width: srsRow.implicitWidth + Style.space(14)
               height: Style.space(22)
               radius: Style.space(4)
@@ -255,16 +266,5 @@ FocusScope {
         }
       }
     }
-  }
-
-  Text {
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: Style.space(58)
-    anchors.horizontalCenter: parent.horizontalCenter
-    visible: panel.rows.length > 0
-    text: "j / k  scroll   ·   Esc  close"
-    color: Qt.darker(panel.fg, 1.9)
-    font.family: panel.fontFamily
-    font.pixelSize: Style.font.caption
   }
 }

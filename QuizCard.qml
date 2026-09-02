@@ -693,8 +693,13 @@ FocusScope {
     }
 
     // ---- ✓ Last Answers (a) ----
+    // fills the answer area only -- the character header, prompt bar and
+    // toolbar stay put, like item info
     Rectangle {
-      anchors.fill: parent
+      anchors.top: promptBar.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
       visible: quiz.lastOpen
       color: quiz.pageBg
       z: 21
