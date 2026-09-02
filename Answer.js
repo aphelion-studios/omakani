@@ -105,13 +105,35 @@ function meaningList(subject, studyMaterial) {
 function readingList(subject) {
   var data = (subject && subject.data) || {};
   var accepted = [];
+  var acceptedTypes = [];
   var known = [];
+  var knownTypes = [];
   (data.readings || []).forEach(function (r) {
     if (!r || !r.reading) return;
     known.push(r.reading);
-    if (r.accepted_answer !== false) accepted.push(r.reading);
+    knownTypes.push(r.type || "");
+    if (r.accepted_answer !== false) {
+      accepted.push(r.reading);
+      acceptedTypes.push(r.type || "");
+    }
   });
-  return { accepted: accepted, known: known };
+  return { accepted: accepted, acceptedTypes: acceptedTypes,
+           known: known, knownTypes: knownTypes };
+}
+
+// the one reading-type WaniKani is accepting here (onyomi / kunyomi / nanori),
+// or "" when it takes more than one -- so we can say which one it wants.
+function wantReadingType(types) {
+  var seen = {};
+  (types || []).forEach(function (t) { if (t) seen[t] = true; });
+  var keys = Object.keys(seen);
+  return keys.length === 1 ? keys[0] : "";
+}
+function readingTypeLabel(t) {
+  if (t === "onyomi") return "on'yomi";
+  if (t === "kunyomi") return "kun'yomi";
+  if (t === "nanori") return "nanori";
+  return "other";
 }
 
 function isVerb(subject) {
@@ -147,7 +169,22 @@ function checkMeaning(subject, studyMaterial, raw) {
       return { status: "correct", fuzzy: true };
   }
 
-  if (_isKana(String(raw || "").replace(/\s+/g, "")))
+  // an English box, but you typed a reading -- romaji, or kana that spells one
+  // of this item's readings. WaniKani shakes here instead of marking it wrong,
+  // so a fast misread of meaning-vs-reading doesn't cost you the item.
+  var bare = String(raw || "").replace(/\s+/g, "");
+  if (bare !== "") {
+    var asK = _isKana(bare) ? _kata(bare) : _toKana(bare);
+    if (asK && _isKana(String(asK).replace(/\s+/g, ""))) {
+      var rl = readingList(subject);
+      for (var r = 0; r < rl.known.length; r++) {
+        if (normReading(asK) === normReading(rl.known[r]))
+          return { status: "retry", reason: "We want the meaning, not the reading" };
+      }
+    }
+  }
+
+  if (_isKana(bare))
     return { status: "retry", reason: "We want the meaning here" };
 
   return { status: "incorrect" };
@@ -167,8 +204,16 @@ function checkReading(subject, raw) {
     if (given === normReading(lists.accepted[i])) return { status: "correct" };
   }
   for (var k = 0; k < lists.known.length; k++) {
-    if (given === normReading(lists.known[k]))
+    if (given === normReading(lists.known[k])) {
+      // a real reading of this kanji, just not the half being asked -- name the
+      // reading type WaniKani wants so you know which way you slipped
+      var want = wantReadingType(lists.acceptedTypes);
+      if (want && lists.knownTypes[k] && lists.knownTypes[k] !== want)
+        return { status: "retry",
+                 reason: "WaniKani is looking for the " + readingTypeLabel(want)
+                   + " reading." };
       return { status: "retry", reason: "WaniKani wants a different reading" };
+    }
   }
   return { status: "incorrect" };
 }

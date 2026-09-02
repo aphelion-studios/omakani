@@ -112,13 +112,27 @@ t("synonym", Answer.check(vocabDog, { meaning_synonyms: ["pup"] }, "meaning", "p
 // meaning: kana typed for a meaning question -> retry
 t("kana for meaning", Answer.check(kanjiOne, null, "meaning", "いち"), "retry");
 
+// meaning: romaji that spells one of the item's readings -> retry, not wrong
+// (going too fast and answering the reading in the meaning box)
+t("romaji reading for meaning", Answer.check(kanjiOne, null, "meaning", "ichi"), "retry");
+t("kana reading for meaning (dog)", Answer.check(vocabDog, null, "meaning", "いぬ"), "retry");
+// real English that isn't the meaning is still just wrong
+t("wrong english meaning", Answer.check(vocabDog, null, "meaning", "wolf"), "incorrect");
+
 // reading: romaji -> kana, accepted
 t("One reading romaji", Answer.check(kanjiOne, null, "reading", "ichi"), "correct");
 t("One reading kana", Answer.check(kanjiOne, null, "reading", "いち"), "correct");
 t("One reading alt accepted", Answer.check(kanjiOne, null, "reading", "itsu"), "correct");
 
-// reading: real but non-accepted reading -> retry
+// reading: real but non-accepted reading -> retry, and it names the wanted type
 t("One reading kunyomi -> retry", Answer.check(kanjiOne, null, "reading", "hito"), "retry");
+(function () {
+  const r = Answer.check(kanjiOne, null, "reading", "hito");
+  if (!/on'yomi/.test(r.reason || "")) {
+    failed++;
+    console.error(`FAIL  kunyomi retry names on'yomi: got reason ${JSON.stringify(r.reason)}`);
+  }
+})();
 
 // reading: wrong -> incorrect
 t("One reading wrong", Answer.check(kanjiOne, null, "reading", "san"), "incorrect");
