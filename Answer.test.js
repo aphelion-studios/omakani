@@ -143,6 +143,31 @@ t("reading typo is wrong", Answer.check(vocabInternational, null, "reading", "�
 // reading: incomplete romaji still has latin -> retry
 t("half romaji reading", Answer.check(vocabToEat, null, "reading", "tabe.z"), "retry");
 
+// reading: a component kanji's reading typed for the whole vocab -> shake,
+// not wrong ("じ" for 時, whose vocab reading is とき)
+const vocabToki = {
+  object: "vocabulary",
+  data: {
+    meanings: [{ meaning: "Time", primary: true, accepted_answer: true }],
+    auxiliary_meanings: [],
+    readings: [{ reading: "とき", primary: true, accepted_answer: true }],
+    parts_of_speech: ["noun"],
+  },
+};
+t("kanji reading for a vocab -> retry",
+  Answer.check(vocabToki, null, "reading", "じ", { otherReadings: ["じ", "とき"] }), "retry");
+(function () {
+  const r = Answer.check(vocabToki, null, "reading", "じ", { otherReadings: ["じ"] });
+  if (!/vocabulary reading/.test(r.reason || "")) {
+    failed++;
+    console.error(`FAIL  vocab-vs-kanji reason: got ${JSON.stringify(r.reason)}`);
+  }
+})();
+t("vocab reading still correct with otherReadings present",
+  Answer.check(vocabToki, null, "reading", "とき", { otherReadings: ["じ"] }), "correct");
+t("real wrong reading still wrong with otherReadings",
+  Answer.check(vocabToki, null, "reading", "さん", { otherReadings: ["じ"] }), "incorrect");
+
 if (failed) {
   console.error(`\n${failed} test(s) failed`);
   process.exit(1);

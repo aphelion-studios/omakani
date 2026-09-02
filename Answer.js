@@ -179,25 +179,28 @@ function checkMeaning(subject, studyMaterial, raw) {
       var rl = readingList(subject);
       for (var r = 0; r < rl.known.length; r++) {
         if (normReading(asK) === normReading(rl.known[r]))
-          return { status: "retry", reason: "We want the meaning, not the reading" };
+          return { status: "retry", reason: "We want the meaning, not the reading." };
       }
     }
   }
 
   if (_isKana(bare))
-    return { status: "retry", reason: "We want the meaning here" };
+    return { status: "retry", reason: "We want the meaning here." };
 
   return { status: "incorrect" };
 }
 
-function checkReading(subject, raw) {
+function checkReading(subject, raw, opts) {
   var typed = String(raw || "");
   var asKana = _isKana(typed.replace(/\s+/g, "")) ? typed : _toKana(typed);
   var given = normReading(asKana);
-  if (given === "") return { status: "retry", reason: "Type an answer" };
+  if (given === "") return { status: "retry", reason: "Type an answer." };
 
   if (/[a-z]/i.test(given))
     return { status: "retry", reason: "Your answer must be in kana" };
+
+  var kind = String((subject && subject.object) || "");
+  var isVocab = kind === "vocabulary" || kind === "kana_vocabulary";
 
   var lists = readingList(subject);
   for (var i = 0; i < lists.accepted.length; i++) {
@@ -212,14 +215,29 @@ function checkReading(subject, raw) {
         return { status: "retry",
                  reason: "WaniKani is looking for the " + readingTypeLabel(want)
                    + " reading." };
-      return { status: "retry", reason: "WaniKani wants a different reading" };
+      return { status: "retry", reason: "WaniKani wants a different reading." };
     }
   }
+
+  // a reading that belongs to a component of this word rather than the word
+  // itself -- e.g. the on'yomi of the single kanji in a kun'yomi vocab. Caller
+  // passes the component readings (WK's own check has the whole subject graph).
+  var others = (opts && opts.otherReadings) || [];
+  for (var o = 0; o < others.length; o++) {
+    if (others[o] && given === normReading(others[o]))
+      return { status: "retry", reason: isVocab
+        ? "We want the vocabulary reading, not the kanji reading."
+        : "WaniKani wants a different reading." };
+  }
+
   return { status: "incorrect" };
 }
 
 // questionType: "meaning" | "reading"
-function check(subject, studyMaterial, questionType, raw) {
-  if (questionType === "reading") return checkReading(subject, raw);
+// opts (optional): { otherReadings: [kana, ...] } -- readings of this subject's
+// components, so a component's reading typed for the whole word shakes instead
+// of counting wrong.
+function check(subject, studyMaterial, questionType, raw, opts) {
+  if (questionType === "reading") return checkReading(subject, raw, opts);
   return checkMeaning(subject, studyMaterial, raw);
 }
