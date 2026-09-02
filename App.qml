@@ -208,7 +208,10 @@ Item {
     var n = Math.max(1, Math.min(60, parseInt(String(level), 10) || 1))
     root.browseLevel = n
     pushPage({ view: "browse", level: n })
-    if (root.service) root.service.loadBrowse(n)
+    if (root.service) {
+      root.service.clearSearch()   // a fresh entry starts on the level view
+      root.service.loadBrowse(n)
+    }
   }
 
   function goSubject(id) {

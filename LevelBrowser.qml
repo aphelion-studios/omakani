@@ -1,10 +1,14 @@
 import QtQuick
+import QtQuick.Controls
 import qs.Commons
 
 // The level browser: every subject on one level, grouped Radicals / Kanji /
 // Vocabulary like the website, each group headed with an "(n/m unlocked)"
 // count and a green progress bar for how many are passed. Locked items show
 // hollow with a dashed border.
+//
+// A search field up top (/ or click to focus) filters subjects from EVERY
+// level by name -- clear it to return to the per-level view.
 //
 // Keys: h/j/k/l (or arrows) move the grid cursor; k from the top row scrolls
 // the section headings in, then a further k lands on the < Level N > bar
@@ -30,9 +34,18 @@ Item {
 
   readonly property bool ready: service && service.browseData
     && Number(service.browseData.level) === level
-  readonly property var rows: ready ? (service.browseData.subjects || []) : []
+  // search mode is driven by the field, not the service, so the view flips the
+  // instant you type (results catch up a beat later)
+  readonly property string searchText: searchField.text.trim()
+  readonly property bool searching: searchText !== ""
+  readonly property bool searchStale: searching && (!service
+    || service.searchQuery !== searchText || service.searchBusy)
+  readonly property var rows: searching
+    ? (service ? (service.searchResults || []) : [])
+    : (ready ? (service.browseData.subjects || []) : [])
   readonly property var prog: ready ? (service.browseData.progress || ({})) : ({})
-  readonly property bool loading: service ? service.browseBusy : false
+  readonly property bool loading: service
+    ? (searching ? service.searchBusy : service.browseBusy) : false
 
   // Flat cursor over `rows` (already ordered radical -> kanji -> vocab).
   property int cursor: 0
@@ -56,6 +69,37 @@ Item {
   function focusGrid() { keyScope.forceActiveFocus() }
   readonly property bool hasKeyFocus: keyScope.activeFocus
 
+  // debounce keystrokes in the search field before hitting the helper
+  Timer {
+    id: searchDebounce
+    interval: 220
+    onTriggered: if (browser.service) browser.service.search(searchField.text)
+  }
+  // the host cleared the search (e.g. a fresh entry to Level Progress) -> wipe
+  // the field to match
+  Connections {
+    target: browser.service
+    function onSearchQueryChanged() {
+      if (browser.service.searchQuery === "" && browser.service.searchWanted === ""
+          && searchField.text !== "")
+        searchField.text = ""
+    }
+  }
+  function clearSearch() {
+    searchDebounce.stop()
+    searchField.text = ""
+    if (service) service.clearSearch()
+    cursor = 0
+    flick.contentY = 0
+    _toGrid()
+  }
+  // hand focus from the search field back to the grid -- a FocusScope keeps
+  // delegating to a child that still has foc:true, so drop it explicitly
+  function _toGrid() {
+    searchField.focus = false
+    Qt.callLater(function () { keyScope.forceActiveFocus() })
+  }
+
   function stepLevel(d) {
     var n = level + d
     if (n >= 1 && n <= 60) browser.changeLevel(n)
@@ -66,10 +110,11 @@ Item {
     var next = Math.max(0, Math.min(rows.length - 1, cursor + delta))
     if (next === cursor) {
       // couldn't move -- going up past the first row: first scroll the
-      // section headings in, then hand off to the level bar
+      // section headings in, then hand off to the level bar (not in search
+      // mode, where there's no level bar)
       if (delta < 0) {
         if (flick.contentY > 1) flick.contentY = 0
-        else onLevelBar = true
+        else if (!browser.searching) onLevelBar = true
       } else {
         flick.contentY = Math.max(0, flick.contentHeight - flick.height)
       }
@@ -120,6 +165,13 @@ Item {
     Keys.enabled: browser.visible
 
     Keys.onPressed: function (e) {
+      // / jumps to the search field from anywhere in the grid
+      if (e.key === Qt.Key_Slash) { searchField.forceActiveFocus(); e.accepted = true; return }
+      // Esc clears an active search and stays on the grid
+      if (e.key === Qt.Key_Escape && browser.searching) {
+        browser.clearSearch(); e.accepted = true; return
+      }
+
       if (browser.onLevelBar) {
         if (e.text === "h" || e.key === Qt.Key_Left) { browser.stepLevel(-1); e.accepted = true }
         else if (e.text === "l" || e.key === Qt.Key_Right) { browser.stepLevel(1); e.accepted = true }
@@ -139,15 +191,88 @@ Item {
       else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { browser.openCursor(); e.accepted = true }
     }
 
-    // ---- level bar (fixed at the top) ----
+    // ---- search field (fixed at the top) ----
     Rectangle {
-      id: levelBar
+      id: searchRow
       anchors.top: parent.top
       anchors.left: parent.left
       anchors.right: parent.right
+      anchors.topMargin: Style.space(20)
+      anchors.leftMargin: Style.space(24)
+      anchors.rightMargin: Style.space(24)
+      height: Style.space(38)
+      radius: Style.space(6)
+      color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b,
+        searchField.activeFocus ? 0.12 : 0.05)
+      border.width: 1
+      border.color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b,
+        searchField.activeFocus ? 0.5 : 0.16)
+
+      TextField {
+        id: searchField
+        anchors.left: parent.left
+        anchors.right: hintText.left
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: Style.space(12)
+        anchors.rightMargin: Style.space(8)
+        background: null
+        leftPadding: 0
+        rightPadding: 0
+        color: browser.ink
+        placeholderText: "Search radicals, kanji, vocabulary — every level"
+        placeholderTextColor: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.38)
+        font.family: browser.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        selectByMouse: true
+        onTextChanged: searchDebounce.restart()
+        Keys.onPressed: function (e) {
+          if (e.key === Qt.Key_Escape) { browser.clearSearch(); e.accepted = true }
+          else if (e.key === Qt.Key_Down || e.key === Qt.Key_Return
+                   || e.key === Qt.Key_Enter) {
+            browser._toGrid(); e.accepted = true
+          }
+        }
+      }
+
+      Text {
+        id: hintText
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(12)
+        anchors.verticalCenter: parent.verticalCenter
+        text: searchField.text !== "" ? "✕"
+          : searchField.activeFocus ? "" : "press  /"
+        color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b,
+          searchField.text !== "" ? 0.6 : 0.32)
+        font.family: browser.fontFamily
+        font.pixelSize: searchField.text !== "" ? Style.font.bodySmall : Style.font.caption
+        MouseArea {
+          anchors.fill: parent
+          anchors.margins: -Style.space(6)
+          enabled: searchField.text !== ""
+          cursorShape: Qt.PointingHandCursor
+          onClicked: browser.clearSearch()
+        }
+      }
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.IBeamCursor
+        onClicked: searchField.forceActiveFocus()
+        // let the hint's clear button win
+        propagateComposedEvents: true
+      }
+    }
+
+    // ---- level bar (below the search field) ----
+    Rectangle {
+      id: levelBar
+      visible: !browser.searching
+      anchors.top: searchRow.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
       anchors.margins: Style.space(24)
+      anchors.topMargin: Style.space(10)
       anchors.bottomMargin: 0
-      height: levelRow.implicitHeight + Style.space(12)
+      height: browser.searching ? 0 : levelRow.implicitHeight + Style.space(12)
       color: "transparent"
       radius: Style.space(6)
       border.width: browser.onLevelBar ? 2 : 0
@@ -217,8 +342,82 @@ Item {
         width: flick.width
         spacing: Style.space(22)
 
+        // ---- search results: one flat grid, sorted radical -> kanji -> vocab
+        // then by level, each chip tagged with its level ----
+        Column {
+          width: sections.width
+          visible: browser.searching
+          spacing: Style.space(12)
+
+          Text {
+            text: (browser.searchStale && browser.rows.length === 0)
+              ? "Searching…"
+              : browser.rows.length + (browser.rows.length === 100 ? "+ " : " ")
+                + (browser.rows.length === 1 ? "result" : "results")
+                + " for “" + (browser.service ? browser.service.searchQuery : "")
+                + "”"
+            color: browser.ink
+            font.family: browser.fontFamily
+            font.pixelSize: Style.font.subtitle
+            font.bold: true
+          }
+
+          Grid {
+            id: resultGrid
+            width: parent.width
+            columns: browser.columns
+            columnSpacing: Style.space(8)
+            rowSpacing: Style.space(12)
+
+            Repeater {
+              model: browser.searching ? browser.rows : []
+              delegate: Column {
+                id: rcell
+                width: (resultGrid.width - (browser.columns - 1) * Style.space(8))
+                  / browser.columns
+                spacing: Style.space(3)
+
+                SubjectChip {
+                  id: rchip
+                  width: parent.width
+                  subjectId: modelData.id
+                  object: modelData.object
+                  characters: modelData.characters || ""
+                  meaning: modelData.meaning || ""
+                  locked: modelData.unlocked === false
+                  cursored: browser.cursor === index && browser.visible
+                  fontFamily: browser.fontFamily
+                  jpFamily: browser.jpFamily
+                  fg: browser.ink
+                  radicalColor: browser.radicalColor
+                  kanjiColor: browser.kanjiColor
+                  vocabColor: browser.vocabColor
+                  onActivated: { browser.cursor = index; browser.openSubject(modelData.id) }
+                  onCursoredChanged: if (cursored)
+                    Qt.callLater(function () { browser.ensureVisible(rcell) })
+                }
+                Text {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  text: "Level " + (modelData.level || "?")
+                  color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.4)
+                  font.family: browser.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+            }
+          }
+
+          Text {
+            visible: !browser.searchStale && browser.rows.length === 0
+            text: "No matches. Try a meaning, a reading, or the characters."
+            color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.5)
+            font.family: browser.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+        }
+
         Repeater {
-          model: [
+          model: browser.searching ? [] : [
             { kind: "radical", label: "Radicals", pkey: "radicals", tint: browser.radicalColor },
             { kind: "kanji", label: "Kanji", pkey: "kanji", tint: browser.kanjiColor },
             { kind: "vocabulary", label: "Vocabulary", pkey: "vocabulary", tint: browser.vocabColor }
@@ -318,10 +517,11 @@ Item {
     }
 
     // loading / empty state -- a sibling of the Flickable so it centres in
-    // the viewport, not in the (possibly zero-height) scroll content
+    // the viewport, not in the (possibly zero-height) scroll content. Search
+    // has its own empty / "Searching…" messaging inside the Flickable.
     Column {
       anchors.centerIn: flick
-      visible: browser.rows.length === 0
+      visible: browser.rows.length === 0 && !browser.searching
       spacing: Style.space(10)
       readonly property string err: browser.service ? String(browser.service.browseError) : ""
 
