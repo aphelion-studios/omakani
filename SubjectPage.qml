@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 import qs.Commons
 import "Markup.js" as Markup
 
@@ -82,6 +83,18 @@ FocusScope {
   // bumped on every subject change so cards drop any manual fold and go back
   // to their default state
   property int resetToken: 0
+
+  // E in the item-info overlay: fold / unfold every collapsible card at once
+  property bool _allExpanded: false
+  function toggleExpandAll() {
+    _allExpanded = !_allExpanded
+    for (var i = 0; i < navCards.length; i++) {
+      var c = navCards[i]
+      if (!c || !c.collapsible) continue
+      if (_allExpanded) c.expand()
+      else c.collapse()
+    }
+  }
 
   function focusedChipIds() {
     var c = focusedCard()
@@ -200,9 +213,14 @@ FocusScope {
     focusIndex = 0
     chipIndex = 0
     _syncedSection = ""
+    _allExpanded = false
     resetToken += 1     // cards drop manual folds, back to their defaults
     Qt.callLater(hydrateLinks)
     Qt.callLater(syncFocusToSection)
+    // browse page: warm the audio daemon + cache this clip so the first
+    // SHIFT+J isn't a cold 10-second wait
+    if (subject && !overlayMode && hasAudio && service)
+      service.preloadAudio([sid])
     // the browser page's first subject arrives after focusPage() already
     // ran on an empty scope -- re-grab so the keyboard works right away
     if (subject && keyNav && !overlayMode && visible)
@@ -293,9 +311,25 @@ FocusScope {
   readonly property color muted: Qt.darker(fg, 1.5)
   readonly property color faint: Qt.darker(fg, 1.9)
   // mnemonic links (e.g. "rendaku") -- RichText's default blue is unreadable on
-  // the dark card. foot doesn't recolour inline URLs, only underlines them, so
-  // match that: the theme foreground, underline kept (Qt underlines <a> for us).
-  readonly property color linkColor: page.fg
+  // the dark card. Match the terminal: the theme's "cyan" palette slot is what
+  // foot / the shell colour URLs with. Underline is kept (Qt underlines <a>).
+  property string _themeColorsRaw: ""
+  readonly property color linkColor: {
+    var m = /(^|\n)\s*cyan\s*=\s*"?(#[0-9a-fA-F]{3,8})"?/.exec(page._themeColorsRaw || "")
+    return m ? m[2] : Color.accent
+  }
+  FileView {
+    id: themeColorsFile
+    path: Color.currentThemePath + "/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onLoaded: page._themeColorsRaw = text()
+    onFileChanged: reload()
+  }
+  Connections {
+    target: Color
+    function onAccentChanged() { themeColorsFile.reload() }
+  }
 
   function primaryMeaning() {
     var list = sd.meanings || []
@@ -351,14 +385,23 @@ FocusScope {
         e.accepted = true
         return
       }
+      // SHIFT+J plays the pronunciation on the browse page (plain j scrolls /
+      // moves the ring there, so it can't double as audio like it does in a
+      // review overlay)
+      if (!page.overlayMode && e.key === Qt.Key_J && (e.modifiers & Qt.ShiftModifier)) {
+        page.playAudio("random"); e.accepted = true; return
+      }
       // j/k move the section ring, Enter toggles a fold (or opens the
       // highlighted chip on a chip section), h/l step the chip cursor,
-      // Esc / f go back a page or close
+      // e folds / unfolds every card, Esc / f go back a page or close
       if (page.keyNav) {
         if (e.text === "j") { page.moveFocus(1); e.accepted = true; return }
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
         else if (e.text === "l") { page.moveChip(1); e.accepted = true; return }
         else if (e.text === "h") { page.moveChip(-1); e.accepted = true; return }
+        else if (e.text === "e" && page.overlayMode) {
+          page.toggleExpandAll(); e.accepted = true; return
+        }
         else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
           page.activateFocused(); e.accepted = true; return
         }
@@ -380,7 +423,6 @@ FocusScope {
         page.scrollBy((e.modifiers & Qt.ShiftModifier) ? -flick.height * 0.8 : flick.height * 0.8)
         e.accepted = true
       }
-      else if (e.text === "p" && !page.overlayMode) { page.playAudio("random"); e.accepted = true }
     }
 
   // while the subject is loading, show nothing here -- the host draws a
@@ -725,7 +767,7 @@ FocusScope {
               }
             }
 
-            // audio (vocab only) -- KYOKO / KENICHI, or press p for a random one
+            // audio (vocab only) -- KYOKO / KENICHI, or SHIFT+J for a random one
             Row {
               visible: page.hasAudio && page.audioAllowed
               spacing: Style.space(8)
@@ -766,11 +808,10 @@ FocusScope {
               Text {
                 anchors.verticalCenter: parent.verticalCenter
                 readonly property bool hasErr: page.service && page.service.audioError !== ""
-                // "or press p" only where p actually plays audio -- the browse
-                // page. In a review overlay audio is J (and j navigates the
-                // open info panel), so the hint would just mislead.
+                // the key hint only on the browse page -- in a review overlay
+                // audio is on the J shortcut and j navigates the open panel
                 visible: hasErr || !page.overlayMode
-                text: hasErr ? page.service.audioError : "or press  p"
+                text: hasErr ? page.service.audioError : "or press  SHIFT+J"
                 color: page.faint
                 font.family: page.fontFamily
                 font.pixelSize: Style.font.caption
