@@ -284,6 +284,9 @@ FocusScope {
   readonly property color cardBg: Qt.lighter(pageBg, 1.7)
   readonly property color muted: Qt.darker(fg, 1.5)
   readonly property color faint: Qt.darker(fg, 1.9)
+  // mnemonic links (e.g. "rendaku") -- the theme's accent, the same colour
+  // foot gives URLs, instead of RichText's unreadable default blue
+  readonly property color linkColor: Color.accent
 
   function primaryMeaning() {
     var list = sd.meanings || []
@@ -580,6 +583,8 @@ FocusScope {
               wrapMode: Text.WordWrap
               lineHeight: 1.35
               color: page.fg
+              linkColor: page.linkColor
+              onLinkActivated: function (l) { Qt.openUrlExternally(l) }
               font.family: page.fontFamily
               font.pixelSize: Style.font.body
             }
@@ -618,6 +623,8 @@ FocusScope {
                 textFormat: Text.RichText
                 wrapMode: Text.WordWrap
                 color: page.muted
+                linkColor: page.linkColor
+                onLinkActivated: function (l) { Qt.openUrlExternally(l) }
                 font.family: page.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
@@ -748,6 +755,8 @@ FocusScope {
               wrapMode: Text.WordWrap
               lineHeight: 1.35
               color: page.fg
+              linkColor: page.linkColor
+              onLinkActivated: function (l) { Qt.openUrlExternally(l) }
               font.family: page.fontFamily
               font.pixelSize: Style.font.body
             }
@@ -766,6 +775,8 @@ FocusScope {
                 textFormat: Text.RichText
                 wrapMode: Text.WordWrap
                 color: page.muted
+                linkColor: page.linkColor
+                onLinkActivated: function (l) { Qt.openUrlExternally(l) }
                 font.family: page.fontFamily
                 font.pixelSize: Style.font.bodySmall
               }
