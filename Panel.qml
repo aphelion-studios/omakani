@@ -1406,7 +1406,8 @@ Panel {
 
     RowLayout {
       anchors.fill: parent
-      spacing: Style.space(8)
+      anchors.rightMargin: Style.space(2)
+      spacing: Style.space(6)
 
       Text {
         text: String(sr.row.label || "")
@@ -1415,6 +1416,7 @@ Panel {
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         Layout.fillWidth: true
+        Layout.minimumWidth: Style.space(20)
         elide: Text.ElideRight
       }
 
@@ -1426,9 +1428,37 @@ Panel {
         Layout.alignment: Qt.AlignVCenter
       }
 
+      // enum: one compact chip, click / Enter cycles
+      Rectangle {
+        visible: sr.isEnum
+        Layout.alignment: Qt.AlignVCenter
+        implicitWidth: Math.min(Style.space(96), enumLbl.implicitWidth + Style.space(14))
+        implicitHeight: Style.space(22)
+        radius: Style.space(4)
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
+        Text {
+          id: enumLbl
+          anchors.centerIn: parent
+          width: parent.width - Style.space(8)
+          horizontalAlignment: Text.AlignHCenter
+          elide: Text.ElideRight
+          text: sr.isEnum ? Model.enumLabel(sr.row, sr.currentValue) : ""
+          color: root.foreground
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          font.bold: true
+        }
+        MouseArea {
+          anchors.fill: parent
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.settingsAdjust(sr.idx, 1)
+        }
+      }
+
+      // int: tight −/value/+ stepper
       Row {
-        visible: !sr.isBool
-        spacing: Style.space(6)
+        visible: sr.isEnum === false && sr.isBool === false
+        spacing: Style.space(4)
         Layout.alignment: Qt.AlignVCenter
 
         PanelActionButton {
@@ -1439,12 +1469,10 @@ Panel {
         }
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          width: sr.isEnum ? Style.space(96) : Style.space(30)
+          width: Style.space(24)
           horizontalAlignment: Text.AlignHCenter
-          elide: Text.ElideRight
-          text: sr.isEnum ? Model.enumLabel(sr.row, sr.currentValue)
-            : sr.currentValue === 0 ? "off" : String(sr.currentValue)
-          color: (!sr.isEnum && sr.currentValue === 0) ? root.dim : root.foreground
+          text: sr.currentValue === 0 ? "off" : String(sr.currentValue)
+          color: sr.currentValue === 0 ? root.dim : root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true
