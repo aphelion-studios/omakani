@@ -69,6 +69,70 @@ function barTooltip(view, now) {
   return lines.join("\n")
 }
 
+// The client-side settings, mirrored from wanikani.py's _PREF_DEFAULTS. The
+// dashboard drop-down and the floating app both render from this one schema so
+// they can't drift. `group` orders them into sections; `kind` picks the
+// control.
+var SETTINGS = [
+  { key: "lessonBatchSize", kind: "int", group: "Lessons",
+    label: "Preferred lesson batch size", from: 1, to: 20, step: 1, fallback: 5,
+    help: "New lessons to learn before each lesson quiz. The last batch may run a little over to avoid a tiny leftover batch." },
+  { key: "lessonDailyMax", kind: "int", group: "Lessons",
+    label: "Maximum daily lessons", from: 0, to: 100, step: 5, fallback: 15,
+    help: "Cap on new lessons per day (0 = no cap). More lessons means more reviews later." },
+  { key: "lessonInterleave", kind: "bool", group: "Lessons",
+    label: "Interleave lesson item types", fallback: true,
+    help: "On: mix radicals / kanji / vocabulary. Off: group by type, then level." },
+
+  { key: "reviewSrsIndicator", kind: "bool", group: "Reviews",
+    label: "SRS change indicator during reviews", fallback: true,
+    help: "Show the “you moved to Guru” chip as each item finishes." },
+  { key: "reviewOrdering", kind: "enum", group: "Reviews",
+    label: "Review ordering", fallback: "shuffled",
+    options: [
+      { value: "shuffled", label: "Shuffled" },
+      { value: "apprentice", label: "Apprentice first" },
+      { value: "lowsrs", label: "Lower SRS stages first" },
+      { value: "lowlevel", label: "Lower levels first" } ],
+    help: "Shuffled is best for a queue you clear regularly. The others prioritise what you're likeliest to forget or a backlog." },
+
+  { key: "audioVoice", kind: "enum", group: "Audio",
+    label: "Pronunciation voice", fallback: "random",
+    options: [
+      { value: "random", label: "Random" },
+      { value: "kyoko", label: "Kyoko" },
+      { value: "kenichi", label: "Kenichi" } ],
+    help: "Default voice for vocabulary audio in lessons and reviews." },
+  { key: "autoplayLessons", kind: "bool", group: "Audio",
+    label: "Autoplay audio in lessons", fallback: false },
+  { key: "autoplayReviews", kind: "bool", group: "Audio",
+    label: "Autoplay audio in reviews", fallback: false },
+  { key: "autoplayExtraStudy", kind: "bool", group: "Audio",
+    label: "Autoplay audio in extra study", fallback: false },
+];
+
+function settingGroups() {
+  var seen = [], out = [];
+  for (var i = 0; i < SETTINGS.length; i++)
+    if (seen.indexOf(SETTINGS[i].group) < 0) { seen.push(SETTINGS[i].group); out.push(SETTINGS[i].group); }
+  return out;
+}
+function settingsInGroup(group) {
+  return SETTINGS.filter(function (s) { return s.group === group; });
+}
+function enumLabel(row, value) {
+  var opts = row.options || [];
+  for (var i = 0; i < opts.length; i++) if (opts[i].value === value) return opts[i].label;
+  return String(value);
+}
+function cycleEnum(row, value, dir) {
+  var opts = row.options || [];
+  var idx = 0;
+  for (var i = 0; i < opts.length; i++) if (opts[i].value === value) { idx = i; break; }
+  idx = (idx + dir + opts.length) % opts.length;
+  return opts[idx].value;
+}
+
 // One-line status under the hero. Errors win over notes.
 function statusLine(view) {
   if (!view) return ""

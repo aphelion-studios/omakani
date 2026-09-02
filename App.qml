@@ -161,6 +161,7 @@ Item {
     if (view === "home") homeDefault()
     if (view === "browse") levelBrowser.focusGrid()
     else if (view === "subject") subjectPage.focusPage()
+    else if (view === "settings") settingsPage.focusPage()
     else if (view === "quiz") quizCard.forceActiveFocus()
     else if (view === "session") quizSession.forceActiveFocus()
     else if (view === "review") reviewEngine.forceActiveFocus()
@@ -204,6 +205,8 @@ Item {
   // stack) so it doesn't snap to 1 while you're on a subject page, which would
   // reset the browser's chip cursor
   property int browseLevel: 1
+  function goSettings() { pushPage({ view: "settings" }) }
+
   function goBrowse(level) {
     var n = Math.max(1, Math.min(60, parseInt(String(level), 10) || 1))
     root.browseLevel = n
@@ -658,6 +661,7 @@ Item {
             if (root.view === "review") return "OmaKani  |  Reviews"
             if (root.view === "lesson") return "OmaKani  |  Lessons"
             if (root.view === "session") return "OmaKani  |  " + root.sessionTitle
+            if (root.view === "settings") return "OmaKani  |  Settings"
             return "OmaKani"
           }
           color: Qt.darker(root.fg, 1.6)
@@ -665,14 +669,36 @@ Item {
           font.pixelSize: Style.font.bodySmall
         }
 
-        Text {
+        Row {
           anchors.right: parent.right
           anchors.rightMargin: Style.space(18)
           anchors.verticalCenter: parent.verticalCenter
-          text: "Esc to " + (root.navStack.length > 1 ? "go back" : "close")
-          color: Qt.darker(root.fg, 1.9)
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          spacing: Style.space(14)
+
+          // settings gear -- only from the home screen
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.view === "home"
+            text: "󰒓"
+            color: gearHover.containsMouse ? root.fg : Qt.darker(root.fg, 1.5)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            MouseArea {
+              id: gearHover
+              anchors.fill: parent
+              anchors.margins: -Style.space(6)
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.goSettings()
+            }
+          }
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Esc to " + (root.navStack.length > 1 ? "go back" : "close")
+            color: Qt.darker(root.fg, 1.9)
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
         }
       }
 
@@ -705,6 +731,8 @@ Item {
               root.homeMoveH(-1); e.accepted = true
             } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
               root.homeActivate(); e.accepted = true
+            } else if (e.text === "," || e.text === "s") {
+              root.goSettings(); e.accepted = true
             }
           }
           Keys.onEscapePressed: {
@@ -1012,6 +1040,19 @@ Item {
             if (root.service) root.service.loadBrowse(newLevel)
           }
           onVisibleChanged: if (visible) Qt.callLater(function () { if (levelBrowser.visible) levelBrowser.focusGrid() })
+        }
+
+        // -------------------------------------------------- SETTINGS
+        SettingsPage {
+          id: settingsPage
+          visible: root.view === "settings"
+          anchors.fill: parent
+          service: root.service
+          pageBg: root.bg
+          fg: root.fg
+          fontFamily: root.fontFamily
+          onCloseRequested: root.leave()
+          onVisibleChanged: if (visible) Qt.callLater(function () { if (settingsPage.visible) settingsPage.focusPage() })
         }
 
         // -------------------------------------------------- SUBJECT

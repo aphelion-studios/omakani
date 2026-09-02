@@ -409,11 +409,16 @@ Panel {
       fallback: true },
     { key: "notifyBurns",           kind: "bool", label: "Notify when items burn",
       fallback: true },
-  ]
+  ].concat(Model.SETTINGS)
 
   function settingValue(row) {
-    var v = setting(row.key, row.fallback)
+    // the shared prefs store first (so the floating app and the drop-down
+    // agree), then this widget's own shell.json entry
+    var v = (svc && typeof svc.setting === "function")
+      ? svc.setting(row.key, row.fallback)
+      : setting(row.key, row.fallback)
     if (row.kind === "bool") return v === true || v === "true" || v === 1
+    if (row.kind === "enum") return String(v)
     var n = parseInt(String(v), 10)
     return isFinite(n) ? n : row.fallback
   }
@@ -428,19 +433,29 @@ Panel {
     root.settings = entry
     if (bar && bar.shell && typeof bar.shell.updateEntryInline === "function")
       bar.shell.updateEntryInline(root.moduleName, entry)
+    // also to the shared prefs store so the floating app sees it
+    if (svc && typeof svc.setSetting === "function")
+      for (var pk in values) svc.setSetting(pk, values[pk])
   }
 
   function settingsActivate(index) {
     var row = settingRows[index]
-    if (!row || row.kind !== "bool") return
+    if (!row) return
     var next = {}
-    next[row.key] = !settingValue(row)
+    if (row.kind === "bool") next[row.key] = !settingValue(row)
+    else if (row.kind === "enum") next[row.key] = Model.cycleEnum(row, settingValue(row), 1)
+    else return
     persistSettings(next)
   }
 
   function settingsAdjust(index, dir) {
     var row = settingRows[index]
-    if (!row || row.kind !== "int") return
+    if (!row) return
+    if (row.kind === "enum") {
+      var e = {}; e[row.key] = Model.cycleEnum(row, settingValue(row), dir)
+      persistSettings(e); return
+    }
+    if (row.kind !== "int") return
     var step = row.step || 1
     var v = Math.max(row.from, Math.min(row.to, settingValue(row) + dir * step))
     var next = {}
@@ -1234,10 +1249,25 @@ Panel {
 
           Repeater {
             model: root.settingRows
-            delegate: SettingRow {
+            delegate: Column {
               width: parent.width
-              row: modelData
-              idx: index
+              spacing: Style.space(6)
+              Text {
+                visible: !!modelData.group
+                  && (index === 0 || root.settingRows[index - 1].group !== modelData.group)
+                topPadding: Style.space(6)
+                text: String(modelData.group || "").toUpperCase()
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                font.letterSpacing: 1
+              }
+              SettingRow {
+                width: parent.width
+                row: modelData
+                idx: index
+              }
             }
           }
 
@@ -1350,6 +1380,7 @@ Panel {
     property int idx: 0
     readonly property bool cursored: root.hasCursor("settings", idx)
     readonly property bool isBool: row.kind === "bool"
+    readonly property bool isEnum: row.kind === "enum"
     readonly property var currentValue: root.settingValue(row)
     implicitHeight: Style.space(28)
     onCursoredChanged: if (cursored) root.setCursorItem(sr)
@@ -1357,9 +1388,9 @@ Panel {
     MouseArea {
       anchors.fill: parent
       hoverEnabled: true
-      cursorShape: sr.isBool ? Qt.PointingHandCursor : Qt.ArrowCursor
+      cursorShape: (sr.isBool || sr.isEnum) ? Qt.PointingHandCursor : Qt.ArrowCursor
       onContainsMouseChanged: if (containsMouse) root.setCursor("settings", sr.idx)
-      onClicked: if (sr.isBool) root.settingsActivate(sr.idx)
+      onClicked: if (sr.isBool || sr.isEnum) root.settingsActivate(sr.idx)
     }
 
     Rectangle {
@@ -1408,10 +1439,12 @@ Panel {
         }
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(30)
+          width: sr.isEnum ? Style.space(96) : Style.space(30)
           horizontalAlignment: Text.AlignHCenter
-          text: sr.currentValue === 0 ? "off" : String(sr.currentValue)
-          color: sr.currentValue === 0 ? root.dim : root.foreground
+          elide: Text.ElideRight
+          text: sr.isEnum ? Model.enumLabel(sr.row, sr.currentValue)
+            : sr.currentValue === 0 ? "off" : String(sr.currentValue)
+          color: (!sr.isEnum && sr.currentValue === 0) ? root.dim : root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true
