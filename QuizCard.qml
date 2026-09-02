@@ -72,6 +72,9 @@ FocusScope {
 
   // reviews vs lessons -- kept for anything review-only in the card
   property bool reviewMode: false
+  // Last Answers ( , ) rides along in reviews and in Extra Study -- both keep a
+  // per-session answer log. The primitive lesson quiz leaves it off.
+  property bool showLastAnswers: reviewMode
 
   property alias infoPageItem: infoPage
   readonly property alias fieldText: field.text
@@ -224,13 +227,20 @@ FocusScope {
       service.playAudio(subject.id, "random", playbackReading())
   }
 
+  // hand keyboard focus to whatever is on top: an open panel drives its own
+  // h/j/k/l, otherwise the answer field (during input) or the card itself (so
+  // the settled-phase shortcuts keep working). Closing any panel lands you
+  // back in the answer field.
+  function _refocus() {
+    if (kanaOpen) kanaPanel.forceActiveFocus()
+    else if (lastOpen) lastPanel.forceActiveFocus()
+    else if (infoOpen) infoPage.focusPage()
+    else if (phase === "input") field.forceActiveFocus()
+    else quiz.forceActiveFocus()
+  }
+
   // the Kana Chart buttons -- drop a kana in at the caret, or rub one out.
   // bypasses the romaji->kana onTextChanged pass (the char is already kana).
-  // keep the kana keyboard focused (for its h/j/k/l nav) while it's open;
-  // otherwise a mouse pick should hand focus back to the field
-  function _kanaRefocus() {
-    Qt.callLater(kanaOpen ? kanaPanel.forceActiveFocus : field.forceActiveFocus)
-  }
   function insertKana(s) {
     if (phase !== "input") return
     var p = field.cursorPosition
@@ -239,7 +249,7 @@ FocusScope {
     field.text = t.slice(0, p) + s + t.slice(p)
     field.cursorPosition = p + s.length
     _converting = false
-    _kanaRefocus()
+    Qt.callLater(_refocus)
   }
   function kanaBackspace() {
     if (phase !== "input" || field.cursorPosition <= 0) return
@@ -249,7 +259,7 @@ FocusScope {
     field.text = t.slice(0, p - 1) + t.slice(p)
     field.cursorPosition = p - 1
     _converting = false
-    _kanaRefocus()
+    Qt.callLater(_refocus)
   }
 
   function openInfo(revealAll) {
@@ -258,19 +268,22 @@ FocusScope {
     _infoRevealAll = (revealAll === true)
     infoOpen = true
     infoRequested()
+    Qt.callLater(_refocus)
   }
   function openLast() {
-    if (!reviewMode) return
+    if (!showLastAnswers) return
     infoOpen = false; kanaOpen = false
     lastOpen = true
+    Qt.callLater(_refocus)
   }
   function openKana() {
     infoOpen = false; lastOpen = false
     kanaOpen = true
+    Qt.callLater(_refocus)
   }
   function closeOverlays() {
     infoOpen = false; _infoRevealAll = false; lastOpen = false; kanaOpen = false
-    Qt.callLater(quiz.forceActiveFocus)
+    Qt.callLater(_refocus)
   }
 
   // a focused item still gets key events while hidden -- don't eat keys when
@@ -292,10 +305,13 @@ FocusScope {
     enabled: quiz.visible && quiz.phase !== "input" && !quiz.anyOverlay
     onActivated: quiz.openInfo(false)
   }
+  // E toggles, the way F does: closed -> open expanded, compact (opened with F)
+  // -> expand, already expanded -> close.
   Shortcut {
     sequences: ["e"]
     enabled: quiz.visible && quiz.phase !== "input" && !quiz.lastOpen && !quiz.kanaOpen
-    onActivated: quiz.openInfo(true)
+    onActivated: (quiz.infoOpen && quiz._infoRevealAll)
+      ? quiz.closeOverlays() : quiz.openInfo(true)
   }
   Shortcut {
     sequences: ["j"]
@@ -311,7 +327,7 @@ FocusScope {
   // , -- Last Answers (WK's "Last Session Data")
   Shortcut {
     sequences: [","]
-    enabled: quiz.visible && quiz.reviewMode && !quiz.infoOpen && !quiz.kanaOpen
+    enabled: quiz.visible && quiz.showLastAnswers && !quiz.infoOpen && !quiz.kanaOpen
     onActivated: quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast()
   }
   // ? -- toggle the hotkeys card
@@ -376,6 +392,12 @@ FocusScope {
       Text {
         id: charText
         anchors.horizontalCenter: parent.horizontalCenter
+        // centre the glyph's ink, not its advance box -- lone narrow radicals
+        // (刂 "Knife" etc.) carry lopsided side bearings and drift left
+        anchors.horizontalCenterOffset: charTextM.advanceWidth > 0
+          ? (charTextM.advanceWidth / 2 - charTextM.tightBoundingRect.x
+             - charTextM.tightBoundingRect.width / 2)
+          : 0
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: -Style.space(4)
         text: quiz.d.characters || ""
@@ -385,6 +407,11 @@ FocusScope {
         font.family: quiz.jpFamily
         font.pixelSize: Math.min(header.height * 0.56, Style.font.displayLarge * 3)
         font.weight: Font.Normal
+      }
+      TextMetrics {
+        id: charTextM
+        font: charText.font
+        text: charText.text
       }
     }
 
@@ -403,7 +430,7 @@ FocusScope {
                           + charText.font.pixelSize * 0.46
         var barTop = header.y + header.height
         // +nudge: the midpoint still read a touch high
-        return (glyphBottom + barTop) / 2 - height / 2 + Style.space(3)
+        return (glyphBottom + barTop) / 2 - height / 2 + Style.space(6)
       }
       z: 15
       visible: !!quiz.srsPill && quiz.phase === "correct" && !quiz.anyOverlay
@@ -507,7 +534,7 @@ FocusScope {
           Keys.onPressed: function (e) {
             if (e.key === Qt.Key_Slash && !quiz.infoOpen && !quiz.lastOpen) {
               quiz.kanaOpen ? quiz.closeOverlays() : quiz.openKana(); e.accepted = true
-            } else if (e.key === Qt.Key_Comma && quiz.reviewMode
+            } else if (e.key === Qt.Key_Comma && quiz.showLastAnswers
                        && !quiz.infoOpen && !quiz.kanaOpen) {
               quiz.lastOpen ? quiz.closeOverlays() : quiz.openLast(); e.accepted = true
             } else if (e.key === Qt.Key_Question) {
@@ -647,7 +674,7 @@ FocusScope {
           // website order: wrap · last answers · info · kana · audio
           model: [
             { g: "󰅐", act: "wrap",  show: true,             on: true },
-            { g: "󰄬", act: "last",  show: quiz.reviewMode,   on: quiz.reviewMode },
+            { g: "󰄬", act: "last",  show: quiz.showLastAnswers, on: quiz.showLastAnswers },
             { g: "󰈈", act: "info",  show: true,             on: quiz.phase !== "input" },
             { g: "ひ", act: "kana",  show: true,             on: quiz.phase === "input" },
             // the glyph alone (quiet vs loud speaker) signals playback
@@ -714,6 +741,9 @@ FocusScope {
         id: infoPage
         anchors.fill: parent
         overlayMode: true
+        // the overlay is shorter than a full page -- hand it the quiz header's
+        // exact height so its coloured band lines up with the answer view
+        bandHeight: header.height
         readonly property bool drilled: quiz._infoStack.length > 0
         // the "<Type> <Meaning|Reading>" bar -- only for the item you're on;
         // a drilled linked subject shows plain "<Type>"
@@ -745,6 +775,7 @@ FocusScope {
         onVisibleChanged: if (visible) Qt.callLater(focusPage)
         onNavigate: function (id) { quiz._infoDrill(id) }
         onCloseRequested: quiz._infoBack()
+        onLastAnswersRequested: quiz.openLast()
       }
     }
 
@@ -761,6 +792,7 @@ FocusScope {
       color: quiz.pageBg
       z: 21
       LastAnswers {
+        id: lastPanel
         anchors.fill: parent
         visible: parent.visible
         log: quiz.answerLog
@@ -773,6 +805,7 @@ FocusScope {
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
         onCloseRequested: quiz.closeOverlays()
+        onInfoRequested: quiz.openInfo(false)
       }
     }
 
@@ -843,7 +876,7 @@ FocusScope {
               { k: "J", d: "Audio Pronunciation" },
               { k: "/", d: "Hiragana IME Chart" }
             ]
-            if (quiz.reviewMode) m.push({ k: ",", d: "Last Answers" })
+            if (quiz.showLastAnswers) m.push({ k: ",", d: "Last Answers" })
             m.push({ k: "W", d: "Wrap Up Session" })
             m.push({ k: "↵", d: "Continue" })
             m.push({ k: "?", d: "Toggle this menu" })
@@ -883,6 +916,6 @@ FocusScope {
   }
 
   onInfoOpenChanged: {
-    if (!infoOpen) { _infoStack = []; Qt.callLater(quiz.forceActiveFocus) }
+    if (!infoOpen) { _infoStack = []; Qt.callLater(_refocus) }
   }
 }

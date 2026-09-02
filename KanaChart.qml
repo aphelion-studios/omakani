@@ -8,7 +8,9 @@ import qs.Commons
 // Pointer- or keyboard-driven: while it's open it holds focus, so h / j / k /
 // l move the highlight (l / h at the row edge step tabs), Enter or Space
 // inserts, Backspace deletes, / or Esc closes.
-Item {
+// A FocusScope (not a bare Item) so forceActiveFocus() from the host reliably
+// routes keys here and the answer field lets go of them.
+FocusScope {
   id: kb
 
   property color fg: Color.foreground
@@ -25,9 +27,11 @@ Item {
   property int selCol: 0
 
   function _reset() { tab = 0; selRow = 0; selCol = 0 }
+  function grabKeys() { kb.forceActiveFocus() }
   onVisibleChanged: {
     if (visible) { _reset(); Qt.callLater(kb.forceActiveFocus) }
   }
+  Keys.enabled: kb.visible
 
   readonly property var tabNames: ["あ", "か", "さ", "た", "な", "は", "ま", "ら", "雑"]
 
