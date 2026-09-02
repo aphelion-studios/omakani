@@ -5,9 +5,10 @@ import qs.Commons
 // isn't an option. Tab across あ..ら + 雑; every key drops its kana into the
 // answer field verbatim (no romaji step), Backspace rubs one out.
 //
-// Pointer- or keyboard-driven: while it's open it holds focus, so h / j / k /
-// l move the highlight (l / h at the row edge step tabs), Enter or Space
-// inserts, Backspace deletes, / or Esc closes.
+// Pointer- or keyboard-driven: while it's open it holds focus. In the grid
+// h/j/k/l move the highlight; k off the top row hops up to the tab strip,
+// where h/l switch tab (あ/か/さ/…) and j (or Enter) drops back into the grid.
+// Enter/Space inserts, Backspace deletes, / or Esc closes.
 // A FocusScope (not a bare Item) so forceActiveFocus() from the host reliably
 // routes keys here and the answer field lets go of them.
 FocusScope {
@@ -25,8 +26,11 @@ FocusScope {
   property int tab: 0
   property int selRow: 0
   property int selCol: 0
+  // keyboard focus is on the tab strip (k'd up off the top row) rather than
+  // the kana grid
+  property bool onTabBar: false
 
-  function _reset() { tab = 0; selRow = 0; selCol = 0 }
+  function _reset() { tab = 0; selRow = 0; selCol = 0; onTabBar = false }
   function grabKeys() { kb.forceActiveFocus() }
   onVisibleChanged: {
     if (visible) { _reset(); Qt.callLater(kb.forceActiveFocus) }
@@ -82,19 +86,37 @@ FocusScope {
   implicitHeight: panel.implicitHeight
 
   Keys.onPressed: function (e) {
-    if (e.key === Qt.Key_Escape || e.key === Qt.Key_Slash) { kb.closeRequested(); e.accepted = true }
-    else if (e.key === Qt.Key_Backspace) { kb.backspacePressed(); e.accepted = true }
-    else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Space) { kb._pick(); e.accepted = true }
+    if (e.key === Qt.Key_Escape || e.key === Qt.Key_Slash) {
+      kb.closeRequested(); e.accepted = true; return
+    }
+    if (e.key === Qt.Key_Backspace) { kb.backspacePressed(); e.accepted = true; return }
+
+    if (kb.onTabBar) {
+      if (e.text === "h" || e.key === Qt.Key_Left) { kb._setTab(kb.tab - 1) }
+      else if (e.text === "l" || e.key === Qt.Key_Right) { kb._setTab(kb.tab + 1) }
+      else if (e.text === "j" || e.key === Qt.Key_Down
+               || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+        kb.onTabBar = false
+      }
+      e.accepted = true
+      return
+    }
+
+    if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Space) {
+      kb._pick(); e.accepted = true
+    }
     else if (e.text === "j" || e.key === Qt.Key_Down) { kb.selRow += 1; kb._clampSel(); e.accepted = true }
-    else if (e.text === "k" || e.key === Qt.Key_Up) { kb.selRow -= 1; kb._clampSel(); e.accepted = true }
+    else if (e.text === "k" || e.key === Qt.Key_Up) {
+      if (kb.selRow > 0) { kb.selRow -= 1; kb._clampSel() }
+      else kb.onTabBar = true          // up off the top row -> the tab strip
+      e.accepted = true
+    }
     else if (e.text === "l" || e.key === Qt.Key_Right) {
       if (kb.selCol < kb._rowLen(kb.selRow) - 1) kb.selCol += 1
-      else kb._setTab(kb.tab + 1)
       e.accepted = true
     }
     else if (e.text === "h" || e.key === Qt.Key_Left) {
       if (kb.selCol > 0) kb.selCol -= 1
-      else { kb._setTab(kb.tab - 1); kb.selCol = kb._rowLen(kb.selRow) - 1 }
       e.accepted = true
     }
     else { e.accepted = true }   // don't leak keys back to the field
@@ -126,6 +148,16 @@ FocusScope {
           width: (tabRow.width - Style.space(96)) / kb.tabNames.length
           height: tabRow.height
           readonly property bool sel: index === kb.tab
+          // keyboard ring: the active tab while focus is on the strip
+          Rectangle {
+            anchors.fill: parent
+            anchors.margins: Style.space(2)
+            radius: Style.space(4)
+            color: "transparent"
+            border.width: 2
+            border.color: kb.fg
+            visible: parent.sel && kb.onTabBar
+          }
           Text {
             anchors.centerIn: parent
             text: modelData
@@ -140,7 +172,7 @@ FocusScope {
             width: parent.width - Style.space(10)
             height: 2
             radius: 1
-            visible: parent.sel
+            visible: parent.sel && !kb.onTabBar
             color: kb.fg
           }
           MouseArea {
@@ -198,7 +230,8 @@ FocusScope {
             delegate: Rectangle {
               readonly property int myRow: parent.rowIndex
               readonly property int myCol: index
-              readonly property bool sel: kb.selRow === myRow && kb.selCol === myCol
+              readonly property bool sel: !kb.onTabBar
+                && kb.selRow === myRow && kb.selCol === myCol
               width: Style.space(84)
               height: Style.space(50)
               radius: Style.space(5)
