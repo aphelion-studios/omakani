@@ -32,10 +32,14 @@ FocusScope {
   // horizontal padding inside a card, and the gap between the coloured header
   // and the first guess line / the last line and the SRS band
   readonly property real cardPad: Style.space(11)
-  // one vertical rhythm: the gap between guess lines, AND the top/bottom
-  // padding inside the coloured header band and the SRS band (around the
-  // character / the ↑ chip)
-  readonly property real bandPad: Style.space(4)
+  // gap between guess lines
+  readonly property real lineGap: Style.space(4)
+  // top / bottom padding inside the coloured header + SRS bands -- around the
+  // ink of the character / the ↑ chip. Bigger than lineGap because the guess
+  // lines carry the font's own leading on top of their spacing; this is tuned
+  // so the space around the header character *reads* like the gap between the
+  // guess lines.
+  readonly property real bandPad: Style.space(9)
 
   signal closeRequested()
   // f jumps straight to item info (the panels swap, like the website)
@@ -244,7 +248,7 @@ FocusScope {
             id: bodyCol
             x: card.pad
             y: cardHead.height + card.pad
-            spacing: panel.bandPad
+            spacing: panel.lineGap
 
             // every meaning guess, in the order they were typed
             Repeater {

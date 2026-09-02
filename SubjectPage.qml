@@ -459,9 +459,11 @@ FocusScope {
         Column {
           id: header
           anchors.centerIn: parent
-          anchors.verticalCenterOffset: -Style.space(4)
+          anchors.verticalCenterOffset: page.overlayMode
+            ? -Style.space(4) : -Style.space(6)
           width: parent.width - Style.space(64)
-          spacing: Style.space(8)
+          // browse: sit the character close to the lock pill below it
+          spacing: page.showLockState ? Style.space(4) : Style.space(8)
 
           Text {
             id: headerChar
@@ -480,6 +482,9 @@ FocusScope {
             font.family: page.jpFamily
             font.pixelSize: Math.min(page._bandH * 0.56, Style.font.displayLarge * 3)
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
+            // browse: trim the line box so the character sits low in the band,
+            // close to the lock pill under it
+            lineHeight: page.showLockState ? 0.68 : 1.0
           }
           TextMetrics {
             id: headerCharM
@@ -487,48 +492,18 @@ FocusScope {
             text: headerChar.text
           }
 
-          // locked / unlocked (browse only) -- solid outline for UNLOCKED,
-          // dashed for LOCKED, the website's tile-border convention
-          Item {
+          // locked / unlocked (browse only) -- a rounded-rectangle chip, same
+          // shape language as the SRS chips and the cards elsewhere
+          Rectangle {
             visible: page.showLockState
             anchors.horizontalCenter: parent.horizontalCenter
-            width: lockLbl.implicitWidth + Style.space(18)
+            width: lockLbl.implicitWidth + Style.space(16)
             height: lockLbl.implicitHeight + Style.space(8)
-
-            Canvas {
-              id: lockBorder
-              anchors.fill: parent
-              onPaint: {
-                var ctx = getContext("2d")
-                ctx.reset()
-                var inset = 1
-                var x = inset, y = inset
-                var w = width - 2 * inset, h = height - 2 * inset
-                var r = h / 2
-                ctx.beginPath()
-                ctx.moveTo(x + r, y)
-                ctx.arcTo(x + w, y, x + w, y + h, r)
-                ctx.arcTo(x + w, y + h, x, y + h, r)
-                ctx.arcTo(x, y + h, x, y, r)
-                ctx.arcTo(x, y, x + w, y, r)
-                ctx.closePath()
-                if (!page.itemLocked) {
-                  ctx.fillStyle = Qt.rgba(1, 1, 1, 0.16)
-                  ctx.fill()
-                }
-                ctx.lineWidth = 1.5
-                ctx.strokeStyle = "#fcfdfd"
-                ctx.setLineDash(page.itemLocked ? [4, 3] : [])
-                ctx.stroke()
-              }
-              Component.onCompleted: requestPaint()
-              onWidthChanged: requestPaint()
-              onHeightChanged: requestPaint()
-              Connections {
-                target: page
-                function onItemLockedChanged() { lockBorder.requestPaint() }
-              }
-            }
+            radius: Style.space(4)
+            color: page.itemLocked
+              ? Qt.rgba(1, 1, 1, 0.06) : Qt.rgba(1, 1, 1, 0.2)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, page.itemLocked ? 0.35 : 0.0)
             Text {
               id: lockLbl
               anchors.centerIn: parent
