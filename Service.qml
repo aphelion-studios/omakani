@@ -128,9 +128,38 @@ Item {
 
   signal tokenRejected(string message)
 
+  // Client-side preferences, loaded from the helper (config/wanikani.json ->
+  // "prefs") so the dashboard drop-down and the floating app share one store.
+  // `settings` (pushed by the bar widget) is the legacy fallback.
+  property var prefs: ({})
+  readonly property bool prefsLoaded: prefsProcess._loaded
+
   function setting(name, fallback) {
-    var value = settings ? settings[name] : undefined
+    var value = prefs ? prefs[name] : undefined
+    if (value === undefined || value === null)
+      value = settings ? settings[name] : undefined
     return value === undefined || value === null ? fallback : value
+  }
+
+  // Write one preference: update locally for an instant redraw, then persist
+  // via the helper (serialised, latest-write-wins per key).
+  property var _prefWriteQueue: []
+  function setSetting(name, value) {
+    var p = {}
+    for (var k in prefs) p[k] = prefs[k]
+    p[name] = value
+    prefs = p
+    var q = _prefWriteQueue.slice()
+    q.push({ key: name, value: value })
+    _prefWriteQueue = q
+    _drainPrefWrites()
+  }
+  function _drainPrefWrites() {
+    if (!ready || prefWriteProcess.running || _prefWriteQueue.length === 0) return
+    var job = _prefWriteQueue[0]
+    prefWriteProcess.command = ["python3", helperPath, "set-pref",
+      String(job.key), JSON.stringify(job.value)]
+    prefWriteProcess.running = true
   }
 
   function intSetting(name, fallback, min, max) {
@@ -286,8 +315,10 @@ Item {
     var n = parseInt(String(id), 10)
     if (!ready || audioProcess.running || !isFinite(n)) return
     audioError = ""
+    // "" / "random" -> the configured default voice
+    var v = (!voice || voice === "random") ? setting("audioVoice", "random") : voice
     var cmd = ["python3", helperPath, "audio", String(n)]
-    if (voice && voice !== "") cmd.push("--voice", String(voice))
+    if (v && v !== "" && v !== "random") cmd.push("--voice", String(v))
     if (reading && String(reading) !== "") cmd.push("--reading", String(reading))
     audioProcess.command = cmd
     audioProcess.running = true
@@ -760,6 +791,36 @@ Item {
       var payload = root.apply(tokenOut.text)
       if (mode === "set" && (payload.ok === false || payload.configured !== true))
         root.tokenRejected(String(payload.error || "WaniKani rejected the API token"))
+    }
+  }
+
+  // client-side preferences: loaded once at startup, refreshed after a write
+  Process {
+    id: prefsProcess
+    property bool _loaded: false
+    running: root.ready
+    command: root.ready ? ["python3", root.helperPath, "prefs"] : []
+    stdout: StdioCollector { id: prefsOut; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) return
+      var payload = Model.parsePayload(prefsOut.text)
+      if (payload && payload.prefs) { root.prefs = payload.prefs; prefsProcess._loaded = true }
+    }
+  }
+
+  Process {
+    id: prefWriteProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: prefWriteOut; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        var payload = Model.parsePayload(prefWriteOut.text)
+        if (payload && payload.prefs) root.prefs = payload.prefs
+      }
+      if (root._prefWriteQueue.length > 0)
+        root._prefWriteQueue = root._prefWriteQueue.slice(1)
+      root._drainPrefWrites()
     }
   }
 }

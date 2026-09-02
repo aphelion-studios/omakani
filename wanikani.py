@@ -33,6 +33,7 @@ import http.client
 import json
 import math
 import os
+import random
 import re
 import socket
 import ssl
@@ -881,6 +882,54 @@ def cmd_clear_token(args):
     return unconfigured("API token removed")
 
 
+# --------------------------------------------------------------- preferences
+# Client-side settings (batch size, autoplay, review ordering, ...). Kept in
+# the same config file as the token, under "prefs", so the dashboard drop-down
+# and the floating app share one store. The shell reads the whole object once
+# and writes single keys.
+
+_PREF_DEFAULTS = {
+    "lessonBatchSize": 5,
+    "lessonDailyMax": 15,
+    "lessonInterleave": True,
+    "reviewSrsIndicator": True,
+    "reviewOrdering": "shuffled",   # shuffled | apprentice | lowsrs | lowlevel
+    "audioVoice": "random",         # random | kyoko | kenichi
+    "autoplayLessons": False,
+    "autoplayReviews": False,
+    "autoplayExtraStudy": False,
+}
+
+
+def load_prefs():
+    prefs = dict(_PREF_DEFAULTS)
+    stored = load_config().get("prefs")
+    if isinstance(stored, dict):
+        prefs.update(stored)
+    return prefs
+
+
+def cmd_prefs(args):
+    return {"ok": True, "configured": True, "error": "", "prefs": load_prefs()}
+
+
+def cmd_set_pref(args):
+    key = str(args.key)
+    raw = args.value
+    try:
+        value = json.loads(raw)
+    except (ValueError, TypeError):
+        value = raw
+    config = load_config()
+    prefs = config.get("prefs")
+    if not isinstance(prefs, dict):
+        prefs = {}
+    prefs[key] = value
+    config["prefs"] = prefs
+    save_config(config)
+    return {"ok": True, "configured": True, "error": "", "prefs": load_prefs()}
+
+
 def cmd_browse(args):
     """Every subject on one level, from the slim cache -- id, characters,
     primary meaning, ordered radicals -> kanji -> vocabulary, each tagged
@@ -1544,10 +1593,44 @@ def cmd_detail(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def _review_order(api, ids, mode):
+    """Sort due review ids per the `reviewOrdering` setting. "shuffled" is a
+    plain shuffle; the others need the assignment SRS stage / subject level, so
+    they fall back to shuffled when those aren't available."""
+    if mode == "shuffled" or mode not in ("apprentice", "lowsrs", "lowlevel"):
+        rows = list(ids)
+        random.shuffle(rows)
+        return rows
+    stage_by, level_by = {}, {}
+    try:
+        assignments, _ = sync_collection(api, "assignments", "/assignments")
+        for a in assignments.values():
+            d = data_of(a)
+            stage_by[d.get("subject_id")] = d.get("srs_stage") or 0
+    except (ApiError, OSError):
+        pass
+    if mode == "lowlevel":
+        try:
+            subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
+            for sid in ids:
+                level_by[sid] = (data_of(subjects.get(sid)) or {}).get("level") or 0
+        except (ApiError, OSError):
+            pass
+    rows = list(ids)
+    random.shuffle(rows)   # tie-break randomly within a group
+    if mode == "apprentice":
+        rows.sort(key=lambda i: 0 if 1 <= stage_by.get(i, 0) <= 4 else 1)
+    elif mode == "lowsrs":
+        rows.sort(key=lambda i: stage_by.get(i, 0))
+    else:  # lowlevel
+        rows.sort(key=lambda i: level_by.get(i, 0))
+    return rows
+
+
 def cmd_reviews(args):
-    """The subject ids that are due for review right now, in queue order.
-    The app pulls the detail it needs and runs the session; each finished
-    item is sent back through `submit-review`."""
+    """The subject ids that are due for review right now, ordered per the
+    `reviewOrdering` setting. The app pulls the detail it needs and runs the
+    session; each finished item is sent back through `submit-review`."""
     config = load_config()
     token = api_token(config)
     if not token:
@@ -1561,6 +1644,7 @@ def cmd_reviews(args):
         if at is None or at <= now:
             ids.extend(bucket.get("subject_ids") or [])
     ids = list(dict.fromkeys(ids))
+    ids = _review_order(api, ids, load_prefs().get("reviewOrdering", "shuffled"))
     return {"ok": True, "configured": True, "error": "",
             "subjectIds": ids, "count": len(ids),
             "requests": api.requests, "fetchedAt": iso(now_utc())}
@@ -1630,14 +1714,52 @@ def cmd_submit_review(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+_TYPE_ORDER = {"radical": 0, "kanji": 1, "vocabulary": 2, "kana_vocabulary": 2}
+
+
+def _lesson_order(subjects, ids, interleave):
+    """Order the lesson ids the way the website does: by level, then subject
+    type. With interleave on, round-robin the types within each level so a
+    batch mixes radicals / kanji / vocab."""
+    def keyed(i):
+        d = data_of(subjects.get(i))
+        obj = str((subjects.get(i) or {}).get("object") or "")
+        return (d.get("level") or 0, _TYPE_ORDER.get(obj, 3), i)
+    ordered = sorted(ids, key=keyed)
+    if not interleave:
+        return ordered
+    out, i = [], 0
+    by_level = {}
+    for sid in ordered:
+        lvl = (data_of(subjects.get(sid)) or {}).get("level") or 0
+        by_level.setdefault(lvl, []).append(sid)
+    for lvl in sorted(by_level):
+        rows = by_level[lvl]
+        buckets = {}
+        for sid in rows:
+            obj = str((subjects.get(sid) or {}).get("object") or "")
+            buckets.setdefault(_TYPE_ORDER.get(obj, 3), []).append(sid)
+        while any(buckets.values()):
+            for t in sorted(buckets):
+                if buckets[t]:
+                    out.append(buckets[t].pop(0))
+    return out
+
+
+def _today_iso():
+    return local_now().date().isoformat()
+
+
 def cmd_lessons(args):
-    """The subject ids waiting in the lesson queue, capped to --batch (the
-    website's default is 5). The app pulls detail, walks the info cards and
-    the quiz, then starts each subject through `start-lesson`."""
+    """The subject ids waiting in the lesson queue, ordered like the website
+    and trimmed to what's left under the daily maximum, then capped to --batch.
+    The app pulls detail, walks the info cards and the quiz, then starts each
+    subject through `start-lesson`."""
     config = load_config()
     token = api_token(config)
     if not token:
         return unconfigured()
+    prefs = load_prefs()
     api = Api(token)
     summary = data_of(api.get("/summary"))
     now = now_utc()
@@ -1647,12 +1769,25 @@ def cmd_lessons(args):
         if at is None or at <= now:
             ids.extend(bucket.get("subject_ids") or [])
     ids = list(dict.fromkeys(ids))
-    total = len(ids)
+    queue_total = len(ids)
+
+    subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
+    ids = _lesson_order(subjects, ids, prefs.get("lessonInterleave", True))
+
+    # daily maximum: how many new lessons already started today (0 = no cap)
+    day = config.get("prefs", {}).get("_lessonDay") or {}
+    done_today = day.get("n", 0) if day.get("date") == _today_iso() else 0
+    daily_max = int(prefs.get("lessonDailyMax") or 0)
+    remaining = max(0, daily_max - done_today) if daily_max > 0 else queue_total
+    total = min(queue_total, remaining)
+    ids = ids[:total]
+
     batch = getattr(args, "batch", 0) or 0
     if batch > 0:
         ids = ids[:batch]
     return {"ok": True, "configured": True, "error": "",
             "subjectIds": ids, "count": len(ids), "total": total,
+            "queueTotal": queue_total, "dailyDone": done_today, "dailyMax": daily_max,
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
@@ -1716,6 +1851,14 @@ def cmd_start_lesson(args):
             return payload
         raise
     assignment = data_of(result.get("data"))
+    # bump today's started-lessons tally, for the daily-maximum cap
+    fresh = load_config()
+    fresh_prefs = fresh.get("prefs") if isinstance(fresh.get("prefs"), dict) else {}
+    day = fresh_prefs.get("_lessonDay") or {}
+    n = (day.get("n", 0) if day.get("date") == _today_iso() else 0) + 1
+    fresh_prefs["_lessonDay"] = {"date": _today_iso(), "n": n}
+    fresh["prefs"] = fresh_prefs
+    save_config(fresh)
     return {"ok": True, "configured": True, "error": "", "dryRun": False,
             "subjectId": subject_id, "assignmentId": assignment_id,
             "srsStage": assignment.get("srs_stage"),
@@ -1788,6 +1931,14 @@ def build_parser():
 
     clear_token = commands.add_parser("clear-token", help="forget the stored API token")
     clear_token.set_defaults(handler=cmd_clear_token)
+
+    prefs_p = commands.add_parser("prefs", help="dump client-side settings")
+    prefs_p.set_defaults(handler=cmd_prefs)
+
+    set_pref = commands.add_parser("set-pref", help="write one client-side setting (value is JSON)")
+    set_pref.add_argument("key")
+    set_pref.add_argument("value")
+    set_pref.set_defaults(handler=cmd_set_pref)
 
     radical_images = commands.add_parser(
         "radical-images",
