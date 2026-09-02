@@ -157,18 +157,22 @@ FocusScope {
   // --- Last Answers log ---------------------------------------------------
   // one card per subject the moment its first answer lands; every guess is
   // appended (meaning list, then reading list); the SRS chip is stamped on
-  // once the subject is done. Newest-touched subject first. Cleared by begin().
+  // once the subject is done. Whatever you just answered rides at the front,
+  // so the item you come back around to jumps back to card #1. Cleared by
+  // begin().
   function _logTouch(id, needsR, type, guess) {
     var log = engine.answerLog.slice()
     var e = null
-    for (var i = 0; i < log.length; i++) if (log[i].id === id) { e = log[i]; break }
+    for (var i = 0; i < log.length; i++) {
+      if (log[i].id === id) { e = log.splice(i, 1)[0]; break }
+    }
     if (!e) {
       e = { id: id, needsR: needsR === true, mGuesses: [], rGuesses: [],
             done: false, pass: true, up: true, stageName: "" }
-      log.unshift(e)
     }
     if (type === "meaning") e.mGuesses = e.mGuesses.concat([guess])
     else e.rGuesses = e.rGuesses.concat([guess])
+    log.unshift(e)
     engine.answerLog = log
   }
   function _logFinish(id, misses, ns, cur) {
