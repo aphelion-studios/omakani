@@ -46,6 +46,8 @@ FocusScope {
   // uncollapsed, no lock pill. "" -> the normal all-sections page.
   property string soloSection: ""
   readonly property bool soloMode: soloSection !== ""
+  // in a lesson, j plays the audio (there's no vim-style nav to lose)
+  property bool lessonMode: false
 
   // in a review overlay the host passes the quiz header's exact pixel height so
   // the info band lines up with the answer view (the overlay is shorter than a
@@ -400,10 +402,13 @@ FocusScope {
         e.accepted = true
         return
       }
-      // SHIFT+J plays the pronunciation on the browse page (plain j scrolls /
-      // moves the ring there, so it can't double as audio like it does in a
-      // review overlay)
-      if (!page.overlayMode && e.key === Qt.Key_J && (e.modifiers & Qt.ShiftModifier)) {
+      // audio: in a lesson plain j plays it (no vim nav to lose); on the
+      // browse page it's SHIFT+J (j scrolls / moves the ring there)
+      if (page.lessonMode && (e.text === "j" || e.text === "J") && page.hasAudio) {
+        page.playAudio("random"); e.accepted = true; return
+      }
+      if (!page.overlayMode && !page.lessonMode
+          && e.key === Qt.Key_J && (e.modifiers & Qt.ShiftModifier)) {
         page.playAudio("random"); e.accepted = true; return
       }
       // j/k move the section ring, Enter toggles a fold (or opens the
@@ -813,7 +818,8 @@ FocusScope {
                 // the key hint only on the browse page -- in a review overlay
                 // audio is on the J shortcut and j navigates the open panel
                 visible: hasErr || !page.overlayMode
-                text: hasErr ? page.service.audioError : "or press  SHIFT+J"
+                text: hasErr ? page.service.audioError
+                  : page.lessonMode ? "or press  j" : "or press  SHIFT+J"
                 color: page.faint
                 font.family: page.fontFamily
                 font.pixelSize: Style.font.caption

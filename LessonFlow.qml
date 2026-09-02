@@ -46,14 +46,27 @@ FocusScope {
     ? service.subjectDetail(ids[infoIndex]) : null
   readonly property string infoKind: infoSubject ? String(infoSubject.object || "") : ""
 
-  // the learn pages for a subject, mirroring wanikani.com's lesson walk
-  function pagesFor(kind) {
+  // the learn pages for a subject, mirroring wanikani.com's lesson walk --
+  // only the sections that subject actually has content for
+  function pagesFor(subjectId) {
+    var s = service ? service.subjectDetail(subjectId) : null
+    if (!s) return ["meaning"]
+    var kind = String(s.object || "")
+    var d = s.data || ({})
+    var hasComp = (d.component_subject_ids || []).length > 0
+    var hasContext = (d.context_sentences || []).length > 0
     if (kind === "radical") return ["meaning"]
-    if (kind === "kanji") return ["composition", "meaning", "reading"]
-    return ["meaning", "reading", "context"]   // vocabulary
+    if (kind === "kanji")
+      return (hasComp ? ["composition"] : []).concat(["meaning", "reading"])
+    // vocabulary / kana_vocabulary
+    var p = hasComp ? ["composition"] : []
+    p = p.concat(["meaning", "reading"])
+    if (hasContext) p.push("context")
+    return p
   }
-  readonly property var currentPages: pagesFor(infoKind)
-  readonly property string soloSection: (phase === "info" && pageIndex < currentPages.length)
+  readonly property var currentPages: (phase === "info" && infoIndex < ids.length)
+    ? pagesFor(ids[infoIndex]) : ["meaning"]
+  readonly property string soloSection: (pageIndex < currentPages.length)
     ? currentPages[pageIndex] : "meaning"
 
   readonly property int moreWaiting: Math.max(0, batchTotal - doneIds.length)
@@ -109,6 +122,15 @@ FocusScope {
   function checkReady() {
     if (phase !== "loading" || !service || ids.length === 0) return
     if (ids.every(function (x) { return !!service.subjectDetail(x) })) {
+      // the Kanji Composition page needs the component subjects too
+      var comp = []
+      for (var i = 0; i < ids.length; i++) {
+        var d = (service.subjectDetail(ids[i]) || {}).data || {}
+        var c = d.component_subject_ids || []
+        for (var j = 0; j < c.length; j++)
+          if (comp.indexOf(c[j]) < 0 && !service.subjectDetail(c[j])) comp.push(c[j])
+      }
+      if (comp.length > 0) service.loadDetail(comp)
       // returning from a continue goes straight into the learn walk
       phase = doneIds.length > 0 ? "info" : "ready"
       if (phase === "info")
@@ -135,7 +157,7 @@ FocusScope {
     if (pageIndex > 0) { pageIndex -= 1; return }
     if (infoIndex > 0) {
       infoIndex -= 1
-      pageIndex = pagesFor(String((service.subjectDetail(ids[infoIndex]) || {}).object || "")).length - 1
+      pageIndex = Math.max(0, pagesFor(ids[infoIndex]).length - 1)
     }
   }
 
@@ -215,11 +237,14 @@ FocusScope {
       else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { startInfo(); e.accepted = true }
       else if (e.key === Qt.Key_Escape) { flow.exit(); e.accepted = true }
     } else if (phase === "info") {
-      if (e.text === "l" || e.key === Qt.Key_Right || e.key === Qt.Key_Return
-          || e.key === Qt.Key_Enter || e.key === Qt.Key_Space) { infoNext(); e.accepted = true }
+      if (e.text === "?") { learnHotkeys.toggle(); e.accepted = true }
+      else if (e.key === Qt.Key_Escape && learnHotkeys.open) { learnHotkeys.close(); e.accepted = true }
+      else if (e.text === "l" || e.key === Qt.Key_Right || e.key === Qt.Key_Return
+          || e.key === Qt.Key_Enter) { infoNext(); e.accepted = true }
       else if (e.text === "h" || e.key === Qt.Key_Left) { infoPrev(); e.accepted = true }
       else if (e.key === Qt.Key_Escape) { flow.exit(); e.accepted = true }
-      else if (e.text === "j" || e.text === "k" || e.text === "p" || e.text === "g" || e.text === "G") {
+      else if (e.text === "j" || e.text === "k" || e.text === "d" || e.text === "u"
+               || e.text === "g" || e.text === "G" || e.key === Qt.Key_Space) {
         // let the info page handle scroll / audio
       }
     } else if (phase === "batch") {
@@ -357,10 +382,11 @@ FocusScope {
     SubjectPage {
       id: infoPage
       anchors.fill: parent
-      anchors.topMargin: Style.space(38)
+      anchors.bottomMargin: Style.space(60)   // room for the lesson chips
       subject: flow.infoSubject
       service: flow.service
       soloSection: flow.soloSection
+      lessonMode: true
       pageBg: flow.pageBg
       fg: flow.fg
       fontFamily: flow.fontFamily
@@ -371,92 +397,102 @@ FocusScope {
       onNavigate: function (id) { /* linked chips are inert during a lesson */ }
     }
 
-    // top strip: per-subject progress dots + a "which item" counter
-    Rectangle {
-      anchors.top: parent.top
-      anchors.left: parent.left
-      anchors.right: parent.right
-      height: Style.space(38)
-      color: flow.pageBg
-      z: 10
-
-      Text {
-        anchors.left: parent.left
-        anchors.leftMargin: Style.space(16)
+    // ‹ / › at the left / right edges, vertically centred (the website's shape)
+    Repeater {
+      model: [{ g: "‹", prev: true }, { g: "›", prev: false }]
+      delegate: Rectangle {
         anchors.verticalCenter: parent.verticalCenter
-        text: "Lesson " + (flow.infoIndex + 1) + " / " + flow.ids.length
-        color: Qt.darker(flow.fg, 1.4)
-        font.family: flow.fontFamily
-        font.pixelSize: Style.font.caption
-        font.bold: true
-      }
-
-      // page dots for the current subject
-      Row {
-        anchors.centerIn: parent
-        spacing: Style.space(6)
-        Repeater {
-          model: flow.currentPages.length
-          delegate: Rectangle {
-            width: index === flow.pageIndex ? Style.space(16) : Style.space(6)
-            height: Style.space(6)
-            radius: height / 2
-            color: index === flow.pageIndex ? flow.fg
-              : Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.25)
-            Behavior on width { NumberAnimation { duration: 120 } }
-          }
+        anchors.left: modelData.prev ? parent.left : undefined
+        anchors.right: modelData.prev ? undefined : parent.right
+        anchors.leftMargin: Style.space(10)
+        anchors.rightMargin: Style.space(10)
+        width: Style.space(42); height: Style.space(60); radius: Style.space(8)
+        z: 10
+        readonly property bool off: modelData.prev
+          && flow.infoIndex === 0 && flow.pageIndex === 0
+        color: navHover.containsMouse && !off
+          ? Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.14)
+          : Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.05)
+        border.width: 1
+        border.color: Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.14)
+        opacity: off ? 0.3 : 1
+        Text {
+          anchors.centerIn: parent
+          text: modelData.g
+          color: flow.fg
+          font.family: flow.fontFamily
+          font.pixelSize: Style.font.heading
         }
-      }
-
-      Text {
-        anchors.right: parent.right
-        anchors.rightMargin: Style.space(16)
-        anchors.verticalCenter: parent.verticalCenter
-        readonly property bool lastPage: flow.pageIndex + 1 >= flow.currentPages.length
-        readonly property bool lastItem: flow.infoIndex + 1 >= flow.ids.length
-        text: "‹ ›  move   ·   " + ((lastPage && lastItem) ? "→  start quiz" : "→  next")
-        color: Qt.darker(flow.fg, 1.6)
-        font.family: flow.fontFamily
-        font.pixelSize: Style.font.caption
+        MouseArea {
+          id: navHover
+          anchors.fill: parent
+          hoverEnabled: true
+          enabled: !parent.off
+          cursorShape: Qt.PointingHandCursor
+          onClicked: modelData.prev ? flow.infoPrev() : flow.infoNext()
+        }
       }
     }
 
-    // ‹ / › page buttons, bottom-centre
-    Row {
+    // lesson chips, bottom-centre -- one per subject in the batch; current is
+    // filled, the rest dimmed. Click to jump.
+    Flow {
       anchors.bottom: parent.bottom
-      anchors.bottomMargin: Style.space(20)
+      anchors.bottomMargin: Style.space(16)
       anchors.horizontalCenter: parent.horizontalCenter
-      spacing: Style.space(16)
+      width: Math.min(parent.width - Style.space(140), Style.space(760))
+      spacing: Style.space(6)
       z: 10
       Repeater {
-        model: [{ g: "‹", act: "prev" }, { g: "›", act: "next" }]
+        model: flow.ids
         delegate: Rectangle {
-          width: Style.space(46); height: Style.space(36); radius: Style.space(6)
-          readonly property bool disabled: modelData.act === "prev"
-            && flow.infoIndex === 0 && flow.pageIndex === 0
-          color: nHover.containsMouse && !disabled
-            ? Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.16)
-            : Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.08)
-          border.width: 1
-          border.color: Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.2)
-          opacity: disabled ? 0.35 : 1
+          readonly property var s: flow.service ? flow.service.subjectDetail(modelData) : null
+          readonly property string obj: s ? String(s.object || "") : ""
+          readonly property string ch: (s && s.data)
+            ? String(s.data.characters || "") : ""
+          readonly property bool cur: index === flow.infoIndex
+          readonly property color tint: obj === "radical" ? flow.radicalColor
+            : obj === "kanji" ? flow.kanjiColor : flow.vocabColor
+          width: chipLbl.implicitWidth + Style.space(16)
+          height: Style.space(28)
+          radius: Style.space(5)
+          color: cur ? tint : Qt.rgba(tint.r, tint.g, tint.b, 0.16)
+          opacity: cur ? 1 : 0.6
+          Behavior on opacity { NumberAnimation { duration: 120 } }
           Text {
+            id: chipLbl
             anchors.centerIn: parent
-            text: modelData.g
-            color: flow.fg
-            font.family: flow.fontFamily
-            font.pixelSize: Style.font.heading
+            text: ch !== "" ? ch
+              : ((s && s.data && s.data.meanings && s.data.meanings[0])
+                 ? s.data.meanings[0].meaning : "…")
+            color: cur ? "#fcfdfd" : tint
+            font.family: ch !== "" ? flow.jpFamily : flow.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
           }
           MouseArea {
-            id: nHover
             anchors.fill: parent
-            hoverEnabled: true
-            enabled: !parent.disabled
             cursorShape: Qt.PointingHandCursor
-            onClicked: modelData.act === "prev" ? flow.infoPrev() : flow.infoNext()
+            onClicked: { flow.infoIndex = index; flow.pageIndex = 0 }
           }
         }
       }
+    }
+
+    HotkeysOverlay {
+      id: learnHotkeys
+      anchors.fill: parent
+      fg: flow.fg
+      pageBg: flow.pageBg
+      fontFamily: flow.fontFamily
+      title: "Lesson keys"
+      rows: [
+        { k: "→", d: "Next page / item" },
+        { k: "←", d: "Previous" },
+        { k: "j", d: "Audio Pronunciation" },
+        { k: "⌂", d: "Back to menu" },
+        { k: "?", d: "Toggle this menu" }
+      ]
     }
   }
 
