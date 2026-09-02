@@ -34,6 +34,8 @@ FocusScope {
   readonly property real cardPad: Style.space(11)
 
   signal closeRequested()
+  // f jumps straight to item info (the panels swap, like the website)
+  signal infoRequested()
 
   // one ✓/✗ line inside a card (meaning, then reading). Sizes to its content
   // so the card can measure its widest row.
@@ -84,8 +86,10 @@ FocusScope {
   Keys.enabled: panel.visible
   Keys.onPressed: function (e) {
     var step = Style.space(90)
-    if (e.key === Qt.Key_Escape || e.text === "f") {
+    if (e.key === Qt.Key_Escape) {
       panel.closeRequested(); e.accepted = true
+    } else if (e.text === "f") {
+      panel.infoRequested(); e.accepted = true
     } else if (e.key === Qt.Key_Down || e.text === "j") {
       flick.contentY = Math.min(Math.max(0, flick.contentHeight - flick.height), flick.contentY + step)
       e.accepted = true
@@ -142,12 +146,18 @@ FocusScope {
           readonly property var rGuesses: row.rGuesses || []
           readonly property string chars: panel.charsOf(row.id)
           readonly property bool showChip: row.done === true
+          // Extra Study never moves SRS -- the footer just names the current
+          // stage, no ↑ / ↓, no pass / fail colour
+          readonly property bool staticChip: row.up === null || row.up === undefined
           readonly property real pad: panel.cardPad
-          // width tracks the widest thing in the card -- the header text or
-          // the longest guess row -- with equal padding on both sides.
-          // `measure` (hidden) does the sizing so the visible divider can span
-          // the full inner width without a binding loop.
-          readonly property real innerW: Math.max(headText.implicitWidth, measure.implicitWidth)
+          // width tracks the widest thing in the card -- the header text, the
+          // longest guess row, or the SRS footer -- with equal padding on both
+          // sides. `measure` / `srsMeasure` (hidden) do the sizing so the
+          // visible divider and footer can span the full inner width without a
+          // binding loop.
+          readonly property real innerW: Math.max(
+            headText.implicitWidth, measure.implicitWidth,
+            showChip ? srsMeasure.implicitWidth : 0)
           width: innerW + pad * 2
           // header · pad · body · pad · (footer)   -- pad matched top & bottom
           height: cardHead.height + pad + bodyCol.implicitHeight + pad
@@ -172,6 +182,28 @@ FocusScope {
             }
           }
 
+          // hidden width probe: the SRS footer's ↑ / stage-name row, so a long
+          // stage ("Enlightened") gets the same left/right padding a guess row
+          // would and never clips
+          Row {
+            id: srsMeasure
+            visible: false
+            spacing: Style.space(4)
+            Text {
+              visible: !card.staticChip
+              text: "↑"
+              font.family: panel.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+            Text {
+              text: card.row.stageName || "Apprentice"
+              font.family: panel.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+          }
+
           // type-coloured header -- rounded to match the card's top corners
           Rectangle {
             id: cardHead
@@ -185,10 +217,21 @@ FocusScope {
             Text {
               id: headText
               anchors.centerIn: parent
+              // centre the glyph's ink, not its advance box -- lone narrow
+              // radicals (刂 etc.) have lopsided side bearings
+              anchors.horizontalCenterOffset: headMetrics.advanceWidth > 0
+                ? (headMetrics.advanceWidth / 2 - headMetrics.tightBoundingRect.x
+                   - headMetrics.tightBoundingRect.width / 2)
+                : 0
               text: card.chars || panel.meaningOf(card.row.id)
               color: "#fcfdfd"
               font.family: card.chars ? panel.jpFamily : panel.fontFamily
               font.pixelSize: card.chars ? Style.font.title : Style.font.bodySmall
+            }
+            TextMetrics {
+              id: headMetrics
+              font: headText.font
+              text: headText.text
             }
           }
 
@@ -243,20 +286,25 @@ FocusScope {
             height: Style.space(26)
             bottomLeftRadius: card.radius
             bottomRightRadius: card.radius
-            color: card.row.pass ? panel.okColor : panel.noColor
+            color: card.staticChip
+              ? Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.16)
+              : card.row.pass ? panel.okColor : panel.noColor
+            readonly property color ink: card.staticChip
+              ? Qt.darker(panel.fg, 1.1) : "#fcfdfd"
             Row {
               anchors.centerIn: parent
               spacing: Style.space(4)
               Text {
+                visible: !card.staticChip
                 text: card.row.up ? "↑" : "↓"
-                color: "#fcfdfd"
+                color: srsFooter.ink
                 font.family: panel.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
               }
               Text {
                 text: card.row.stageName
-                color: "#fcfdfd"
+                color: srsFooter.ink
                 font.family: panel.fontFamily
                 font.pixelSize: Style.font.caption
                 font.bold: true
