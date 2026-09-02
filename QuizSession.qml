@@ -57,6 +57,57 @@ FocusScope {
   // mOK/rOK does.
   property var _cleared: ({})
 
+  // Last Answers log -- one card per subject the moment its first answer
+  // lands, every typed guess appended, and a plain current-stage chip (no
+  // ↑ / ↓ -- Extra Study never moves SRS) once the subject is done. Same
+  // shape the review engine feeds QuizCard; cleared by start().
+  property var answerLog: []
+  function _srsName(stage) {
+    if (stage <= 0) return "Lesson"
+    if (stage <= 4) return "Apprentice"
+    if (stage <= 6) return "Guru"
+    if (stage === 7) return "Master"
+    if (stage === 8) return "Enlightened"
+    return "Burned"
+  }
+  function _needsReading(id) {
+    var s = service && service.subjectDetail(id)
+    var kind = s ? String(s.object || "") : ""
+    return kind === "kanji" || kind === "vocabulary"
+  }
+  function _subjectDone(id) {
+    return _cleared[id + ":meaning"] === true
+      && (!_needsReading(id) || _cleared[id + ":reading"] === true)
+  }
+  function _logTouch(id, type, guess) {
+    var log = answerLog.slice()
+    var e = null
+    for (var i = 0; i < log.length; i++)
+      if (log[i].id === id) { e = log.splice(i, 1)[0]; break }
+    if (!e)
+      e = { id: id, needsR: _needsReading(id), mGuesses: [], rGuesses: [],
+            done: false, pass: true, up: null, stageName: "" }
+    if (type === "meaning") e.mGuesses = e.mGuesses.concat([guess])
+    else e.rGuesses = e.rGuesses.concat([guess])
+    log.unshift(e)
+    answerLog = log
+  }
+  function _logFinish(id) {
+    var s = service && service.subjectDetail(id)
+    var stage = (s && s.assignment && isFinite(s.assignment.srs_stage))
+      ? s.assignment.srs_stage : 0
+    var log = answerLog.slice()
+    for (var i = 0; i < log.length; i++)
+      if (log[i].id === id) {
+        log[i].done = true
+        log[i].pass = true
+        log[i].up = null                 // Extra Study leaves SRS where it is
+        log[i].stageName = _srsName(stage)
+        break
+      }
+    answerLog = log
+  }
+
   function start() {
     queue = []
     pos = 0
@@ -66,6 +117,7 @@ FocusScope {
     correctAnswers = 0
     missedIds = ({})
     _cleared = ({})
+    answerLog = []
     built = false
     _finished = false
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
@@ -112,8 +164,11 @@ FocusScope {
     function onDetailReady(ids) { session.tryBuild() }
   }
 
-  function onAnswered(correct) {
+  function onAnswered(correct, text) {
     totalAnswers += 1
+    if (current)
+      _logTouch(current.id, current.type,
+                { text: String(text || ""), ok: correct === true })
     if (correct) {
       correctAnswers += 1
       clearedQuestions += 1
@@ -121,6 +176,7 @@ FocusScope {
         var m = _cleared
         m[current.id + ":" + current.type] = true
         _cleared = m
+        if (_subjectDone(current.id)) _logFinish(current.id)
       }
     } else {
       missedIds[current.id] = true
@@ -135,6 +191,9 @@ FocusScope {
 
   // set by a wrapper (LessonFlow) that wants to show its own end screen
   property bool suppressSummary: false
+  // Last Answers ( , ) -- on for Extra Study, off inside the lesson quiz
+  // (brand-new items, no session history worth flipping back to)
+  property bool lastAnswers: !suppressSummary
   property bool _finished: false
   signal completed(int total, int correct, int answers, var missed)
 
@@ -205,6 +264,8 @@ FocusScope {
     progress: session.progress
     // f-info hides the half you're being tested on, like a real review
     restrictInfo: true
+    showLastAnswers: session.lastAnswers
+    answerLog: session.answerLog
     meaningDone: session.current
       ? session._cleared[session.current.id + ":meaning"] === true : false
     readingDone: session.current
@@ -216,7 +277,7 @@ FocusScope {
     radicalColor: session.radicalColor
     kanjiColor: session.kanjiColor
     vocabColor: session.vocabColor
-    onAnswered: function (correct) { session.onAnswered(correct) }
+    onAnswered: function (correct, text) { session.onAnswered(correct, text) }
     onAdvance: session.onAdvance()
     onWrapUp: { session.phase = "summary"; Qt.callLater(session._grabFocus) }
     onVisibleChanged: if (visible) Qt.callLater(forceActiveFocus)
