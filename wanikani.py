@@ -942,10 +942,35 @@ def cmd_browse(args):
             "requests": api.requests, "fetchedAt": iso(now_utc())}
 
 
+def _search_score(chars, slug, m_texts, query):
+    """None = no match; lower = better. Word-aware for English so "dog" hits
+    "Male Dog" but not "Yodogawa" / "endogenous"; substring for the CJK
+    characters, which are short."""
+    cl = (chars or "").lower()
+    hays = [(slug or "").lower().replace("-", " ")] + [t.lower() for t in m_texts]
+    multiword = " " in query
+
+    if cl == query or any(h == query for h in hays):
+        return 0
+    for h in hays:
+        for tok in re.findall(r"[a-z0-9']+", h):
+            if tok == query:
+                return 1
+    if cl and query in cl:
+        return 1
+    for h in hays:
+        for tok in re.findall(r"[a-z0-9']+", h):
+            if tok.startswith(query):
+                return 2
+    if multiword and any(query in h for h in hays):
+        return 2
+    return None
+
+
 def cmd_search(args):
     """Subjects matching a query, across every level. Matches the query against
-    each subject's characters, slug and every meaning; ranks exact > prefix >
-    substring, then radical > kanji > vocab, then by level. Cheap: it reuses
+    each subject's characters, slug and every meaning; ranks exact > word >
+    word-prefix, then radical > kanji > vocab, then by level. Cheap: it reuses
     the same delta-synced slim `subjects` cache the browser already builds."""
     config = load_config()
     token = api_token(config)
@@ -974,15 +999,7 @@ def cmd_search(args):
         m_texts = [str(m.get("meaning") or "") for m in meanings]
         primary = next((m.get("meaning") for m in meanings if m.get("primary")),
                        m_texts[0] if m_texts else "")
-        score = None
-        for hay in [chars, slug] + m_texts:
-            low = hay.lower()
-            if not low:
-                continue
-            cand = 0 if low == query else 1 if low.startswith(query) \
-                else 2 if query in low else None
-            if cand is not None and (score is None or cand < score):
-                score = cand
+        score = _search_score(chars, slug, m_texts, query)
         if score is None:
             continue
         a_data = data_of(assignment_by_subject.get(subject.get("id")))
