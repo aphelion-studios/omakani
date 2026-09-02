@@ -119,6 +119,28 @@ FocusScope {
     if (sid === _lastSubjectId) return
     _lastSubjectId = sid
     reset()
+    // pull the component kanji so a component's reading typed for the whole
+    // vocab can shake ("we want the vocabulary reading") instead of counting
+    // wrong -- cached, so it's ready by the next encounter at worst
+    if (service && subject && subject.data
+        && (kind === "vocabulary" || kind === "kana_vocabulary")) {
+      var cids = subject.data.component_subject_ids || []
+      if (cids.length > 0) service.loadDetail(cids)
+    }
+  }
+
+  // readings of this word's component kanji (minus its own), for Answer.check
+  function _componentReadings() {
+    if (!isVocab || !service || !subject || !subject.data) return []
+    var ids = subject.data.component_subject_ids || []
+    var out = []
+    for (var i = 0; i < ids.length; i++) {
+      var s = service.subjectDetail(ids[i])
+      var rs = (s && s.data && s.data.readings) || []
+      for (var j = 0; j < rs.length; j++)
+        if (rs[j] && rs[j].reading) out.push(rs[j].reading)
+    }
+    return out
   }
   onQuestionTypeChanged: reset()
 
@@ -164,7 +186,8 @@ FocusScope {
       field.text = Kana.toKana(field.text)
       _converting = false
     }
-    var res = Answer.check(subject, studyMaterial, effectiveType, field.text)
+    var res = Answer.check(subject, studyMaterial, effectiveType, field.text,
+                           { otherReadings: _componentReadings() })
     var typed = field.text.trim()
     if (res.status === "correct") {
       phase = "correct"
@@ -305,14 +328,8 @@ FocusScope {
     enabled: quiz.visible && quiz.phase !== "input" && !quiz.anyOverlay
     onActivated: quiz.openInfo(false)
   }
-  // E toggles, the way F does: closed -> open expanded, compact (opened with F)
-  // -> expand, already expanded -> close.
-  Shortcut {
-    sequences: ["e"]
-    enabled: quiz.visible && quiz.phase !== "input" && !quiz.lastOpen && !quiz.kanaOpen
-    onActivated: (quiz.infoOpen && quiz._infoRevealAll)
-      ? quiz.closeOverlays() : quiz.openInfo(true)
-  }
+  // E is handled inside the item-info overlay (fold / unfold every card) --
+  // it does nothing from the review page itself.
   Shortcut {
     sequences: ["j"]
     enabled: quiz.visible && quiz.phase !== "input" && quiz.canAudio && !quiz.anyOverlay
@@ -430,11 +447,11 @@ FocusScope {
                           + charText.font.pixelSize * 0.46
         var barTop = header.y + header.height
         // +nudge: the midpoint still read a touch high
-        return (glyphBottom + barTop) / 2 - height / 2 + Style.space(6)
+        return (glyphBottom + barTop) / 2 - height / 2 + Style.space(3)
       }
       z: 15
       visible: !!quiz.srsPill && quiz.phase === "correct" && !quiz.anyOverlay
-      width: pillRow.implicitWidth + Style.space(20)
+      width: pillRow.implicitWidth + Style.space(18)
       height: Style.space(28)
       radius: Style.space(5)
       color: (quiz.srsPill && quiz.srsPill.pass) ? quiz.okColor : quiz.noColor
@@ -442,14 +459,24 @@ FocusScope {
         id: pillRow
         anchors.centerIn: parent
         spacing: Style.space(5)
-        Text {
-          text: (quiz.srsPill && quiz.srsPill.up) ? "↑" : "↓"
+        // the arrow rides in a white disc, matching the website
+        Rectangle {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(16)
+          height: width
+          radius: width / 2
           color: "#fcfdfd"
-          font.family: quiz.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
+          Text {
+            anchors.centerIn: parent
+            text: (quiz.srsPill && quiz.srsPill.up) ? "↑" : "↓"
+            color: srsChip.color
+            font.family: quiz.fontFamily
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
         }
         Text {
+          anchors.verticalCenter: parent.verticalCenter
           text: quiz.srsPill ? quiz.srsPill.text : ""
           color: "#fcfdfd"
           font.family: quiz.fontFamily
@@ -872,7 +899,7 @@ FocusScope {
           model: {
             var m = [
               { k: "F", d: "Item Info" },
-              { k: "E", d: "Expand Hidden Item Info" },
+              { k: "E", d: "Fold / Unfold All (in Item Info)" },
               { k: "J", d: "Audio Pronunciation" },
               { k: "/", d: "Hiragana IME Chart" }
             ]
