@@ -142,20 +142,23 @@ FocusScope {
           readonly property var rGuesses: row.rGuesses || []
           readonly property string chars: panel.charsOf(row.id)
           readonly property bool showChip: row.done === true
+          readonly property real pad: panel.cardPad
           // width tracks the widest thing in the card -- the header text or
           // the longest guess row -- with equal padding on both sides.
           // `measure` (hidden) does the sizing so the visible divider can span
           // the full inner width without a binding loop.
           readonly property real innerW: Math.max(headText.implicitWidth, measure.implicitWidth)
-          width: innerW + panel.cardPad * 2
-          height: bodyCol.y + bodyCol.implicitHeight + panel.cardPad
-          radius: Style.space(6)
+          width: innerW + pad * 2
+          // header · pad · body · pad · (footer)   -- pad matched top & bottom
+          height: cardHead.height + pad + bodyCol.implicitHeight + pad
+                  + (showChip ? srsFooter.height : 0)
+          radius: Style.space(7)
           color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.05)
           border.width: 1
           border.color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.1)
           clip: true
 
-          // hidden width probe: every guess row plus the SRS chip
+          // hidden width probe: every guess row
           Column {
             id: measure
             visible: false
@@ -167,24 +170,17 @@ FocusScope {
               model: card.rGuesses
               delegate: PanelAnswerRow { ok: modelData.ok; jp: true; label: modelData.text }
             }
-            Item {
-              visible: card.showChip
-              implicitWidth: chipMeasure.implicitWidth + Style.space(14)
-              implicitHeight: 1
-              Row { id: chipMeasure
-                Text { text: "↑"; font.family: panel.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
-                Text { text: card.row.stageName; font.family: panel.fontFamily; font.pixelSize: Style.font.caption; font.bold: true }
-              }
-            }
           }
 
-          // type-coloured header with the characters
+          // type-coloured header -- rounded to match the card's top corners
           Rectangle {
             id: cardHead
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
             height: Style.space(44)
+            topLeftRadius: card.radius
+            topRightRadius: card.radius
             color: panel.colorFor(card.row.id)
             Text {
               id: headText
@@ -198,8 +194,8 @@ FocusScope {
 
           Column {
             id: bodyCol
-            x: panel.cardPad
-            y: cardHead.height + Style.space(9)
+            x: card.pad
+            y: cardHead.height + card.pad
             spacing: Style.space(4)
 
             // every meaning guess, in the order they were typed
@@ -233,33 +229,37 @@ FocusScope {
                 label: modelData.text
               }
             }
+          }
 
-            // SRS transition -- shown once the subject is done: green ↑ if
-            // you never missed it, red ↓ if you did
-            Rectangle {
-              visible: card.showChip
-              width: srsRow.implicitWidth + Style.space(14)
-              height: Style.space(22)
-              radius: Style.space(4)
-              color: card.row.pass ? panel.okColor : panel.noColor
-              Row {
-                id: srsRow
-                anchors.centerIn: parent
-                spacing: Style.space(4)
-                Text {
-                  text: card.row.up ? "↑" : "↓"
-                  color: "#fcfdfd"
-                  font.family: panel.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                }
-                Text {
-                  text: card.row.stageName
-                  color: "#fcfdfd"
-                  font.family: panel.fontFamily
-                  font.pixelSize: Style.font.caption
-                  font.bold: true
-                }
+          // SRS transition -- its own footer band once the subject is done,
+          // mirroring the type-coloured header: green ↑ if you never missed
+          // it, red ↓ if you did
+          Rectangle {
+            id: srsFooter
+            visible: card.showChip
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Style.space(26)
+            bottomLeftRadius: card.radius
+            bottomRightRadius: card.radius
+            color: card.row.pass ? panel.okColor : panel.noColor
+            Row {
+              anchors.centerIn: parent
+              spacing: Style.space(4)
+              Text {
+                text: card.row.up ? "↑" : "↓"
+                color: "#fcfdfd"
+                font.family: panel.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+              Text {
+                text: card.row.stageName
+                color: "#fcfdfd"
+                font.family: panel.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
               }
             }
           }
