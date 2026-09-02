@@ -2,9 +2,12 @@ import QtQuick
 import qs.Commons
 
 // The website's Kana Chart: a docked on-screen kana keyboard for when typing
-// isn't an option. Tab across あ..ら + 雑; every button drops its kana into
-// the answer field verbatim (no romaji step), Backspace rubs one out.
-// Pointer-driven -- the ひ toolbar button opens and closes it, Esc closes.
+// isn't an option. Tab across あ..ら + 雑; every key drops its kana into the
+// answer field verbatim (no romaji step), Backspace rubs one out.
+//
+// Pointer- or keyboard-driven: while it's open it holds focus, so h / j / k /
+// l move the highlight (l / h at the row edge step tabs), Enter or Space
+// inserts, Backspace deletes, / or Esc closes.
 Item {
   id: kb
 
@@ -15,10 +18,16 @@ Item {
 
   signal kanaPicked(string kana)
   signal backspacePressed()
+  signal closeRequested()
 
   property int tab: 0
-  // reset to the あ tab whenever it reopens (matches the website)
-  onVisibleChanged: if (visible) tab = 0
+  property int selRow: 0
+  property int selCol: 0
+
+  function _reset() { tab = 0; selRow = 0; selCol = 0 }
+  onVisibleChanged: {
+    if (visible) { _reset(); Qt.callLater(kb.forceActiveFocus) }
+  }
 
   readonly property var tabNames: ["あ", "か", "さ", "た", "な", "は", "ま", "ら", "雑"]
 
@@ -50,9 +59,42 @@ Item {
   ]
 
   readonly property var page: pages[tab]
+  function _rowLen(r) { return (page[r] || []).length }
+  function _clampSel() {
+    selRow = Math.max(0, Math.min(selRow, page.length - 1))
+    selCol = Math.max(0, Math.min(selCol, _rowLen(selRow) - 1))
+  }
+  function _setTab(t) {
+    tab = Math.max(0, Math.min(t, tabNames.length - 1))
+    selRow = 0
+    selCol = Math.min(selCol, _rowLen(0) - 1)
+  }
+  function _pick() {
+    var cell = (page[selRow] || [])[selCol]
+    if (cell) kb.kanaPicked(cell[0])
+  }
 
   implicitWidth: Style.space(780)
   implicitHeight: panel.implicitHeight
+
+  Keys.onPressed: function (e) {
+    if (e.key === Qt.Key_Escape || e.key === Qt.Key_Slash) { kb.closeRequested(); e.accepted = true }
+    else if (e.key === Qt.Key_Backspace) { kb.backspacePressed(); e.accepted = true }
+    else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Space) { kb._pick(); e.accepted = true }
+    else if (e.text === "j" || e.key === Qt.Key_Down) { kb.selRow += 1; kb._clampSel(); e.accepted = true }
+    else if (e.text === "k" || e.key === Qt.Key_Up) { kb.selRow -= 1; kb._clampSel(); e.accepted = true }
+    else if (e.text === "l" || e.key === Qt.Key_Right) {
+      if (kb.selCol < kb._rowLen(kb.selRow) - 1) kb.selCol += 1
+      else kb._setTab(kb.tab + 1)
+      e.accepted = true
+    }
+    else if (e.text === "h" || e.key === Qt.Key_Left) {
+      if (kb.selCol > 0) kb.selCol -= 1
+      else { kb._setTab(kb.tab - 1); kb.selCol = kb._rowLen(kb.selRow) - 1 }
+      e.accepted = true
+    }
+    else { e.accepted = true }   // don't leak keys back to the field
+  }
 
   Rectangle {
     id: panel
@@ -100,7 +142,7 @@ Item {
           MouseArea {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
-            onClicked: kb.tab = index
+            onClicked: kb._setTab(index)
           }
         }
       }
@@ -146,17 +188,23 @@ Item {
         delegate: Row {
           spacing: Style.space(6)
           property var cells: modelData
+          property int rowIndex: index
           Repeater {
             model: parent.cells
             delegate: Rectangle {
+              readonly property int myRow: parent.rowIndex
+              readonly property int myCol: index
+              readonly property bool sel: kb.selRow === myRow && kb.selCol === myCol
               width: Style.space(84)
               height: Style.space(50)
               radius: Style.space(5)
-              color: kHover.containsMouse
-                ? Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.18)
+              color: sel || kHover.containsMouse
+                ? Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.2)
                 : Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.10)
-              border.width: 1
-              border.color: Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.14)
+              border.width: sel ? 2 : 1
+              border.color: sel
+                ? Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.75)
+                : Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.14)
               Column {
                 anchors.centerIn: parent
                 spacing: Style.space(1)
@@ -180,7 +228,11 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: kb.kanaPicked(modelData[0])
+                onClicked: {
+                  kb.selRow = parent.myRow
+                  kb.selCol = parent.myCol
+                  kb.kanaPicked(modelData[0])
+                }
               }
             }
           }
