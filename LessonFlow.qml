@@ -311,6 +311,7 @@ FocusScope {
     subjectIds: flow.subjectIds
     title: "Lesson quiz"
     suppressSummary: true
+    isLesson: true
     pageBg: flow.pageBg
     fg: flow.fg
     fontFamily: flow.fontFamily

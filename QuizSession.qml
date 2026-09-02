@@ -194,6 +194,9 @@ FocusScope {
 
   // set by a wrapper (LessonFlow) that wants to show its own end screen
   property bool suppressSummary: false
+  // set by LessonFlow -- picks the autoplay setting and (later) other
+  // lesson-vs-extra-study behaviour
+  property bool isLesson: false
   // Last Answers ( , ) -- on for Extra Study, off inside the lesson quiz
   // (brand-new items, no session history worth flipping back to)
   property bool lastAnswers: !suppressSummary
@@ -268,6 +271,8 @@ FocusScope {
     // f-info hides the half you're being tested on, like a real review
     restrictInfo: true
     showLastAnswers: session.lastAnswers
+    autoplayReading: !!session.service && session.service.boolSetting(
+      session.isLesson ? "autoplayLessons" : "autoplayExtraStudy", false)
     answerLog: session.answerLog
     meaningDone: session.current
       ? session._cleared[session.current.id + ":meaning"] === true : false

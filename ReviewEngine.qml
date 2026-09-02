@@ -453,6 +453,8 @@ FocusScope {
       ? engine.items[engine.current.id].rOK === true : false
     srsPill: engine.pill
     reviewMode: true
+    srsIndicator: !engine.service || engine.service.boolSetting("reviewSrsIndicator", true)
+    autoplayReading: !!engine.service && engine.service.boolSetting("autoplayReviews", false)
     answerLog: engine.answerLog
     pageBg: engine.pageBg
     fg: engine.fg

@@ -75,6 +75,10 @@ FocusScope {
   // Last Answers ( , ) rides along in reviews and in Extra Study -- both keep a
   // per-session answer log. The primitive lesson quiz leaves it off.
   property bool showLastAnswers: reviewMode
+  // settings: show the finish-a-subject SRS chip; auto-play a vocab's reading
+  // once you answer its reading right
+  property bool srsIndicator: true
+  property bool autoplayReading: false
 
   property alias infoPageItem: infoPage
   readonly property alias fieldText: field.text
@@ -194,6 +198,7 @@ FocusScope {
       kanaOpen = false
       tip = settleTip(res)
       quiz.answered(true, typed)
+      if (autoplayReading && readingPrompt && canAudio) Qt.callLater(quiz.playAudio)
       Qt.callLater(quiz.forceActiveFocus)
     } else if (res.status === "incorrect") {
       phase = "wrong"
@@ -450,7 +455,7 @@ FocusScope {
         return (glyphBottom + barTop) / 2 - height / 2 + Style.space(3)
       }
       z: 15
-      visible: !!quiz.srsPill && quiz.phase === "correct" && !quiz.anyOverlay
+      visible: quiz.srsIndicator && !!quiz.srsPill && quiz.phase === "correct" && !quiz.anyOverlay
       width: pillRow.implicitWidth + Style.space(18)
       height: Style.space(28)
       radius: Style.space(5)
