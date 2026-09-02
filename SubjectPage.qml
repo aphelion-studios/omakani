@@ -922,6 +922,9 @@ FocusScope {
               delegate: SubjectChip {
                 subjectId: modelData
                 resource: page.resolve(modelData)
+                // dim + dash items the account hasn't unlocked, like the browser
+                locked: !!resource
+                  && !(resource.assignment && resource.assignment.unlocked_at)
                 fontFamily: page.fontFamily
                 jpFamily: page.jpFamily
                 fg: "#fcfdfd"
@@ -956,6 +959,9 @@ FocusScope {
               delegate: SubjectChip {
                 subjectId: modelData
                 resource: page.resolve(modelData)
+                // dim + dash items the account hasn't unlocked, like the browser
+                locked: !!resource
+                  && !(resource.assignment && resource.assignment.unlocked_at)
                 fontFamily: page.fontFamily
                 jpFamily: page.jpFamily
                 fg: "#fcfdfd"
@@ -990,6 +996,9 @@ FocusScope {
               delegate: SubjectChip {
                 subjectId: modelData
                 resource: page.resolve(modelData)
+                // dim + dash items the account hasn't unlocked, like the browser
+                locked: !!resource
+                  && !(resource.assignment && resource.assignment.unlocked_at)
                 fontFamily: page.fontFamily
                 jpFamily: page.jpFamily
                 fg: "#fcfdfd"
