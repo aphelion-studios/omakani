@@ -5,10 +5,10 @@ import qs.Commons
 // isn't an option. Tab across あ..ら + 雑; every key drops its kana into the
 // answer field verbatim (no romaji step), Backspace rubs one out.
 //
-// Pointer- or keyboard-driven: while it's open it holds focus. In the grid
-// h/j/k/l move the highlight; k off the top row hops up to the tab strip,
-// where h/l switch tab (あ/か/さ/…) and j (or Enter) drops back into the grid.
-// Enter/Space inserts, Backspace deletes, / or Esc closes.
+// Pointer- or keyboard-driven: while it's open it holds focus. It opens with
+// the tab strip focused -- h/l switch tab (あ/か/さ/…), j (or Enter) drops into
+// the grid; there h/j/k/l move the highlight and k off the top row hops back
+// to the strip. Enter/Space inserts, Backspace deletes, / or Esc closes.
 // A FocusScope (not a bare Item) so forceActiveFocus() from the host reliably
 // routes keys here and the answer field lets go of them.
 FocusScope {
@@ -30,7 +30,9 @@ FocusScope {
   // the kana grid
   property bool onTabBar: false
 
-  function _reset() { tab = 0; selRow = 0; selCol = 0; onTabBar = false }
+  // open with focus on the tab strip, like the website -- j / Enter drops into
+  // the grid
+  function _reset() { tab = 0; selRow = 0; selCol = 0; onTabBar = true }
   function grabKeys() { kb.forceActiveFocus() }
   onVisibleChanged: {
     if (visible) { _reset(); Qt.callLater(kb.forceActiveFocus) }

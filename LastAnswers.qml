@@ -29,12 +29,13 @@ FocusScope {
   readonly property color okColor: "#93c01f"
   readonly property color noColor: "#fc0234"
 
-  // the padding inside a card -- same on every edge (the user liked the gap
-  // to the left of the ✓/✗; this mirrors it on the right)
+  // horizontal padding inside a card -- the user liked the gap to the left of
+  // the ✓/✗; this mirrors it on the right, and sits below the header / above
+  // the SRS band
   readonly property real cardPad: Style.space(11)
-  // one vertical rhythm for the whole card: header->first line == line->line ==
-  // last line->footer == the gap inside the footer band
-  readonly property real cardRowGap: Style.space(7)
+  // gap between guess lines, and below the coloured header (kept tight so the
+  // header doesn't float above the answers)
+  readonly property real rowGap: Style.space(4)
 
   signal closeRequested()
   // f jumps straight to item info (the panels swap, like the website)
@@ -162,10 +163,11 @@ FocusScope {
             headText.implicitWidth, measure.implicitWidth,
             showChip ? srsMeasure.implicitWidth : 0)
           width: innerW + pad * 2
-          // header · gap · body · gap · (footer) -- one rhythm top, between the
-          // lines, and down to the footer
-          height: cardHead.height + panel.cardRowGap + bodyCol.implicitHeight
-                  + panel.cardRowGap + (showChip ? srsFooter.height : 0)
+          // header · rowGap · body · pad · (footer) -- header sits as close to
+          // the first line as the lines sit to each other; the SRS band keeps
+          // its own breathing room
+          height: cardHead.height + panel.rowGap + bodyCol.implicitHeight
+                  + card.pad + (showChip ? srsFooter.height : 0)
           radius: Style.space(7)
           color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.05)
           border.width: 1
@@ -239,8 +241,8 @@ FocusScope {
           Column {
             id: bodyCol
             x: card.pad
-            y: cardHead.height + panel.cardRowGap
-            spacing: panel.cardRowGap
+            y: cardHead.height + panel.rowGap
+            spacing: panel.rowGap
 
             // every meaning guess, in the order they were typed
             Repeater {
@@ -252,13 +254,17 @@ FocusScope {
             }
 
             // divider between the meaning and reading guesses -- only when
-            // both halves have actually been attempted. A bare 1px line so the
-            // column's own spacing gives it equal air above and below.
-            Rectangle {
+            // both halves have actually been attempted
+            Item {
               width: card.innerW
-              height: 1
+              height: Style.space(9)
               visible: card.mGuesses.length > 0 && card.rGuesses.length > 0
-              color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.25)
+              Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: 1
+                color: Qt.rgba(panel.fg.r, panel.fg.g, panel.fg.b, 0.25)
+              }
             }
 
             Repeater {

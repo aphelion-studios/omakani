@@ -47,6 +47,11 @@ FocusScope {
   // full page, so the plain 0.26 proportion would draw a smaller band). 0 ->
   // use the standalone proportion.
   property real bandHeight: 0
+  // one shallow proportion everywhere -- browse page, item info, drilled linked
+  // subject -- all read identically. In a review overlay the host hands us the
+  // quiz header's own height so the two line up exactly.
+  readonly property real _bandH: bandHeight > 0
+    ? bandHeight : Math.round(page.height * 0.26)
 
   // the "<Type> <Meaning|Reading>" bar under the header, in a review overlay.
   // "" -> the bar shows the type (and level, unless hideLevel) instead.
@@ -94,6 +99,8 @@ FocusScope {
       if (_allExpanded) c.expand()
       else c.collapse()
     }
+    // the layout jumps as everything folds/unfolds -- keep the ringed card in view
+    Qt.callLater(scrollToFocused)
   }
 
   function focusedChipIds() {
@@ -427,35 +434,29 @@ FocusScope {
 
   // while the subject is loading, show nothing here -- the host draws a
   // plain "Loading subject…" so it doesn't flash an empty coloured header
-  Flickable {
-    id: flick
-    anchors.fill: parent
+
+  // The coloured band + type bar. In a review overlay they're pinned (a child
+  // of `keys`, over the scroll area) so scrolling the cards never drags the
+  // header away; on the standalone browse page they scroll with everything
+  // else (parented into `headSlot` inside the Flickable).
+  Column {
+    id: headBlock
+    parent: page.overlayMode ? keys : headSlot
+    anchors.top: parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    z: page.overlayMode ? 5 : 0
     visible: !!page.subject
-    contentWidth: width
-    contentHeight: body.implicitHeight
-    boundsBehavior: Flickable.StopAtBounds
-    clip: true
 
-    Column {
-      id: body
-      width: flick.width
-      spacing: 0
+    // in a review overlay QuizCard draws its 4px progress rail over the very
+    // top; leave the same gap so the coloured band lines up with the answer view
+    Item { width: 1; height: page.overlayMode ? Style.space(4) : 0 }
 
-      // in a review overlay QuizCard draws its 4px progress rail over the very
-      // top; leave the same gap so the coloured band lines up with the
-      // answer view
-      Item { width: 1; height: page.overlayMode ? Style.space(4) : 0 }
-
-      // ---------------------------------------------------- header band
-      // one shallow proportion everywhere -- browse page, item info, drilled
-      // linked subject -- all read identically. In a review overlay the host
-      // hands us the quiz header's own height so the two line up exactly.
-      readonly property real _bandH: page.bandHeight > 0
-        ? page.bandHeight : Math.round(page.height * 0.26)
-      Rectangle {
-        width: parent.width
-        implicitHeight: body._bandH
-        color: page.typeColor
+    // ---------------------------------------------------- header band
+    Rectangle {
+      width: parent.width
+      implicitHeight: page._bandH
+      color: page.typeColor
 
         Column {
           id: header
@@ -479,7 +480,7 @@ FocusScope {
             text: page.sd.characters || (page.overlayMode ? "" : page.primaryMeaning())
             color: "#fcfdfd"
             font.family: page.jpFamily
-            font.pixelSize: Math.min(body._bandH * 0.56, Style.font.displayLarge * 3)
+            font.pixelSize: Math.min(page._bandH * 0.56, Style.font.displayLarge * 3)
             font.weight: page.sd.characters ? Font.Normal : Font.Bold
           }
           TextMetrics {
@@ -589,6 +590,35 @@ FocusScope {
             font.pixelSize: Style.font.subtitle
           }
         }
+      }
+    }
+
+  // ---- scrolling area ----
+  Flickable {
+    id: flick
+    // overlay: start below the pinned header. browse: fill, the header scrolls
+    // inside as headSlot's content.
+    anchors.top: page.overlayMode ? headBlock.bottom : parent.top
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.bottom: parent.bottom
+    visible: !!page.subject
+    contentWidth: width
+    contentHeight: body.implicitHeight
+    boundsBehavior: Flickable.StopAtBounds
+    clip: true
+
+    Column {
+      id: body
+      width: flick.width
+      spacing: 0
+
+      // holds the header on the browse page (0-height in the overlay, where
+      // the header is pinned outside the Flickable instead)
+      Item {
+        id: headSlot
+        width: parent.width
+        height: page.overlayMode ? 0 : childrenRect.height
       }
 
       Item { width: 1; height: Style.space(20) }
