@@ -42,6 +42,11 @@ FocusScope {
   // the level leaks which look-alike you're being asked
   property bool hideLevel: false
 
+  // lesson "learn" step: show ONE section at a time (the page-by-page walk),
+  // uncollapsed, no lock pill. "" -> the normal all-sections page.
+  property string soloSection: ""
+  readonly property bool soloMode: soloSection !== ""
+
   // in a review overlay the host passes the quiz header's exact pixel height so
   // the info band lines up with the answer view (the overlay is shorter than a
   // full page, so the plain 0.26 proportion would draw a smaller band). 0 ->
@@ -179,12 +184,15 @@ FocusScope {
   // text sections (Meaning / Reading / Context) fold in the overlay; a plain
   // page only folds the anti-cheat half during a review. Chip sections don't
   // fold -- h/l navigate their chips instead.
-  function cardCollapsible() { return keyNav || collapse !== "" }
+  function cardCollapsible() { return !soloMode && (keyNav || collapse !== "") }
   function startFolded(key) {
+    if (soloMode) return false                  // one section, always open
     if (collapse === key) return true          // anti-cheat: tested half
     if (reviewFolds && key === "context") return true
     return false
   }
+  // in the lesson walk, only the current page's card shows
+  function cardShown(key) { return !soloMode || soloSection === key }
 
   // land the ring on the tested half when the overlay opens after a miss --
   // once per focusSection value, so j/k can move away afterwards
@@ -290,7 +298,7 @@ FocusScope {
   // unlock state, from the assignment (absent entirely => still locked)
   readonly property var asg: subject && subject.assignment ? subject.assignment : ({})
   readonly property bool itemLocked: !asg.id && !asg.unlocked_at
-  readonly property bool showLockState: !overlayMode && !!subject
+  readonly property bool showLockState: !overlayMode && !soloMode && !!subject
   readonly property var study: subject && subject.study_material ? subject.study_material : ({})
 
   readonly property color typeColor: {
@@ -596,6 +604,7 @@ FocusScope {
         SubjectCard {
           readonly property string navKey: "meaning"
           width: parent.width
+          visible: page.cardShown("meaning")
           collapsible: page.cardCollapsible()
           defaultCollapsed: page.startFolded("meaning")
           resetToken: page.resetToken
@@ -718,8 +727,8 @@ FocusScope {
         SubjectCard {
           readonly property string navKey: "reading"
           width: parent.width
-          visible: page.kind === "kanji" || page.kind === "vocabulary"
-            || page.kind === "kana_vocabulary"
+          visible: (page.kind === "kanji" || page.kind === "vocabulary"
+            || page.kind === "kana_vocabulary") && page.cardShown("reading")
           collapsible: page.cardCollapsible()
           defaultCollapsed: page.startFolded("reading")
           resetToken: page.resetToken
@@ -863,7 +872,7 @@ FocusScope {
         SubjectCard {
           readonly property string navKey: "context"
           width: parent.width
-          visible: (page.sd.context_sentences || []).length > 0
+          visible: (page.sd.context_sentences || []).length > 0 && page.cardShown("context")
           collapsible: page.cardCollapsible()
           defaultCollapsed: page.startFolded("context")
           resetToken: page.resetToken
@@ -906,7 +915,7 @@ FocusScope {
         SubjectCard {
           readonly property string navKey: "composition"
           width: parent.width
-          visible: (page.sd.component_subject_ids || []).length > 0
+          visible: (page.sd.component_subject_ids || []).length > 0 && page.cardShown("composition")
           collapsible: false   // chip section: h/l navigate, no fold
           navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
@@ -943,7 +952,7 @@ FocusScope {
         SubjectCard {
           readonly property string navKey: "foundin"
           width: parent.width
-          visible: (page.sd.amalgamation_subject_ids || []).length > 0
+          visible: (page.sd.amalgamation_subject_ids || []).length > 0 && !page.soloMode
           collapsible: false   // chip section: h/l navigate, no fold
           navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
@@ -980,7 +989,7 @@ FocusScope {
         SubjectCard {
           readonly property string navKey: "similar"
           width: parent.width
-          visible: (page.sd.visually_similar_subject_ids || []).length > 0
+          visible: (page.sd.visually_similar_subject_ids || []).length > 0 && !page.soloMode
           collapsible: false   // chip section: h/l navigate, no fold
           navFocused: page.keyNav && page.focusedKey === navKey
           Component.onCompleted: page.registerCard(this)
