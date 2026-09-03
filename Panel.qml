@@ -1435,9 +1435,9 @@ Panel {
     }
   }
 
-  // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩". On dark themes it's
-  // the theme accent; on light themes it's WK's own kanji-pink (Lessons) /
-  // radical-blue (Reviews), with the button's colour in the count pill.
+  // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩". WK's own kanji-pink
+  // (Lessons) / radical-blue (Reviews) on every theme, with the button's
+  // colour in the count pill.
   component CountCard: Rectangle {
     id: cc
     property int index: 0
@@ -1449,12 +1449,8 @@ Panel {
 
     readonly property bool cursored: root.hasCursor("start", index)
     readonly property bool lit: cursored || startHover.containsMouse
-    readonly property color fill: root.lightUi
-      ? (cc.kind === "lessons" ? "#fc02a9" : "#0098e6")
-      : root.accent
-    // text/number ink: white on the light-theme pink/blue, the panel bg
-    // (which reads on the accent) on dark themes
-    readonly property color ink: root.lightUi ? "#fcfdfd" : root.background
+    readonly property color fill: cc.kind === "lessons" ? "#fc02a9" : "#0098e6"
+    readonly property color ink: "#fcfdfd"
 
     implicitHeight: Style.space(40)
     radius: Style.space(6)
@@ -1509,8 +1505,7 @@ Panel {
           id: ccPill
           anchors.centerIn: parent
           text: String(cc.count)
-          // the button's own colour on light themes (WK), panel bg on dark
-          color: root.lightUi ? cc.fill : root.background
+          color: cc.fill   // the button's own colour, like WK
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true

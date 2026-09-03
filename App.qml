@@ -833,12 +833,11 @@ Item {
                 readonly property bool on: modelData.enabled !== false
                 readonly property bool current: gIndex === root.homeIndex && on
                 readonly property bool lit: current || (homeHover.containsMouse && on)
-                // dark theme: the accent. light theme: WK's kanji-pink for
-                // Lessons, radical-blue for Reviews.
-                readonly property color fillColor: root.lightUi
-                  ? (modelData.act === "lesson" ? "#fc02a9" : "#0098e6")
-                  : root.accent
-                readonly property color btnInk: root.lightUi ? "#fcfdfd" : root.bg
+                // WK's kanji-pink for Lessons, radical-blue for Reviews, on
+                // every theme
+                readonly property color fillColor: modelData.act === "lesson"
+                  ? "#fc02a9" : "#0098e6"
+                readonly property color btnInk: "#fcfdfd"
                 width: (homeCol.colW - homeCol.gap) / 2
                 height: Style.space(44)
                 radius: Style.space(6)
@@ -846,7 +845,7 @@ Item {
                 opacity: on ? 1.0 : 0.4
                 color: lit ? Qt.lighter(fillColor, 1.3) : fillColor
                 border.width: lit ? 3 : 0
-                border.color: root.lightUi ? Qt.rgba(0, 0, 0, 0.3) : "#fcfdfd"
+                border.color: "#fcfdfd"
                 Behavior on color { ColorAnimation { duration: 110 } }
 
                 Rectangle {
@@ -888,7 +887,7 @@ Item {
                       id: cnt
                       anchors.centerIn: parent
                       text: modelData.count
-                      color: root.lightUi ? homeBtn.fillColor : root.bg
+                      color: homeBtn.fillColor   // the button's own colour, like WK
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
                       font.bold: true
