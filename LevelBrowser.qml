@@ -463,27 +463,33 @@ Item {
 
         // segmented gate bar: one slot per kanji needed for the threshold,
         // green for the ones already Guru'd. Rounded outer ends, square
-        // middles, generous gaps -- the website's look.
-        Row {
-          id: gateBar
+        // middles, generous gaps -- the website's look. The wrapper adds a
+        // little breathing room below the bar before the blocking chips.
+        Item {
           width: parent.width
-          spacing: Style.space(3)
-          readonly property int slots: Math.max(1, levelUpBand.threshold)
-          readonly property int filled: Math.min(slots, levelUpBand.kp.passed)
-          readonly property real segW: (bandCol.width - (slots - 1) * Style.space(3)) / slots
-          Repeater {
-            model: gateBar.slots
-            delegate: Rectangle {
-              width: gateBar.segW
-              height: Style.space(10)
-              readonly property real endR: Style.space(4)
-              topLeftRadius: index === 0 ? endR : 0
-              bottomLeftRadius: index === 0 ? endR : 0
-              topRightRadius: index === gateBar.slots - 1 ? endR : 0
-              bottomRightRadius: index === gateBar.slots - 1 ? endR : 0
-              color: index < gateBar.filled
-                ? browser.passedColor
-                : Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.14)
+          implicitHeight: gateBar.implicitHeight + Style.space(6)
+          Row {
+            id: gateBar
+            width: parent.width
+            anchors.top: parent.top
+            spacing: Style.space(3)
+            readonly property int slots: Math.max(1, levelUpBand.threshold)
+            readonly property int filled: Math.min(slots, levelUpBand.kp.passed)
+            readonly property real segW: (bandCol.width - (slots - 1) * Style.space(3)) / slots
+            Repeater {
+              model: gateBar.slots
+              delegate: Rectangle {
+                width: gateBar.segW
+                height: Style.space(10)
+                readonly property real endR: Style.space(4)
+                topLeftRadius: index === 0 ? endR : 0
+                bottomLeftRadius: index === 0 ? endR : 0
+                topRightRadius: index === gateBar.slots - 1 ? endR : 0
+                bottomRightRadius: index === gateBar.slots - 1 ? endR : 0
+                color: index < gateBar.filled
+                  ? browser.passedColor
+                  : Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.14)
+              }
             }
           }
         }
@@ -658,21 +664,6 @@ Item {
               }
             }
 
-            // passed-progress bar
-            Rectangle {
-              width: parent.width
-              height: Style.space(4)
-              radius: height / 2
-              color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.12)
-              Rectangle {
-                height: parent.height
-                radius: parent.radius
-                width: parent.width * (section.p.total > 0
-                  ? section.p.passed / section.p.total : 0)
-                color: browser.passedColor
-              }
-            }
-
             // chip grid -- each cell is the chip plus a thin SRS-progress
             // strip, the way the website annotates its level page
             Grid {
@@ -722,25 +713,32 @@ Item {
                     })
                   }
 
-                  // SRS strip only once the item has actually been started;
-                  // a lessons / locked item gets a word caption instead
-                  SrsStrip {
-                    visible: !cell.cLocked && !cell.cInLessons
-                    width: parent.width - Style.space(8)
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    stage: cell.cStage
-                    locked: cell.cLocked
-                    fg: browser.ink
-                    passedColor: browser.passedColor
-                  }
+                  // annotation band under the chip -- a fixed-height slot so
+                  // the SRS strip and the "Lessons" / "Locked" caption sit on
+                  // the same line across a grid row. Started items get the
+                  // strip; lessons / locked items get the word.
+                  Item {
+                    width: parent.width
+                    height: Style.space(15)
 
-                  Text {
-                    visible: cell.cLocked || cell.cInLessons
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: cell.cLocked ? "Locked" : "Lessons"
-                    color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.5)
-                    font.family: browser.fontFamily
-                    font.pixelSize: Style.font.caption
+                    SrsStrip {
+                      visible: !cell.cLocked && !cell.cInLessons
+                      width: parent.width - Style.space(8)
+                      anchors.centerIn: parent
+                      stage: cell.cStage
+                      locked: cell.cLocked
+                      fg: browser.ink
+                      passedColor: browser.passedColor
+                    }
+
+                    Text {
+                      visible: cell.cLocked || cell.cInLessons
+                      anchors.centerIn: parent
+                      text: cell.cLocked ? "Locked" : "Lessons"
+                      color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.5)
+                      font.family: browser.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
                   }
                 }
               }
