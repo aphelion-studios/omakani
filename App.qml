@@ -850,6 +850,7 @@ Item {
                   anchors.fill: parent
                   visible: homeBtn.lit
                   ringRadius: homeBtn.radius
+                  ringColor: Qt.lighter(homeBtn.fillColor, 1.3)   // match the lit fill
                 }
 
                 Rectangle {

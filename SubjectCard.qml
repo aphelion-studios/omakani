@@ -34,18 +34,27 @@ Rectangle {
   function toggle() { if (collapsible) _userState = !collapsed }
 
   readonly property bool lightUi: Model.lightBg(Color.background)
+  // the item-info keyboard focus ring is tinted from this (usually the
+  // subject's type colour)
+  property color ringColor: Color.accent
 
   color: bg
   radius: Style.space(6)
   // light themes: a hairline so the card reads against the page (which may be
-  // the same colour); the nav ring wins when present
-  border.width: navFocused ? 2 : (lightUi ? 1 : 0)
-  border.color: navFocused
-    ? (lightUi ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(1, 1, 1, 0.85))
-    : Qt.rgba(0, 0, 0, 0.1)
+  // the same colour)
+  border.width: lightUi ? 1 : 0
+  border.color: Qt.rgba(0, 0, 0, 0.1)
   implicitHeight: folded
     ? headRow.implicitHeight + Style.space(28)
     : headRow.implicitHeight + Style.space(10) + inner.implicitHeight + Style.space(32)
+
+  // keyboard focus ring for the item-info overlay (j/k move it between cards)
+  CursorRing {
+    anchors.fill: parent
+    visible: card.navFocused
+    ringRadius: card.radius
+    ringColor: card.ringColor
+  }
 
   // ---- header (click toggles when collapsible) ----
   Item {

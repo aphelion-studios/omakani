@@ -385,9 +385,19 @@ FocusScope {
   readonly property bool hasKeyFocus: keys.activeFocus
 
   readonly property bool hasAudio: kind === "vocabulary" || kind === "kana_vocabulary"
+  // the word's primary accepted reading -- audio_pool filters a multi-reading
+  // clip list to this so KYOKO / KENICHI / j never grab an unrelated reading
+  readonly property string primaryReadingText: {
+    var rs = (sd.readings || []).filter(function (r) { return r.accepted_answer !== false })
+    for (var i = 0; i < rs.length; i++) if (rs[i].primary) return String(rs[i].reading || "")
+    return rs.length ? String(rs[0].reading || "") : ""
+  }
+  // a review can pin audio to the exact reading under test
+  property string audioReading: ""
   function playAudio(voice) {
     if (service && hasAudio && subject && subject.id)
-      service.playAudio(subject.id, voice || "random")
+      service.playAudio(subject.id, voice || "random",
+        audioReading !== "" ? audioReading : primaryReadingText)
   }
 
   function scrollBy(dy) {
@@ -655,6 +665,7 @@ FocusScope {
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Name" : "Meaning"
           bg: page.cardBg
+          ringColor: page.typeColor
 
           Column {
             width: parent.width
@@ -783,6 +794,7 @@ FocusScope {
           Component.onCompleted: page.registerCard(this)
           title: "Reading"
           bg: page.cardBg
+          ringColor: page.typeColor
 
           Column {
             width: parent.width
@@ -857,9 +869,10 @@ FocusScope {
               Text {
                 anchors.verticalCenter: parent.verticalCenter
                 readonly property bool hasErr: page.service && page.service.audioError !== ""
-                // the key hint only on the browse page -- in a review overlay
-                // audio is on the J shortcut and j navigates the open panel
-                visible: hasErr || !page.overlayMode
+                // browse page: always. review item-info: only while the
+                // Reading card holds the ring, where Shift+J plays it (j
+                // otherwise moves the section ring)
+                visible: hasErr || !page.overlayMode || page.focusedKey === "reading"
                 text: hasErr ? page.service.audioError
                   : page.lessonMode ? "or press  j" : "or press  SHIFT+J"
                 color: page.faint
@@ -928,6 +941,7 @@ FocusScope {
           Component.onCompleted: page.registerCard(this)
           title: "Context"
           bg: page.cardBg
+          ringColor: page.typeColor
 
           Column {
             width: parent.width
@@ -969,6 +983,7 @@ FocusScope {
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "kanji" ? "Radical Combination" : "Kanji Composition"
           bg: page.cardBg
+          ringColor: page.typeColor
           chipIds: page.sd.component_subject_ids || []
 
           Flow {
@@ -1006,6 +1021,7 @@ FocusScope {
           Component.onCompleted: page.registerCard(this)
           title: page.kind === "radical" ? "Found In Kanji" : "Found In Vocabulary"
           bg: page.cardBg
+          ringColor: page.typeColor
           chipIds: (page.sd.amalgamation_subject_ids || []).slice(0, 60)
 
           Flow {
@@ -1043,6 +1059,7 @@ FocusScope {
           Component.onCompleted: page.registerCard(this)
           title: "Visually Similar Kanji"
           bg: page.cardBg
+          ringColor: page.typeColor
           chipIds: page.sd.visually_similar_subject_ids || []
 
           Flow {

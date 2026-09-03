@@ -143,6 +143,14 @@ function lightBg(c) {
   return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) > 0.5
 }
 
+// Colour "chroma" -- how far from grey a colour is (max channel minus min).
+// Near-zero for the White theme's near-neutral accent, so callers can swap in
+// a saturated hue where a tinted-accent state would otherwise read as grey.
+function chroma(c) {
+  if (!c) return 0
+  return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b)
+}
+
 // One-line status under the hero. Errors win over notes.
 function statusLine(view) {
   if (!view) return ""

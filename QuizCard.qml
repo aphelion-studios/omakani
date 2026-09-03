@@ -239,15 +239,17 @@ FocusScope {
     submit()
   }
 
-  // the reading to hear: what was just typed on a reading prompt, else the
-  // primary accepted reading -- so 近々 (ちかぢか / きんきん) never plays back
-  // the reading you weren't asked
+  // the reading to hear: what you typed only if you got the reading RIGHT
+  // (a wrong guess would otherwise play back your mistake, or an unrelated
+  // clip), else the primary accepted reading -- so 近々 (ちかぢか / きんきん)
+  // plays back a reading that actually exists
   function playbackReading() {
-    if (readingPrompt && phase !== "input") {
-      var t = field.text.replace(/\s/g, "")
-      if (t !== "") return t
-    }
     var rs = (d.readings || []).filter(function (r) { return r.accepted_answer !== false })
+    if (readingPrompt && phase === "correct") {
+      var t = field.text.replace(/\s/g, "")
+      // only if it's genuinely one of the word's readings
+      for (var k = 0; k < rs.length; k++) if (rs[k].reading === t) return t
+    }
     for (var i = 0; i < rs.length; i++) if (rs[i].primary) return rs[i].reading
     return rs.length ? rs[0].reading : ""
   }
@@ -832,6 +834,10 @@ FocusScope {
         // already committed your answer, so hearing it isn't a peek
         audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
           || (quiz.readingPrompt && quiz.phase !== "input")
+        // pin the item-info's KYOKO / KENICHI / Shift+J to the reading under
+        // test, so a multi-reading word doesn't play an unrelated clip.
+        // drilled into a linked subject -> let the page use its own primary.
+        audioReading: drilled ? "" : quiz.playbackReading()
         subject: quiz._infoSubject
         service: quiz.service
         pageBg: quiz.pageBg

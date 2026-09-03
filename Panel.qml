@@ -700,7 +700,11 @@ Panel {
 
     Mark {
       anchors.centerIn: parent
-      tint: root.markActive ? root.accent
+      // active state normally uses the theme accent, but on a theme whose
+      // accent is near-neutral (the White theme) that's indistinguishable
+      // from the idle grey -- fall back to the WaniKani radical blue there.
+      tint: root.markActive
+        ? (Model.chroma(root.accent) < 0.12 ? "#0098e6" : root.accent)
         : (!wk.configured
            ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.7)
            : root.foreground)
@@ -1445,6 +1449,7 @@ Panel {
       anchors.fill: parent
       visible: cc.lit
       ringRadius: cc.radius
+      ringColor: Qt.lighter(cc.fill, 1.3)   // match the lit fill
     }
 
     // breathing highlight while the queue is available
@@ -1865,9 +1870,14 @@ Panel {
     radius: Style.space(4)
     color: root.typeColor(item ? item.type : "")
     opacity: chipMouse.containsMouse ? 0.82 : 1
-    border.width: cursored ? Math.max(1, Style.space(2)) : 0
-    border.color: "#fcfdfd"
     onCursoredChanged: if (cursored) root.setCursorItem(chip)
+
+    CursorRing {
+      anchors.fill: parent
+      visible: chip.cursored
+      ringRadius: chip.radius
+      ringColor: Qt.lighter(chip.color, 1.3)   // match a lit chip
+    }
 
     Text {
       id: chipLabel

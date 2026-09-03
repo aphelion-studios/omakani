@@ -318,7 +318,9 @@ Item {
     // "" / "random" -> the configured default voice
     var v = (!voice || voice === "random") ? setting("audioVoice", "random") : voice
     var cmd = ["python3", helperPath, "audio", String(n)]
-    if (v && v !== "" && v !== "random") cmd.push("--voice", String(v))
+    // pass "random" through too -- the helper picks a random voice actor; if
+    // we swallow it here the helper just plays the first clip every time
+    if (v && v !== "") cmd.push("--voice", String(v))
     if (reading && String(reading) !== "") cmd.push("--reading", String(reading))
     audioProcess.command = cmd
     audioProcess.running = true
