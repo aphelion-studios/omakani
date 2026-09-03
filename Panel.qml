@@ -125,6 +125,8 @@ Panel {
       out.push({ n: "upcoming", o: "v", c: wk.upcoming.length })
     if (wk.dashboardLoaded)
       out.push({ n: "extra", o: "v", c: 3 })
+    if (wk.dashboardLoaded)
+      out.push({ n: "levelprogress", o: "v", c: 4 })   // header + rad/kan/voc
     if (chipCount(wk.recentlyUnlocked) > 0)
       out.push({ n: "unlocked", o: "h", c: chipCount(wk.recentlyUnlocked) })
     if (chipCount(wk.criticalCondition) > 0)
@@ -260,9 +262,12 @@ Panel {
     }
     // the cursor couldn't move -- a second Up at the top scrolls the header
     // fully in, a second Down at the bottom scrolls to the end
-    if (navSection === beforeSec && navIndex === beforeIdx && dy !== 0 && panelFlick) {
-      panelFlick.contentY = dy < 0 ? 0
-        : Math.max(0, panelFlick.contentHeight - panelFlick.height)
+    if (navSection === beforeSec && navIndex === beforeIdx && dy !== 0) {
+      var edgeFlick = root.settingsOpen ? settingsFlick : panelFlick
+      if (edgeFlick) {
+        edgeFlick.contentY = dy < 0 ? 0
+          : Math.max(0, edgeFlick.contentHeight - edgeFlick.height)
+      }
       return
     }
     scrollTimer.restart()
@@ -293,6 +298,7 @@ Panel {
     }
     else if (s === "start") openStart(i)
     else if (s === "extra") openExtraStudy(i)
+    else if (s === "levelprogress") openLevelProgress(i)
     else if (s === "unlocked") openItem(wk.recentlyUnlocked[i])
     else if (s === "critical") openItem(wk.criticalCondition[i])
     else if (s === "burned") openItem(wk.recentlyBurned[i])
@@ -330,6 +336,18 @@ Panel {
       JSON.stringify({ session: modes[index] })])
     root.close()   // get the dropdown out of the app's way
   }
+  // Open the full Level Progress page for the current level. index 0 is the
+  // "LEVEL N PROGRESS" heading -> just the level; 1/2/3 are Radicals / Kanji /
+  // Vocabulary -> land on that section's first chip.
+  function openLevelProgress(index) {
+    var payload = { browse: Number(wk.level) || 1 }
+    if (index === 1) payload.focus = "radical"
+    else if (index === 2) payload.focus = "kanji"
+    else if (index === 3) payload.focus = "vocabulary"
+    Quickshell.execDetached(["omarchy-shell", "-q", "shell", "summon",
+      "io.github.aphelion-studios.omakani", JSON.stringify(payload)])
+    root.close()
+  }
 
   Timer {
     id: scrollTimer
@@ -338,19 +356,21 @@ Panel {
   }
   function scrollToCursor() {
     var it = cursorItem
-    if (!it || !it.visible || !panelFlick) return
+    if (!it || !it.visible) return
+    var flick = root.settingsOpen ? settingsFlick : panelFlick
+    if (!flick) return
     // The very first target lands with a fat top margin; a second Up press
     // (handled in navMove) scrolls the header the rest of the way in.
-    var y = it.mapToItem(panelFlick.contentItem, 0, 0).y
+    var y = it.mapToItem(flick.contentItem, 0, 0).y
     // A fatter top margin on the first row of a section pulls its heading in too.
     var topM = navIndex === 0 ? Style.space(38) : Style.space(16)
     var botM = Style.space(16)
-    var viewH = panelFlick.height
-    var maxY = Math.max(0, panelFlick.contentHeight - viewH)
-    if (y - topM < panelFlick.contentY)
-      panelFlick.contentY = Math.max(0, y - topM)
-    else if (y + it.height + botM > panelFlick.contentY + viewH)
-      panelFlick.contentY = Math.min(maxY, y + it.height + botM - viewH)
+    var viewH = flick.height
+    var maxY = Math.max(0, flick.contentHeight - viewH)
+    if (y - topM < flick.contentY)
+      flick.contentY = Math.max(0, y - topM)
+    else if (y + it.height + botM > flick.contentY + viewH)
+      flick.contentY = Math.min(maxY, y + it.height + botM - viewH)
   }
 
   function commitToken() {
@@ -656,7 +676,9 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(360))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(720))
+    contentHeight: panel.fittedContentHeight(
+      root.settingsOpen ? settingsColumn.implicitHeight : column.implicitHeight,
+      Style.space(720))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -976,14 +998,43 @@ Panel {
             readonly property var lp: wk.levelProgress
             readonly property int gate: Number(lp.kanjiToLevelUp) || 0
 
-            PanelSectionHeader {
-              text: "LEVEL " + wk.level + " PROGRESS"
-              foreground: root.foreground
-              fontFamily: root.fontFamily
+            Item {
+              id: lpHeaderItem
+              width: parent.width
+              implicitHeight: lpHeader.implicitHeight
+              readonly property bool cursored: root.hasCursor("levelprogress", 0)
+              onCursoredChanged: if (cursored) root.setCursorItem(lpHeaderItem)
+              Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: -Style.space(4)
+                anchors.rightMargin: -Style.space(4)
+                anchors.topMargin: -Style.space(2)
+                anchors.bottomMargin: -Style.space(2)
+                radius: Style.cornerRadius
+                color: lpHeaderItem.cursored
+                  ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+                  : "transparent"
+                Behavior on color { ColorAnimation { duration: 60 } }
+              }
+              PanelSectionHeader {
+                id: lpHeader
+                width: parent.width
+                text: "LEVEL " + wk.level + " PROGRESS"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+              MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onContainsMouseChanged: if (containsMouse) root.setCursor("levelprogress", 0)
+                onClicked: root.openLevelProgress(0)
+              }
             }
 
             ProgressRow {
               width: parent.width
+              idx: 1
               label: "Radicals"
               tint: root.radicalColor
               passed: Number(parent.lp.radicals ? parent.lp.radicals.passed : 0)
@@ -991,6 +1042,7 @@ Panel {
             }
             ProgressRow {
               width: parent.width
+              idx: 2
               label: "Kanji"
               tint: root.kanjiColor
               passed: Number(parent.lp.kanji ? parent.lp.kanji.passed : 0)
@@ -998,6 +1050,7 @@ Panel {
             }
             ProgressRow {
               width: parent.width
+              idx: 3
               label: "Vocabulary"
               tint: root.vocabColor
               passed: Number(parent.lp.vocabulary ? parent.lp.vocabulary.passed : 0)
@@ -1221,7 +1274,18 @@ Panel {
         visible: root.settingsOpen
         color: Color.popups.background
 
+        Flickable {
+          id: settingsFlick
+          anchors.fill: parent
+          clip: true
+          contentWidth: width
+          contentHeight: settingsColumn.implicitHeight
+          boundsBehavior: Flickable.StopAtBounds
+          flickableDirection: Flickable.VerticalFlick
+          interactive: contentHeight > height
+
         Column {
+          id: settingsColumn
           width: parent.width
           spacing: Style.space(10)
 
@@ -1271,15 +1335,8 @@ Panel {
             }
           }
 
-          Text {
-            width: parent.width
-            topPadding: Style.space(4)
-            text: "Notifications follow Do Not Disturb and stay quiet on vacation."
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.WordWrap
-          }
+          Item { width: 1; height: Style.space(6) }   // a little tail padding
+        }
         }
       }
     }
@@ -1406,7 +1463,7 @@ Panel {
 
     RowLayout {
       anchors.fill: parent
-      anchors.rightMargin: Style.space(2)
+      anchors.rightMargin: Style.space(6)
       spacing: Style.space(6)
 
       Text {
@@ -1562,45 +1619,77 @@ Panel {
   }
 
   // One Level Progress line: "Radicals  19 / 20" over a tinted fill bar.
-  component ProgressRow: Column {
+  // A nav target -- Enter / click opens the full Level Progress page on that
+  // section's first chip (idx 1 = radicals, 2 = kanji, 3 = vocabulary).
+  component ProgressRow: Item {
     id: pr
     property string label: ""
     property color tint: root.accent
     property int passed: 0
     property int total: 0
+    property int idx: 0
     readonly property real frac: total > 0 ? Math.max(0, Math.min(1, passed / total)) : 0
-    spacing: Style.space(3)
+    readonly property bool cursored: root.hasCursor("levelprogress", idx)
+    implicitHeight: prCol.implicitHeight
+    onCursoredChanged: if (cursored) root.setCursorItem(pr)
 
-    RowLayout {
+    Rectangle {
+      anchors.fill: parent
+      anchors.leftMargin: -Style.space(4)
+      anchors.rightMargin: -Style.space(4)
+      anchors.topMargin: -Style.space(3)
+      anchors.bottomMargin: -Style.space(3)
+      radius: Style.cornerRadius
+      color: pr.cursored
+        ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+        : "transparent"
+      Behavior on color { ColorAnimation { duration: 60 } }
+    }
+
+    Column {
+      id: prCol
       width: parent.width
-      Text {
-        text: pr.label
-        color: root.foreground
-        opacity: 0.9
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        Layout.fillWidth: true
+      spacing: Style.space(3)
+
+      RowLayout {
+        width: parent.width
+        Text {
+          text: pr.label
+          color: root.foreground
+          opacity: 0.9
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          Layout.fillWidth: true
+        }
+        Text {
+          text: pr.passed + " / " + pr.total
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
       }
-      Text {
-        text: pr.passed + " / " + pr.total
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        font.bold: true
+
+      Rectangle {
+        width: parent.width
+        height: Style.space(4)
+        radius: 2
+        color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
+        Rectangle {
+          width: Math.round(parent.width * pr.frac)
+          height: parent.height
+          radius: parent.radius
+          color: pr.tint
+        }
       }
     }
 
-    Rectangle {
-      width: parent.width
-      height: Style.space(4)
-      radius: 2
-      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
-      Rectangle {
-        width: Math.round(parent.width * pr.frac)
-        height: parent.height
-        radius: parent.radius
-        color: pr.tint
-      }
+    MouseArea {
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onContainsMouseChanged: if (containsMouse) root.setCursor("levelprogress", pr.idx)
+      onClicked: root.openLevelProgress(pr.idx)
     }
   }
 

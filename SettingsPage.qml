@@ -50,6 +50,7 @@ FocusScope {
       if (e.text === "?") { keyHints.toggle(); e.accepted = true }
       else if (e.key === Qt.Key_Escape && keyHints.open) { keyHints.close(); e.accepted = true }
       else if (e.key === Qt.Key_Escape) { page.closeRequested(); e.accepted = true }
+      else if (e.text === "s" && !keyHints.open) { page.closeRequested(); e.accepted = true }
       else if (e.text === "j" || e.key === Qt.Key_Down) {
         page.cursor = Math.min(page.rows.length - 1, page.cursor + 1)
         Qt.callLater(ensureVisible); e.accepted = true
@@ -271,6 +272,7 @@ FocusScope {
         { k: "j k", d: "Move between settings" },
         { k: "h l", d: "Change the value" },
         { k: "↵", d: "Toggle / cycle" },
+        { k: "s", d: "Close settings" },
         { k: "Esc", d: "Back" },
         { k: "?", d: "Toggle this menu" }
       ]

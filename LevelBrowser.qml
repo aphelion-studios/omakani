@@ -14,6 +14,9 @@ import qs.Commons
 // the section headings in, then a further k lands on the < Level N > bar
 // where h/l step levels and j drops back to the grid; [ / ] step levels from
 // anywhere; Enter opens the subject; g / G jump to the ends.
+//
+// Each chip carries a thin SRS strip; on your current level a band above the
+// grid lists the kanji still blocking the level-up gate.
 Item {
   id: browser
 
@@ -49,6 +52,9 @@ Item {
 
   // Flat cursor over `rows` (already ordered radical -> kanji -> vocab).
   property int cursor: 0
+  // the host (dashboard "Radicals 19/20" etc.) can ask us to land on a
+  // section's first chip; applied once that level's rows arrive, then cleared
+  property string pendingSection: ""
   // when true the < Level N > bar has the ring; h/l step levels, j returns
   property bool onLevelBar: false
   readonly property int columns: Math.max(1,
@@ -61,9 +67,88 @@ Item {
         : r.object === kind
     })
   }
+  // kanji on this level not yet Guru'd -- the items blocking the level-up gate
+  readonly property var blockingKanji: (ready && !searching)
+    ? rows.filter(function (r) { return r.object === "kanji" && r.passed !== true })
+    : []
   function progOf(pkey) {
     var p = prog[pkey] || ({})
     return { passed: p.passed || 0, unlocked: p.unlocked || 0, total: p.total || 0 }
+  }
+  // flat index of the first chip in a section
+  function firstIndexOf(kind) {
+    if (kind === "kanji") return sectionRows("radical").length
+    if (kind === "vocabulary" || kind === "vocab")
+      return sectionRows("radical").length + sectionRows("kanji").length
+    return 0   // radical
+  }
+  // section Column items, keyed by kind -- so a pending-section request can
+  // scroll that heading into view
+  property var _sections: ({})
+  // true while we're driving the view to a pending section: suppresses the
+  // grid's own auto-scrolls (topPin, the first-chip scroll-to-top) so they
+  // don't fight sectionPin
+  property bool _seeking: false
+
+  // a fresh entry into Level Progress -- top of the level, nothing ringed.
+  // A pending-section request (from the dashboard's "Kanji 31/37" etc.) drives
+  // the view instead, so don't reset when one is queued.
+  function enterFresh() {
+    onLevelBar = false
+    // a pending-section request drives the view -- and it may have been
+    // consumed synchronously already (cached level), so also bail while a
+    // seek is still settling
+    if (pendingSection !== "" || _seeking) return
+    cursor = 0
+    scrollTop()
+  }
+  function _applyPendingSection() {
+    if (pendingSection === "" || rows.length === 0) return
+    var kind = pendingSection === "vocab" ? "vocabulary" : pendingSection
+    // the section must actually be in `rows` before we can land on it -- rows
+    // arrives whole, but a stale level's rows can be showing for a frame. Keep
+    // pendingSection queued and retry on the next rows / ready change.
+    var srows = sectionRows(kind)
+    if (srows.length === 0) return
+    var idx = firstIndexOf(kind)
+    if (idx >= rows.length) return
+    pendingSection = ""
+    onLevelBar = false
+    cursor = idx
+    if (idx === 0) { _seeking = false; scrollTop(); return }
+    // pin the section heading near the top for a few frames -- the grid
+    // reflows as chips resolve and a one-shot scroll gets undone
+    sectionPin.kind = kind
+    sectionPin.ticks = 0
+    sectionPin.restart()
+  }
+  // give up on an unresolvable pending section so _seeking can't wedge the view
+  Timer {
+    id: seekWatchdog
+    interval: 2500
+    onTriggered: if (browser.pendingSection !== "" || browser._seeking) {
+      browser.pendingSection = ""
+      browser._seeking = false
+    }
+  }
+  Timer {
+    id: sectionPin
+    interval: 16
+    repeat: true
+    property string kind: ""
+    property int ticks: 0
+    onTriggered: {
+      ticks += 1
+      var t = browser._sections[kind]
+      if (t) {
+        var y = t.mapToItem(flick.contentItem, 0, 0).y
+        var maxY = Math.max(0, flick.contentHeight - flick.height)
+        flick.contentY = Math.max(0, Math.min(maxY, y - Style.space(4)))
+      }
+      if (ticks >= 20 || !browser.visible) {
+        stop(); ticks = 0; kind = ""; browser._seeking = false
+      }
+    }
   }
 
   function focusGrid() { keyScope.forceActiveFocus() }
@@ -138,24 +223,40 @@ Item {
   // the grid reflows as chips resolve after the rows land, and a plain
   // contentY=0 gets undone by that pass (the "Radicals (n/m)" heading ends up
   // scrolled under the level bar) -- so pin it to 0 for a few frames
-  function scrollTop() { flick.contentY = 0; topPin.restart() }
+  function scrollTop() {
+    if (_seeking) return   // a pending section owns the scroll right now
+    flick.contentY = 0
+    topPin.restart()
+  }
   Timer {
     id: topPin
     interval: 16
     repeat: true
     property int ticks: 0
     onTriggered: {
+      if (browser._seeking) { stop(); ticks = 0; return }
       flick.contentY = 0
       ticks += 1
       if (ticks >= 14 || !browser.visible || browser.cursor !== 0) { stop(); ticks = 0 }
     }
   }
-  onLevelChanged: { cursor = 0; scrollTop() }
+  onLevelChanged: { if (!_seeking) cursor = 0; if (pendingSection === "" && !_seeking) scrollTop() }
   onRowsChanged: {
     if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
-    if (cursor === 0) scrollTop()   // fresh level -- show the first heading
+    _applyPendingSection()
+    if (cursor === 0 && pendingSection === "") scrollTop()   // show first heading
   }
-  onVisibleChanged: if (visible) { onLevelBar = false; if (cursor === 0) scrollTop() }
+  onVisibleChanged: if (visible) {
+    onLevelBar = false
+    Qt.callLater(_applyPendingSection)
+    if (cursor === 0 && pendingSection === "") scrollTop()
+  }
+  onPendingSectionChanged: if (pendingSection !== "") {
+    _seeking = true
+    seekWatchdog.restart()
+    Qt.callLater(_applyPendingSection)
+  }
+  onReadyChanged: if (ready && pendingSection !== "") Qt.callLater(_applyPendingSection)
 
   FocusScope {
     id: keyScope
@@ -321,10 +422,83 @@ Item {
 
     }
 
+    // ---- level-up gate: which kanji still block the next level (current level
+    // only, mirroring the website's "Guru N more kanji" line) ----
+    Item {
+      id: levelUpBand
+      anchors.top: levelBar.bottom
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.leftMargin: Style.space(24)
+      anchors.rightMargin: Style.space(24)
+      anchors.topMargin: visible ? Style.space(10) : 0
+
+      readonly property int userLevel: browser.service ? Number(browser.service.level) || 0 : 0
+      // prefer the dashboard's figure; fall back to the browse counts (90% of
+      // this level's kanji must be Guru'd)
+      readonly property int gate: {
+        var lp = browser.service && browser.service.levelProgress
+          ? browser.service.levelProgress : null
+        var g = lp ? Number(lp.kanjiToLevelUp) : NaN
+        if (isFinite(g)) return Math.max(0, g)
+        var k = browser.progOf("kanji")
+        return k.total > 0 ? Math.max(0, Math.ceil(k.total * 0.9) - k.passed) : 0
+      }
+      visible: !browser.searching && browser.ready
+        && browser.level === userLevel && browser.blockingKanji.length > 0
+      implicitHeight: visible ? bandCol.implicitHeight : 0
+
+      Column {
+        id: bandCol
+        width: parent.width
+        spacing: Style.space(8)
+
+        Text {
+          text: levelUpBand.gate > 0
+            ? "Guru " + levelUpBand.gate + " more kanji to reach level " + (browser.level + 1)
+            : "Kanji gate cleared — level " + (browser.level + 1) + " is unlocked"
+          color: levelUpBand.gate > 0 ? browser.ink : browser.passedColor
+          font.family: browser.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          font.bold: true
+        }
+
+        Flow {
+          width: parent.width
+          spacing: Style.space(6)
+          Repeater {
+            model: browser.blockingKanji.slice(0, 14)
+            delegate: SubjectChip {
+              subjectId: modelData.id
+              object: "kanji"
+              characters: modelData.characters || ""
+              meaning: modelData.meaning || ""
+              locked: modelData.unlocked === false
+              fontFamily: browser.fontFamily
+              jpFamily: browser.jpFamily
+              fg: browser.ink
+              radicalColor: browser.radicalColor
+              kanjiColor: browser.kanjiColor
+              vocabColor: browser.vocabColor
+              onActivated: browser.openSubject(modelData.id)
+            }
+          }
+          Text {
+            visible: browser.blockingKanji.length > 14
+            anchors.verticalCenter: parent.verticalCenter
+            text: "+" + (browser.blockingKanji.length - 14)
+            color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.5)
+            font.family: browser.fontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+        }
+      }
+    }
+
     // ---- scrolling section list ----
     Flickable {
       id: flick
-      anchors.top: levelBar.bottom
+      anchors.top: levelUpBand.bottom
       anchors.topMargin: Style.space(14)
       anchors.left: parent.left
       anchors.right: parent.right
@@ -427,6 +601,7 @@ Item {
             id: section
             width: sections.width
             spacing: Style.space(8)
+            Component.onCompleted: browser._sections[modelData.kind] = section
             readonly property var srows: browser.sectionRows(modelData.kind)
             readonly property var p: browser.progOf(modelData.pkey)
             readonly property int baseIndex: {
@@ -473,41 +648,57 @@ Item {
               }
             }
 
-            // chip grid
+            // chip grid -- each cell is the chip plus a thin SRS-progress
+            // strip, the way the website annotates its level page
             Grid {
               id: grid
               width: parent.width
               columns: browser.columns
               columnSpacing: Style.space(8)
-              rowSpacing: Style.space(8)
+              rowSpacing: Style.space(10)
 
               Repeater {
                 model: section.srows
-                delegate: SubjectChip {
-                  id: chipItem
+                delegate: Column {
+                  id: cell
                   width: (grid.width - (browser.columns - 1) * Style.space(8)) / browser.columns
+                  spacing: Style.space(3)
                   readonly property int flatIndex: section.baseIndex + index
-                  subjectId: modelData.id
-                  object: modelData.object
-                  characters: modelData.characters || ""
-                  meaning: modelData.meaning || ""
-                  locked: modelData.unlocked === false
-                  cursored: browser.cursor === flatIndex && browser.visible && !browser.onLevelBar
-                  fontFamily: browser.fontFamily
-                  jpFamily: browser.jpFamily
-                  fg: browser.ink
-                  radicalColor: browser.radicalColor
-                  kanjiColor: browser.kanjiColor
-                  vocabColor: browser.vocabColor
-                  onActivated: {
-                    browser.cursor = flatIndex
-                    browser.openSubject(modelData.id)
+
+                  SubjectChip {
+                    id: chipItem
+                    width: parent.width
+                    subjectId: modelData.id
+                    object: modelData.object
+                    characters: modelData.characters || ""
+                    meaning: modelData.meaning || ""
+                    locked: modelData.unlocked === false
+                    cursored: browser.cursor === cell.flatIndex && browser.visible && !browser.onLevelBar
+                    fontFamily: browser.fontFamily
+                    jpFamily: browser.jpFamily
+                    fg: browser.ink
+                    radicalColor: browser.radicalColor
+                    kanjiColor: browser.kanjiColor
+                    vocabColor: browser.vocabColor
+                    onActivated: {
+                      browser.cursor = cell.flatIndex
+                      browser.openSubject(modelData.id)
+                    }
+                    onCursoredChanged: if (cursored) Qt.callLater(function () {
+                      if (browser._seeking) return   // sectionPin owns the scroll
+                      if (cell.flatIndex === 0) browser.scrollTop()
+                      else browser.ensureVisible(cell)
+                    })
                   }
-                  onCursoredChanged: if (cursored) Qt.callLater(function () {
-                    // don't scroll the first chip up under the section heading
-                    if (chipItem.flatIndex === 0) browser.scrollTop()
-                    else browser.ensureVisible(chipItem)
-                  })
+
+                  SrsStrip {
+                    width: parent.width - Style.space(8)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    stage: Number(modelData.srsStage) || 0
+                    locked: modelData.unlocked === false
+                    fg: browser.ink
+                    passedColor: browser.passedColor
+                  }
                 }
               }
             }

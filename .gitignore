@@ -7,3 +7,6 @@ __pycache__/
 # committed or shipped with the plugin -- this is defensive in case the cache
 # is ever copied or symlinked into a checkout.
 radical_mnemonics/
+
+# Theme contrast/legibility audit -- before/after screenshots, local only
+theme-audit/

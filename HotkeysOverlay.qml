@@ -112,21 +112,25 @@ Item {
         model: ov.rows
         delegate: Row {
           spacing: Style.space(8)
-          Rectangle {
-            width: Style.space(22)
-            height: Style.space(18)
-            radius: Style.space(3)
-            anchors.verticalCenter: parent.verticalCenter
-            color: Qt.rgba(ov.fg.r, ov.fg.g, ov.fg.b, 0.1)
-            border.width: 1
-            border.color: Qt.rgba(ov.fg.r, ov.fg.g, ov.fg.b, 0.16)
-            Text {
-              anchors.centerIn: parent
-              text: modelData.k
-              color: ov.fg
-              font.family: ov.fontFamily
-              font.pixelSize: Style.font.caption
-              font.bold: true
+          Repeater {
+            model: String(modelData.k).split(" ")
+            delegate: Rectangle {
+              width: Math.max(Style.space(20), kLabel.implicitWidth + Style.space(9))
+              height: Style.space(18)
+              radius: Style.space(3)
+              anchors.verticalCenter: parent.verticalCenter
+              color: Qt.rgba(ov.fg.r, ov.fg.g, ov.fg.b, 0.1)
+              border.width: 1
+              border.color: Qt.rgba(ov.fg.r, ov.fg.g, ov.fg.b, 0.16)
+              Text {
+                id: kLabel
+                anchors.centerIn: parent
+                text: modelData
+                color: ov.fg
+                font.family: ov.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
             }
           }
           Text {

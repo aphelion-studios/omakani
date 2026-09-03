@@ -32,7 +32,14 @@ FocusScope {
   property bool overlayMode: false
   // keyboard section/chip navigation (j/k ring, h/l chips, Enter fold/open,
   // Esc back) -- on in the overlay and in the standalone browser page
-  property bool keyNav: overlayMode
+  property bool keyNav: overlayMode || forceKeyNav || lessonChipComposition
+  // the host (a lesson drilling into a component) forces the chip ring on
+  property bool forceKeyNav: false
+  // lesson Composition page: j arms the component ring, k disarms it so h/l
+  // page between lessons again. Off by default -- nothing is focused.
+  property bool lessonChipFocused: false
+  readonly property bool lessonChipComposition:
+    lessonMode && soloSection === "composition" && lessonChipFocused
   // hearing the word is a peek if you haven't cleared its reading yet
   property bool audioAllowed: true
   // apply the review's default folds (context folded); off when drilled into
@@ -219,6 +226,8 @@ FocusScope {
   // (linked-chip hydration), handing back the *same* record -- guard on the
   // id so a re-merge doesn't reset the scroll position or the focus ring
   property int _loadedSubjectId: 0
+  // paging to a different learn card drops the chip ring
+  onSoloSectionChanged: lessonChipFocused = false
   onSubjectChanged: {
     var sid = (subject && subject.id) ? Number(subject.id) : 0
     if (sid !== 0 && sid === _loadedSubjectId) {
@@ -229,6 +238,7 @@ FocusScope {
     flick.contentY = 0
     focusIndex = 0
     chipIndex = 0
+    lessonChipFocused = false
     _syncedSection = ""
     _allExpanded = false
     resetToken += 1     // cards drop manual folds, back to their defaults
@@ -404,12 +414,25 @@ FocusScope {
       }
       // audio: in a lesson plain j plays it (no vim nav to lose); on the
       // browse page it's SHIFT+J (j scrolls / moves the ring there)
-      if (page.lessonMode && (e.text === "j" || e.text === "J") && page.hasAudio) {
+      if (page.lessonMode && (e.text === "j" || e.text === "J") && page.hasAudio
+          && page.soloSection !== "composition") {
         page.playAudio("random"); e.accepted = true; return
       }
       if (!page.overlayMode && !page.lessonMode
           && e.key === Qt.Key_J && (e.modifiers & Qt.ShiftModifier)) {
         page.playAudio("random"); e.accepted = true; return
+      }
+      // lesson Composition page: j arms the component ring, k / Esc disarms it
+      // (so h/l page between lessons again). Nothing is focused until you press j.
+      if (page.lessonMode && page.soloSection === "composition" && !page.forceKeyNav) {
+        if (!page.lessonChipFocused) {
+          if (e.text === "j") { page.lessonChipFocused = true; e.accepted = true; return }
+        } else {
+          if (e.text === "k" || e.key === Qt.Key_Escape) {
+            page.lessonChipFocused = false; e.accepted = true; return
+          }
+          if (e.text === "j") { e.accepted = true; return }   // only one section
+        }
       }
       // j/k move the section ring, Enter toggles a fold (or opens the
       // highlighted chip on a chip section), h/l step the chip cursor,

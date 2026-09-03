@@ -557,8 +557,11 @@ def level_progress(subjects_by_id, assignment_by_subject, level):
             continue
         key = type_key(subject.get("object"))
         progress[key]["total"] += 1
-        assignment = assignment_by_subject.get(subject.get("id"))
-        if (data_of(assignment).get("srs_stage") or 0) >= 5:
+        a_data = data_of(assignment_by_subject.get(subject.get("id")))
+        # WaniKani counts an item toward level-up once it has *ever* reached
+        # Guru (passed_at is set) -- failing it back to Apprentice later doesn't
+        # un-count it. Mirror the browse endpoint so both views agree.
+        if bool(a_data.get("passed_at")) or (a_data.get("srs_stage") or 0) >= 5:
             progress[key]["passed"] += 1
     kanji = progress["kanji"]
     threshold = math.ceil(kanji["total"] * 0.9)

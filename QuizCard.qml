@@ -201,6 +201,8 @@ FocusScope {
     } else if (res.status === "incorrect") {
       phase = "wrong"
       kanaOpen = false
+      tip = "Need help? View the correct "
+        + (effectiveType === "reading" ? "reading" : "meaning") + " and mnemonic."
       quiz.answered(false, typed)
       shake.restart()
       Qt.callLater(quiz.forceActiveFocus)

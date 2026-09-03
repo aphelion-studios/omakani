@@ -69,6 +69,30 @@ FocusScope {
   readonly property string soloSection: (pageIndex < currentPages.length)
     ? currentPages[pageIndex] : "meaning"
 
+  // drilling into a component chip from the Composition page during the learn
+  // walk -- a small back stack, the same shape as the review Item Info. h /
+  // Left / Esc pops one.
+  property var _drillStack: []
+  property int _drillPending: 0
+  readonly property bool drilled: _drillStack.length > 0
+  readonly property var infoSubjectShown: drilled
+    ? _drillStack[_drillStack.length - 1] : infoSubject
+  // on the Composition page the SubjectPage drives its own chip ring (j/k/h/l/
+  // Enter), exactly like reviews; every other learn page uses h/l for paging
+  readonly property bool infoChipNav: phase === "info" && soloSection === "composition"
+  function _drill(id) {
+    if (!service) return
+    var res = service.subjectDetail(id)
+    if (res) { _drillStack = _drillStack.concat([res]); return }
+    _drillPending = parseInt(String(id), 10)
+    service.loadDetail([id])
+  }
+  function _drillBack() {
+    if (_drillStack.length > 0) _drillStack = _drillStack.slice(0, -1)
+  }
+  onPageIndexChanged: _drillStack = []
+  onInfoIndexChanged: _drillStack = []
+
   readonly property int moreWaiting: Math.max(0, batchTotal - doneIds.length)
 
   // autoplay a vocab's reading when the learn walk reaches its reading page
@@ -200,7 +224,16 @@ FocusScope {
   Connections {
     target: flow.service
     enabled: flow.service !== null
-    function onDetailReady(ids) { flow.checkReady() }
+    function onDetailReady(ids) {
+      flow.checkReady()
+      if (flow._drillPending > 0 && flow.service) {
+        var res = flow.service.subjectDetail(flow._drillPending)
+        if (res) {
+          flow._drillStack = flow._drillStack.concat([res])
+          flow._drillPending = 0
+        }
+      }
+    }
     function onLessonStarted(result) {
       if (flow.phase !== "starting") return
       flow.startedCount += 1
@@ -237,8 +270,17 @@ FocusScope {
       else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { startInfo(); e.accepted = true }
       else if (e.key === Qt.Key_Escape) { flow.exit(); e.accepted = true }
     } else if (phase === "info") {
+      // The SubjectPage handles j/k itself (scroll, or -- on the Composition
+      // page -- arming its component ring). Anything it doesn't accept bubbles
+      // here: h/l page the learn walk, unless the ring is armed and eats them.
       if (e.text === "?") { learnHotkeys.toggle(); e.accepted = true }
       else if (e.key === Qt.Key_Escape && learnHotkeys.open) { learnHotkeys.close(); e.accepted = true }
+      else if (drilled && (e.key === Qt.Key_Escape || e.key === Qt.Key_Left)) {
+        _drillBack(); e.accepted = true
+      }
+      else if (drilled) {
+        // the drilled page owns j/k/h/l/Enter; Left / Esc (above) pops it
+      }
       else if (e.text === "l" || e.key === Qt.Key_Right || e.key === Qt.Key_Return
           || e.key === Qt.Key_Enter) { infoNext(); e.accepted = true }
       else if (e.text === "h" || e.key === Qt.Key_Left) { infoPrev(); e.accepted = true }
@@ -382,11 +424,15 @@ FocusScope {
     SubjectPage {
       id: infoPage
       anchors.fill: parent
-      anchors.bottomMargin: Style.space(60)   // room for the lesson chips
-      subject: flow.infoSubject
+      anchors.bottomMargin: flow.drilled ? 0 : Style.space(98)   // chips + nav
+      subject: flow.infoSubjectShown
       service: flow.service
-      soloSection: flow.soloSection
+      // a drilled component shows the whole page; the learn walk shows one card
+      soloSection: flow.drilled ? "" : flow.soloSection
       lessonMode: true
+      // a drilled component always shows its ring; the Composition page only
+      // once the user presses j (SubjectPage tracks that itself)
+      forceKeyNav: flow.drilled
       pageBg: flow.pageBg
       fg: flow.fg
       fontFamily: flow.fontFamily
@@ -394,86 +440,90 @@ FocusScope {
       radicalColor: flow.radicalColor
       kanjiColor: flow.kanjiColor
       vocabColor: flow.vocabColor
-      onNavigate: function (id) { /* linked chips are inert during a lesson */ }
+      onNavigate: function (id) { flow._drill(id) }
+      onCloseRequested: flow.drilled ? flow._drillBack() : flow.exit()
     }
 
-    // ‹ / › at the left / right edges, vertically centred (the website's shape)
-    Repeater {
-      model: [{ g: "‹", prev: true }, { g: "›", prev: false }]
-      delegate: Rectangle {
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: modelData.prev ? parent.left : undefined
-        anchors.right: modelData.prev ? undefined : parent.right
-        anchors.leftMargin: Style.space(10)
-        anchors.rightMargin: Style.space(10)
-        width: Style.space(42); height: Style.space(60); radius: Style.space(8)
-        z: 10
-        readonly property bool off: modelData.prev
-          && flow.infoIndex === 0 && flow.pageIndex === 0
-        color: navHover.containsMouse && !off
-          ? Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.14)
-          : Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.05)
-        border.width: 1
-        border.color: Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.14)
-        opacity: off ? 0.3 : 1
-        Text {
-          anchors.centerIn: parent
-          text: modelData.g
-          color: flow.fg
-          font.family: flow.fontFamily
-          font.pixelSize: Style.font.heading
-        }
-        MouseArea {
-          id: navHover
-          anchors.fill: parent
-          hoverEnabled: true
-          enabled: !parent.off
-          cursorShape: Qt.PointingHandCursor
-          onClicked: modelData.prev ? flow.infoPrev() : flow.infoNext()
-        }
-      }
-    }
-
-    // lesson chips, bottom-centre -- one per subject in the batch; current is
-    // filled, the rest dimmed. Click to jump.
-    Flow {
+    // lesson chips stacked above the ‹ › page nav, bottom-centre (the website's
+    // shape). Chips: one per subject in the batch, current filled, rest dimmed.
+    Column {
+      visible: !flow.drilled
       anchors.bottom: parent.bottom
       anchors.bottomMargin: Style.space(16)
       anchors.horizontalCenter: parent.horizontalCenter
-      width: Math.min(parent.width - Style.space(140), Style.space(760))
-      spacing: Style.space(6)
+      spacing: Style.space(10)
       z: 10
-      Repeater {
-        model: flow.ids
-        delegate: Rectangle {
-          readonly property var s: flow.service ? flow.service.subjectDetail(modelData) : null
-          readonly property string obj: s ? String(s.object || "") : ""
-          readonly property string ch: (s && s.data)
-            ? String(s.data.characters || "") : ""
-          readonly property bool cur: index === flow.infoIndex
-          readonly property color tint: obj === "radical" ? flow.radicalColor
-            : obj === "kanji" ? flow.kanjiColor : flow.vocabColor
-          width: chipLbl.implicitWidth + Style.space(16)
-          height: Style.space(28)
-          radius: Style.space(5)
-          color: cur ? tint : Qt.rgba(tint.r, tint.g, tint.b, 0.16)
-          opacity: cur ? 1 : 0.6
-          Behavior on opacity { NumberAnimation { duration: 120 } }
-          Text {
-            id: chipLbl
-            anchors.centerIn: parent
-            text: ch !== "" ? ch
-              : ((s && s.data && s.data.meanings && s.data.meanings[0])
-                 ? s.data.meanings[0].meaning : "…")
-            color: cur ? "#fcfdfd" : tint
-            font.family: ch !== "" ? flow.jpFamily : flow.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            font.bold: true
+
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(6)
+        Repeater {
+          model: flow.ids
+          delegate: Rectangle {
+            readonly property var s: flow.service ? flow.service.subjectDetail(modelData) : null
+            readonly property string obj: s ? String(s.object || "") : ""
+            readonly property string ch: (s && s.data)
+              ? String(s.data.characters || "") : ""
+            readonly property bool cur: index === flow.infoIndex
+            readonly property color tint: obj === "radical" ? flow.radicalColor
+              : obj === "kanji" ? flow.kanjiColor : flow.vocabColor
+            width: chipLbl.implicitWidth + Style.space(16)
+            height: Style.space(28)
+            radius: Style.space(5)
+            color: cur ? tint : Qt.rgba(tint.r, tint.g, tint.b, 0.16)
+            opacity: cur ? 1 : 0.6
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+            Text {
+              id: chipLbl
+              anchors.centerIn: parent
+              text: ch !== "" ? ch
+                : ((s && s.data && s.data.meanings && s.data.meanings[0])
+                   ? s.data.meanings[0].meaning : "…")
+              color: cur ? "#fcfdfd" : tint
+              font.family: ch !== "" ? flow.jpFamily : flow.fontFamily
+              font.pixelSize: Style.font.bodySmall
+              font.bold: true
+            }
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: { flow.infoIndex = index; flow.pageIndex = 0 }
+            }
           }
-          MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.PointingHandCursor
-            onClicked: { flow.infoIndex = index; flow.pageIndex = 0 }
+        }
+      }
+
+      // ‹ / › page nav, centred under the chips
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Style.space(16)
+        Repeater {
+          model: [{ g: "‹", prev: true }, { g: "›", prev: false }]
+          delegate: Rectangle {
+            width: Style.space(48); height: Style.space(36); radius: Style.space(8)
+            readonly property bool off: modelData.prev
+              && flow.infoIndex === 0 && flow.pageIndex === 0
+            color: navHover.containsMouse && !off
+              ? Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.14)
+              : Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.05)
+            border.width: 1
+            border.color: Qt.rgba(flow.fg.r, flow.fg.g, flow.fg.b, 0.14)
+            opacity: off ? 0.3 : 1
+            Text {
+              anchors.centerIn: parent
+              text: modelData.g
+              color: flow.fg
+              font.family: flow.fontFamily
+              font.pixelSize: Style.font.title
+            }
+            MouseArea {
+              id: navHover
+              anchors.fill: parent
+              hoverEnabled: true
+              enabled: !parent.off
+              cursorShape: Qt.PointingHandCursor
+              onClicked: modelData.prev ? flow.infoPrev() : flow.infoNext()
+            }
           }
         }
       }
@@ -486,11 +536,29 @@ FocusScope {
       pageBg: flow.pageBg
       fontFamily: flow.fontFamily
       title: "Lesson keys"
-      rows: [
-        { k: "→", d: "Next page / item" },
-        { k: "←", d: "Previous" },
-        { k: "j", d: "Audio Pronunciation" },
-        { k: "⌂", d: "Back to menu" },
+      rows: flow.drilled ? [
+        { k: "h l", d: "Move between components" },
+        { k: "↵", d: "Open the ringed component" },
+        { k: "Esc", d: "Back to the lesson" },
+        { k: "?", d: "Toggle this menu" }
+      ] : (flow.infoChipNav && infoPage.lessonChipFocused) ? [
+        { k: "h l", d: "Move between components" },
+        { k: "↵", d: "Open a component's page" },
+        { k: "k", d: "Unfocus (back to paging)" },
+        { k: "Esc", d: "Back to lesson menu" },
+        { k: "?", d: "Toggle this menu" }
+      ] : flow.infoChipNav ? [
+        { k: "h l", d: "Previous / next page" },
+        { k: "j", d: "Focus the components" },
+        { k: "j k", d: "Scroll the page" },
+        { k: "Esc", d: "Back to lesson menu" },
+        { k: "?", d: "Toggle this menu" }
+      ] : [
+        { k: "l", d: "Next page / item" },
+        { k: "h", d: "Previous page / item" },
+        { k: "j", d: "Play audio" },
+        { k: "j k", d: "Scroll the page" },
+        { k: "Esc", d: "Back to lesson menu" },
         { k: "?", d: "Toggle this menu" }
       ]
     }

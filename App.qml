@@ -211,6 +211,7 @@ Item {
     var n = Math.max(1, Math.min(60, parseInt(String(level), 10) || 1))
     root.browseLevel = n
     pushPage({ view: "browse", level: n })
+    levelBrowser.enterFresh()   // top of the level, even when re-entering it
     if (root.service) {
       root.service.clearSearch()   // a fresh entry starts on the level view
       root.service.loadBrowse(n)
@@ -375,10 +376,15 @@ Item {
     // so Esc from that flow backs out to the menu; a second Esc closes.
     var payload = null
     try { payload = payloadJson ? JSON.parse(payloadJson) : null } catch (e) { payload = null }
-    if (payload && (payload.session || payload.review || payload.lesson || payload.subject)) {
+    if (payload && (payload.session || payload.review || payload.lesson
+        || payload.subject || payload.browse)) {
       Qt.callLater(function () {
         root.navStack = [{ view: "home" }]
         if (payload.subject) root.goSubject(Number(payload.subject))
+        else if (payload.browse) {
+          levelBrowser.pendingSection = payload.focus ? String(payload.focus) : ""
+          root.goBrowse(Number(payload.browse))
+        }
         else if (payload.session) root.openSessionMode(String(payload.session))
         else if (payload.review) root.goReview()
         else root.goLesson()
@@ -413,10 +419,19 @@ Item {
     target: "io.github.aphelion-studios.omakani.app"
 
     function home(): void { root.open(""); root.resetNav() }
+    function settings(): void { root.open(""); root.resetNav(); root.goSettings() }
     function browse(level: string): void {
       root.open("")
       root.resetNav()
       root.goBrowse(parseInt(level, 10) || (root.service ? root.service.level : 1))
+    }
+    // Level Progress for the current level, optionally landing on a section's
+    // first chip: focus = "radical" | "kanji" | "vocabulary" (or "").
+    function levelprogress(focus: string): void {
+      root.open("")
+      root.resetNav()
+      levelBrowser.pendingSection = (focus && focus !== "") ? focus : ""
+      root.goBrowse(root.service ? root.service.level : 1)
     }
     function subject(id: string): void {
       root.open("")
@@ -1020,10 +1035,10 @@ Item {
           extraButton: ({ glyph: "󰒓" })
           onExtraClicked: root.goSettings()
           rows: [
-            { k: "↑↓", d: "Move between rows" },
-            { k: "←→", d: "Lessons / Reviews" },
+            { k: "j k", d: "Move between rows" },
+            { k: "h l", d: "Lessons / Reviews" },
             { k: "↵", d: "Open" },
-            { k: "󰒓", d: "Settings" },
+            { k: "s", d: "Settings" },
             { k: "Esc", d: "Close the window" },
             { k: "?", d: "Toggle this menu" }
           ]
