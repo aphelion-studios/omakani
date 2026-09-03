@@ -1408,32 +1408,7 @@ Panel {
   }
 
   // ---- small components ------------------------------------------------
-
-  // A white selection ring with a hairline down each edge, so it stays legible
-  // whether the fill behind it is a light theme accent or the dark panel.
-  component CursorRing: Item {
-    id: cring
-    property real ringRadius: Style.space(6)
-    property real band: 2
-    // edge hairline: the dark panel bg on dark themes; a plain dark on light,
-    // where the theme bg is too pale to define the white ring
-    readonly property color hair: root.lightUi
-      ? Qt.rgba(0, 0, 0, 0.3)
-      : Qt.rgba(root.background.r, root.background.g, root.background.b, 0.4)
-    Rectangle {
-      anchors.fill: parent; radius: cring.ringRadius; color: "transparent"
-      border.width: 1; border.color: cring.hair
-    }
-    Rectangle {
-      anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, cring.ringRadius - 1)
-      color: "transparent"; border.width: cring.band; border.color: "#fcfdfd"
-    }
-    Rectangle {
-      anchors.fill: parent; anchors.margins: 1 + cring.band
-      radius: Math.max(0, cring.ringRadius - 1 - cring.band)
-      color: "transparent"; border.width: 1; border.color: cring.hair
-    }
-  }
+  // (the keyboard-focus ring is CursorRing.qml, shared with the main window)
 
   // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩". WK's own kanji-pink
   // (Lessons) / radical-blue (Reviews) on every theme, with the button's

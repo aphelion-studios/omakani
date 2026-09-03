@@ -828,7 +828,10 @@ FocusScope {
         // land the ring on the half you were just tested on -- whether you
         // missed it or nailed it -- so f drops you straight onto that card
         focusSection: (quiz.phase !== "input" && !drilled) ? quiz.effectiveType : ""
+        // also fair game once you've answered a reading prompt -- you've
+        // already committed your answer, so hearing it isn't a peek
         audioAllowed: !quiz.restrictInfo || quiz.readingDone || drilled
+          || (quiz.readingPrompt && quiz.phase !== "input")
         subject: quiz._infoSubject
         service: quiz.service
         pageBg: quiz.pageBg

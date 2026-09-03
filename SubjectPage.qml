@@ -440,6 +440,12 @@ FocusScope {
       // highlighted chip on a chip section), h/l step the chip cursor,
       // e folds / unfolds every card, Esc / f go back a page or close
       if (page.keyNav) {
+        // Shift+J on the focused Reading card plays the vocab audio (j alone
+        // still moves the section ring)
+        if (e.key === Qt.Key_J && (e.modifiers & Qt.ShiftModifier)
+            && page.focusedKey === "reading" && page.hasAudio && page.audioAllowed) {
+          page.playAudio("random"); e.accepted = true; return
+        }
         if (e.text === "j") { page.moveFocus(1); e.accepted = true; return }
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
         else if (e.text === "l") { page.moveChip(1); e.accepted = true; return }

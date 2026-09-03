@@ -844,9 +844,13 @@ Item {
                 clip: true
                 opacity: on ? 1.0 : 0.4
                 color: lit ? Qt.lighter(fillColor, 1.3) : fillColor
-                border.width: lit ? 3 : 0
-                border.color: "#fcfdfd"
                 Behavior on color { ColorAnimation { duration: 110 } }
+
+                CursorRing {
+                  anchors.fill: parent
+                  visible: homeBtn.lit
+                  ringRadius: homeBtn.radius
+                }
 
                 Rectangle {
                   anchors.fill: parent
