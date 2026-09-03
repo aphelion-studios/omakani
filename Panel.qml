@@ -22,6 +22,8 @@ Panel {
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
   readonly property color background: Color.popups.background
+  // light theme? drives the WK-style pink/blue queue buttons + a few ink flips
+  readonly property bool lightUi: Model.lightBg(Color.background)
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
@@ -1413,8 +1415,11 @@ Panel {
     id: cring
     property real ringRadius: Style.space(6)
     property real band: 2
-    readonly property color hair: Qt.rgba(root.background.r, root.background.g,
-      root.background.b, 0.4)
+    // edge hairline: the dark panel bg on dark themes; a plain dark on light,
+    // where the theme bg is too pale to define the white ring
+    readonly property color hair: root.lightUi
+      ? Qt.rgba(0, 0, 0, 0.3)
+      : Qt.rgba(root.background.r, root.background.g, root.background.b, 0.4)
     Rectangle {
       anchors.fill: parent; radius: cring.ringRadius; color: "transparent"
       border.width: 1; border.color: cring.hair
@@ -1430,8 +1435,9 @@ Panel {
     }
   }
 
-  // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩", the same accent
-  // button + white count pill the main window uses.
+  // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩". On dark themes it's
+  // the theme accent; on light themes it's WK's own kanji-pink (Lessons) /
+  // radical-blue (Reviews), with the button's colour in the count pill.
   component CountCard: Rectangle {
     id: cc
     property int index: 0
@@ -1443,12 +1449,18 @@ Panel {
 
     readonly property bool cursored: root.hasCursor("start", index)
     readonly property bool lit: cursored || startHover.containsMouse
+    readonly property color fill: root.lightUi
+      ? (cc.kind === "lessons" ? "#fc02a9" : "#0098e6")
+      : root.accent
+    // text/number ink: white on the light-theme pink/blue, the panel bg
+    // (which reads on the accent) on dark themes
+    readonly property color ink: root.lightUi ? "#fcfdfd" : root.background
 
     implicitHeight: Style.space(40)
     radius: Style.space(6)
     clip: true
     opacity: cc.active ? 1 : 0.45
-    color: cc.lit ? Qt.lighter(root.accent, 1.3) : root.accent
+    color: cc.lit ? Qt.lighter(cc.fill, 1.3) : cc.fill
     Behavior on color { ColorAnimation { duration: 110 } }
     onCursoredChanged: if (cursored) root.setCursorItem(cc)
 
@@ -1462,7 +1474,7 @@ Panel {
     Rectangle {
       anchors.fill: parent
       radius: parent.radius
-      color: Qt.lighter(root.accent, 1.35)
+      color: Qt.lighter(cc.fill, 1.35)
       visible: cc.active && !cc.lit
       opacity: 0
       SequentialAnimation on opacity {
@@ -1479,7 +1491,7 @@ Panel {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: cc.label
-        color: root.background
+        color: cc.ink
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         font.bold: true
@@ -1490,14 +1502,15 @@ Panel {
         height: Style.space(18)
         radius: height / 2
         color: "#fcfdfd"
-        // hairline so the white pill keeps an edge on a light accent card
+        // hairline so the white pill keeps an edge on a light-coloured card
         border.width: 1
         border.color: Qt.rgba(0, 0, 0, 0.12)
         Text {
           id: ccPill
           anchors.centerIn: parent
           text: String(cc.count)
-          color: root.background
+          // the button's own colour on light themes (WK), panel bg on dark
+          color: root.lightUi ? cc.fill : root.background
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true

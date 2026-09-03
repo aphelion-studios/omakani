@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 // The full OmaKani app: subject browser, lessons and reviews done in-shell.
 // A `panel`-kind plugin, mounted by the shell and summoned with
@@ -30,6 +31,7 @@ Item {
   readonly property color bg: Color.background
   readonly property color fg: Color.foreground
   readonly property color accent: Color.accent
+  readonly property bool lightUi: Model.lightBg(Color.background)
   readonly property string fontFamily: Style.font.family
   // WaniKani's web app sets subject characters in "Noto Sans JP" (the Google
   // webfont). Use it when the user has installed it; otherwise fall back to
@@ -831,20 +833,26 @@ Item {
                 readonly property bool on: modelData.enabled !== false
                 readonly property bool current: gIndex === root.homeIndex && on
                 readonly property bool lit: current || (homeHover.containsMouse && on)
+                // dark theme: the accent. light theme: WK's kanji-pink for
+                // Lessons, radical-blue for Reviews.
+                readonly property color fillColor: root.lightUi
+                  ? (modelData.act === "lesson" ? "#fc02a9" : "#0098e6")
+                  : root.accent
+                readonly property color btnInk: root.lightUi ? "#fcfdfd" : root.bg
                 width: (homeCol.colW - homeCol.gap) / 2
                 height: Style.space(44)
                 radius: Style.space(6)
                 clip: true
                 opacity: on ? 1.0 : 0.4
-                color: lit ? Qt.lighter(root.accent, 1.3) : root.accent
+                color: lit ? Qt.lighter(fillColor, 1.3) : fillColor
                 border.width: lit ? 3 : 0
-                border.color: "#fcfdfd"
+                border.color: root.lightUi ? Qt.rgba(0, 0, 0, 0.3) : "#fcfdfd"
                 Behavior on color { ColorAnimation { duration: 110 } }
 
                 Rectangle {
                   anchors.fill: parent
                   radius: parent.radius
-                  color: Qt.lighter(root.accent, 1.35)
+                  color: Qt.lighter(homeBtn.fillColor, 1.35)
                   visible: homeBtn.on && !homeBtn.lit
                   opacity: 0
                   SequentialAnimation on opacity {
@@ -861,7 +869,7 @@ Item {
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.text
-                    color: root.bg
+                    color: homeBtn.btnInk
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
@@ -873,14 +881,14 @@ Item {
                     height: Style.space(20)
                     radius: height / 2
                     color: "#fcfdfd"
-                    // hairline so the white pill keeps an edge on a light accent
+                    // hairline so the white pill keeps an edge on a light card
                     border.width: 1
                     border.color: Qt.rgba(0, 0, 0, 0.12)
                     Text {
                       id: cnt
                       anchors.centerIn: parent
                       text: modelData.count
-                      color: root.bg
+                      color: root.lightUi ? homeBtn.fillColor : root.bg
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
                       font.bold: true
