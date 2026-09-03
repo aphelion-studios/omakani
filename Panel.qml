@@ -1007,8 +1007,8 @@ Panel {
               onCursoredChanged: if (cursored) root.setCursorItem(lpHeaderItem)
               Rectangle {
                 anchors.fill: parent
-                anchors.leftMargin: -Style.space(4)
-                anchors.rightMargin: -Style.space(4)
+                anchors.leftMargin: -Style.space(9)
+                anchors.rightMargin: -Style.space(9)
                 anchors.topMargin: -Style.space(2)
                 anchors.bottomMargin: -Style.space(2)
                 radius: Style.cornerRadius
@@ -1478,8 +1478,8 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
-      anchors.leftMargin: -Style.space(4)
-      anchors.rightMargin: -Style.space(4)
+      anchors.leftMargin: -Style.space(9)
+      anchors.rightMargin: -Style.space(9)
       radius: Style.cornerRadius
       color: sr.cursored
         ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
@@ -1612,8 +1612,8 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
-      anchors.leftMargin: -Style.space(4)
-      anchors.rightMargin: -Style.space(4)
+      anchors.leftMargin: -Style.space(9)
+      anchors.rightMargin: -Style.space(9)
       radius: Style.cornerRadius
       color: esr.cursored
         ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
@@ -1687,8 +1687,8 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
-      anchors.leftMargin: -Style.space(4)
-      anchors.rightMargin: -Style.space(4)
+      anchors.leftMargin: -Style.space(9)
+      anchors.rightMargin: -Style.space(9)
       anchors.topMargin: -Style.space(3)
       anchors.bottomMargin: -Style.space(3)
       radius: Style.cornerRadius
@@ -1949,8 +1949,8 @@ Panel {
 
         Rectangle {
           anchors.fill: parent
-          anchors.leftMargin: -Style.space(4)
-          anchors.rightMargin: -Style.space(4)
+          anchors.leftMargin: -Style.space(9)
+          anchors.rightMargin: -Style.space(9)
           radius: Style.cornerRadius
           color: rowItem.cursored
             ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.09)
