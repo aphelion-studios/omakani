@@ -1007,8 +1007,6 @@ Panel {
               onCursoredChanged: if (cursored) root.setCursorItem(lpHeaderItem)
               Rectangle {
                 anchors.fill: parent
-                anchors.leftMargin: -Style.space(9)
-                anchors.rightMargin: -Style.space(9)
                 anchors.topMargin: -Style.space(2)
                 anchors.bottomMargin: -Style.space(2)
                 radius: Style.cornerRadius
@@ -1019,7 +1017,9 @@ Panel {
               }
               PanelSectionHeader {
                 id: lpHeader
-                width: parent.width
+                // indented like the rows it heads -- it's a focus target too
+                x: Style.space(10)
+                width: parent.width - Style.space(20)
                 text: "LEVEL " + wk.level + " PROGRESS"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
@@ -1059,7 +1059,8 @@ Panel {
             }
 
             Text {
-              width: parent.width
+              x: Style.space(10)   // line up with the progress rows above
+              width: parent.width - Style.space(20)
               topPadding: Style.space(2)
               textFormat: Text.StyledText
               text: parent.gate > 0
@@ -1478,8 +1479,6 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
-      anchors.leftMargin: -Style.space(9)
-      anchors.rightMargin: -Style.space(9)
       radius: Style.cornerRadius
       color: sr.cursored
         ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
@@ -1488,9 +1487,10 @@ Panel {
     }
 
     RowLayout {
-      // no right inset -- the control sits at the row edge like every other
-      // dashboard row, so the focus highlight has equal padding both sides
+      // content inset inside the row so the focus highlight has padding
       anchors.fill: parent
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
       spacing: Style.space(6)
 
       Text {
@@ -1612,8 +1612,6 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
-      anchors.leftMargin: -Style.space(9)
-      anchors.rightMargin: -Style.space(9)
       radius: Style.cornerRadius
       color: esr.cursored
         ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
@@ -1623,6 +1621,8 @@ Panel {
 
     RowLayout {
       anchors.fill: parent
+      anchors.leftMargin: Style.space(10)
+      anchors.rightMargin: Style.space(10)
       spacing: Style.space(8)
 
       Text {
@@ -1687,8 +1687,6 @@ Panel {
 
     Rectangle {
       anchors.fill: parent
-      anchors.leftMargin: -Style.space(9)
-      anchors.rightMargin: -Style.space(9)
       anchors.topMargin: -Style.space(3)
       anchors.bottomMargin: -Style.space(3)
       radius: Style.cornerRadius
@@ -1700,7 +1698,8 @@ Panel {
 
     Column {
       id: prCol
-      width: parent.width
+      x: Style.space(10)
+      width: parent.width - Style.space(20)
       spacing: Style.space(3)
 
       RowLayout {
@@ -1949,8 +1948,6 @@ Panel {
 
         Rectangle {
           anchors.fill: parent
-          anchors.leftMargin: -Style.space(9)
-          anchors.rightMargin: -Style.space(9)
           radius: Style.cornerRadius
           color: rowItem.cursored
             ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.09)
@@ -1962,6 +1959,8 @@ Panel {
 
         RowLayout {
           anchors.fill: parent
+          anchors.leftMargin: Style.space(10)
+          anchors.rightMargin: Style.space(10)
           spacing: Style.space(8)
 
           Text {
