@@ -120,6 +120,7 @@ Panel {
     // k off the first row reaches it, j off the last row just stops
     if (settingsOpen) return [{ n: "settingsdone", o: "h", c: 1 },
                               { n: "settings", o: "v", c: settingRows.length }]
+    if (helpOpen) return [{ n: "helpdone", o: "h", c: 1 }]
     if (!wk.configured) return [{ n: "token", o: "v", c: 1 }, { n: "footer", o: "h", c: 4 }]
     var out = []
     if (startActions.length > 0)
@@ -140,7 +141,7 @@ Panel {
       out.push({ n: "critical", o: "h", c: chipCount(wk.criticalCondition) })
     if (chipCount(wk.recentlyBurned) > 0)
       out.push({ n: "burned", o: "h", c: chipCount(wk.recentlyBurned) })
-    out.push({ n: "footer", o: "h", c: 4 })
+    out.push({ n: "footer", o: "h", c: 5 })
     return out
   }
 
@@ -252,7 +253,7 @@ Panel {
   // re-apply the open-time default when late data reshuffles things, but only
   // while the user hasn't taken over the cursor yet
   function _maybeRedefault() {
-    if (opened && !_navPinned && !settingsOpen && upcomingDrill < 0) navDefault()
+    if (opened && !_navPinned && !settingsOpen && !helpOpen && upcomingDrill < 0) navDefault()
   }
   onNavSectionsChanged: Qt.callLater(_maybeRedefault)
 
@@ -301,6 +302,8 @@ Panel {
         if (!right) upcomingDrill = -1
       } else if (cur.n === "settingsdone") {
         if (!right) settingsOpen = false
+      } else if (cur.n === "helpdone") {
+        if (!right) helpOpen = false
       } else if (cur.n === "settings") {
         settingsAdjust(navIndex, right ? 1 : -1)
       } else if (cur.o === "h") {
@@ -314,7 +317,8 @@ Panel {
     // the cursor couldn't move -- a second Up at the top scrolls the header
     // fully in, a second Down at the bottom scrolls to the end
     if (navSection === beforeSec && navIndex === beforeIdx && dy !== 0) {
-      var edgeFlick = root.settingsOpen ? settingsFlick : panelFlick
+      var edgeFlick = root.settingsOpen ? settingsFlick
+        : root.helpOpen ? helpFlick : panelFlick
       // only nudge the view if the content actually overflows -- when
       // everything fits (the settings sheet at its normal size) a stray
       // 1-2px scroll on a wall keystroke is just noise
@@ -349,6 +353,7 @@ Panel {
     if (s === "token") tokenField.forceActiveFocus()
     else if (s === "drillback") upcomingDrill = -1
     else if (s === "settingsdone") settingsOpen = false
+    else if (s === "helpdone") helpOpen = false
     else if (s === "settings") settingsActivate(i)
     else if (s === "upcoming") {
       if (i < wk.upcoming.length && Number(wk.upcoming[i].count) > 0) {
@@ -364,8 +369,9 @@ Panel {
     else if (s === "burned") openItem(wk.recentlyBurned[i])
     else if (s === "footer") {
       if (i === 0) wk.refreshAll()
-      else if (i === 1) openDashboard()
-      else if (i === 2) settingsOpen = !settingsOpen
+      else if (i === 1) helpOpen = !helpOpen
+      else if (i === 2) openDashboard()
+      else if (i === 3) settingsOpen = !settingsOpen
       else wk.clearToken()
     }
   }
@@ -417,7 +423,8 @@ Panel {
   function scrollToCursor() {
     var it = cursorItem
     if (!it || !it.visible) return
-    var flick = root.settingsOpen ? settingsFlick : panelFlick
+    var flick = root.settingsOpen ? settingsFlick
+      : root.helpOpen ? helpFlick : panelFlick
     if (!flick) return
     // The very first target lands with a fat top margin; a second Up press
     // (handled in navMove) scrolls the header the rest of the way in.
@@ -444,6 +451,7 @@ Panel {
   onOpenedChanged: if (opened) {
     upcomingDrill = -1
     settingsOpen = false
+    helpOpen = false
     navReset()
     if (panelFlick) panelFlick.contentY = 0
     wk.refreshAll()
@@ -478,6 +486,7 @@ Panel {
 
   property bool settingsOpen: false
   onSettingsOpenChanged: {
+    if (settingsOpen) helpOpen = false
     if (panelFlick) panelFlick.contentY = 0
     Qt.callLater(function() {
       if (root.settingsOpen) {
@@ -493,6 +502,39 @@ Panel {
       scrollTimer.restart()
     })
   }
+
+  // ---- keyboard-shortcut help ------------------------------------------
+
+  property bool helpOpen: false
+  onHelpOpenChanged: {
+    if (helpOpen) settingsOpen = false
+    if (helpFlick) helpFlick.contentY = 0
+    Qt.callLater(function() {
+      if (root.helpOpen) {
+        root.navSection = "helpdone"
+        root.navActive = true
+      } else if (root.upcomingDrill >= 0) {
+        root.navSection = "drillback"   // land back where we were
+      } else {
+        root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
+      }
+      root.navIndex = 0
+      scrollTimer.restart()
+    })
+  }
+
+  readonly property var helpKeys: [
+    { k: "j   k", d: "Move down / up" },
+    { k: "h   l", d: "Move sideways  ·  l opens the row" },
+    { k: "Enter", d: "Open / activate the selection" },
+    { k: "‹   ›", d: "Adjust a setting  (h / l)" },
+    { k: "g   G", d: "Jump to top / bottom" },
+    { k: "Tab", d: "Next panel  (Shift+Tab back)" },
+    { k: "r", d: "Refresh now" },
+    { k: "s", d: "Open settings" },
+    { k: "?", d: "Show / hide this list" },
+    { k: "Esc", d: "Step back, or close the panel" },
+  ]
 
   // Ordered { key, kind } for the settings sheet. bool rows flip on Enter;
   // the number row takes h/l.
@@ -770,8 +812,9 @@ Panel {
     // cap so it never has to scroll a keystroke's worth; the main dashboard
     // genuinely overflows and keeps the tighter cap
     contentHeight: panel.fittedContentHeight(
-      root.settingsOpen ? settingsColumn.implicitHeight : column.implicitHeight,
-      Style.space(root.settingsOpen ? 920 : 720))
+      root.settingsOpen ? settingsColumn.implicitHeight
+        : root.helpOpen ? helpColumn.implicitHeight : column.implicitHeight,
+      Style.space(root.settingsOpen || root.helpOpen ? 920 : 720))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -780,7 +823,8 @@ Panel {
       onMoveRequested: function(dx, dy) { root.navMove(dx, dy) }
       onActivateRequested: root.navActivate()
       onCloseRequested: {
-        if (root.settingsOpen) root.settingsOpen = false
+        if (root.helpOpen) root.helpOpen = false
+        else if (root.settingsOpen) root.settingsOpen = false
         else if (root.upcomingDrill >= 0) root.upcomingDrill = -1
         else root.close()
       }
@@ -788,6 +832,7 @@ Panel {
       onTextKey: function(text) {
         if (text === "r" || text === "R") wk.refreshAll()
         else if (text === "s" || text === "S") root.settingsOpen = !root.settingsOpen
+        else if (text === "?") root.helpOpen = !root.helpOpen
         else if (text === "g") root.navEnd(false)
         else if (text === "G") root.navEnd(true)
       }
@@ -1346,13 +1391,26 @@ Panel {
             }
 
             PanelActionButton {
+              id: footerHelp
+              iconText: "󰌌"
+              tooltipText: "Keyboard shortcuts  (?)"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              hasCursor: root.hasCursor("footer", 1)
+              onHovered: function(h) { if (h) root.setCursor("footer", 1) }
+              onHasCursorChanged: if (hasCursor) root.setCursorItem(footerHelp)
+              Layout.alignment: Qt.AlignVCenter
+              onClicked: root.helpOpen = !root.helpOpen
+            }
+
+            PanelActionButton {
               id: footerOpen
               iconText: "󰏌"
               tooltipText: "Open wanikani.com"
               foreground: root.foreground
               fontFamily: root.fontFamily
-              hasCursor: root.hasCursor("footer", 1)
-              onHovered: function(h) { if (h) root.setCursor("footer", 1) }
+              hasCursor: root.hasCursor("footer", 2)
+              onHovered: function(h) { if (h) root.setCursor("footer", 2) }
               onHasCursorChanged: if (hasCursor) root.setCursorItem(footerOpen)
               Layout.alignment: Qt.AlignVCenter
               onClicked: root.openDashboard()
@@ -1361,11 +1419,11 @@ Panel {
             PanelActionButton {
               id: footerSettings
               iconText: "󰒓"
-              tooltipText: "Settings"
+              tooltipText: "Settings  (s)"
               foreground: root.foreground
               fontFamily: root.fontFamily
-              hasCursor: root.hasCursor("footer", 2)
-              onHovered: function(h) { if (h) root.setCursor("footer", 2) }
+              hasCursor: root.hasCursor("footer", 3)
+              onHovered: function(h) { if (h) root.setCursor("footer", 3) }
               onHasCursorChanged: if (hasCursor) root.setCursorItem(footerSettings)
               Layout.alignment: Qt.AlignVCenter
               onClicked: root.settingsOpen = !root.settingsOpen
@@ -1379,8 +1437,8 @@ Panel {
               fontFamily: root.fontFamily
               enabled: !wk.actionBusy
               hoverColor: root.urgent
-              hasCursor: root.hasCursor("footer", 3)
-              onHovered: function(h) { if (h) root.setCursor("footer", 3) }
+              hasCursor: root.hasCursor("footer", 4)
+              onHovered: function(h) { if (h) root.setCursor("footer", 4) }
               onHasCursorChanged: if (hasCursor) root.setCursorItem(footerForget)
               Layout.alignment: Qt.AlignVCenter
               onClicked: wk.clearToken()
@@ -1475,6 +1533,80 @@ Panel {
 
           Item { width: 1; height: Style.space(6) }   // a little tail padding
         }
+        }
+      }
+
+      // ---- keyboard-shortcut sheet ----
+
+      Rectangle {
+        anchors.fill: parent
+        visible: root.helpOpen
+        color: Color.popups.background
+
+        Flickable {
+          id: helpFlick
+          anchors.fill: parent
+          clip: true
+          contentWidth: width
+          contentHeight: helpColumn.implicitHeight
+          boundsBehavior: Flickable.StopAtBounds
+          flickableDirection: Flickable.VerticalFlick
+          interactive: contentHeight > height
+
+          Column {
+            id: helpColumn
+            width: parent.width
+            spacing: Style.space(10)
+
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(6)
+              PanelActionButton {
+                id: helpBack
+                iconText: "󰅁"
+                tooltipText: "Done"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                hasCursor: root.hasCursor("helpdone", 0)
+                onHovered: function(h) { if (h) root.setCursor("helpdone", 0) }
+                onHasCursorChanged: if (hasCursor) root.setCursorItem(helpBack)
+                onClicked: root.helpOpen = false
+              }
+              PanelSectionHeader {
+                text: "KEYBOARD SHORTCUTS"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                Layout.fillWidth: true
+              }
+            }
+
+            Repeater {
+              model: root.helpKeys
+              delegate: RowLayout {
+                width: helpColumn.width
+                spacing: Style.space(12)
+                Text {
+                  Layout.preferredWidth: Style.space(64)
+                  Layout.alignment: Qt.AlignTop
+                  text: modelData.k
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                }
+                Text {
+                  Layout.fillWidth: true
+                  text: modelData.d
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
+                }
+              }
+            }
+
+            Item { width: 1; height: Style.space(6) }
+          }
         }
       }
     }
