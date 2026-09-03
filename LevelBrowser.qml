@@ -204,17 +204,28 @@ Item {
     var next = Math.max(0, Math.min(rows.length - 1, cursor + delta))
     if (next === cursor) {
       // couldn't move -- going up past the first row: first scroll the
-      // section headings in, then hand off to the level bar (not in search
-      // mode, where there's no level bar)
+      // section headings in, then walk on up out of the grid
       if (delta < 0) {
         if (flick.contentY > 1) flick.contentY = 0
-        else if (!browser.searching) onLevelBar = true
+        else _upFromGridTop()
       } else {
         flick.contentY = Math.max(0, flick.contentHeight - flick.height)
       }
       return
     }
     cursor = next
+  }
+
+  // leaving the grid off its top row: the un-Guru'd kanji row if the gate
+  // band is showing, otherwise the level bar (never in search mode)
+  function _upFromGridTop() {
+    if (browser.searching) return
+    if (levelUpBand.visible && blockingShown > 0) {
+      onBlockingBar = true
+      blockingCursor = 0
+    } else {
+      onLevelBar = true
+    }
   }
 
   // item counts per section, in the radical -> kanji -> vocab order `rows`
@@ -246,9 +257,12 @@ Item {
     var lastRow = Math.floor((lens[sec] - 1) / columns)
 
     if (dir > 0) {
+      // next row down in this section -- but only if it actually reaches
+      // this column; a short final row that stops before it means we skip
+      // straight to the next section (same column)
       if (rowN < lastRow) {
-        cursor = base + Math.min(lens[sec] - 1, (rowN + 1) * columns + col)
-        return
+        var t = (rowN + 1) * columns + col
+        if (t < lens[sec]) { cursor = base + t; return }
       }
       var nb = base + lens[sec]
       for (var ns = sec + 1; ns < 3; ns++) {
@@ -258,6 +272,7 @@ Item {
       }
       flick.contentY = Math.max(0, flick.contentHeight - flick.height)
     } else {
+      // rows above the last one are always full, so the same column exists
       if (rowN > 0) {
         cursor = base + (rowN - 1) * columns + col
         return
@@ -267,11 +282,15 @@ Item {
         if (lens[ps] === 0) continue
         pb -= lens[ps]
         var pLast = Math.floor((lens[ps] - 1) / columns)
-        cursor = pb + Math.min(lens[ps] - 1, pLast * columns + col)
+        var u = pLast * columns + col
+        // the previous section's last row may stop before this column --
+        // land on the row above it instead
+        if (u >= lens[ps]) u = Math.max(0, (pLast - 1) * columns + col)
+        cursor = pb + Math.min(lens[ps] - 1, u)
         return
       }
       if (flick.contentY > 1) flick.contentY = 0
-      else if (!browser.searching) onLevelBar = true
+      else _upFromGridTop()
     }
   }
   function openCursor() {

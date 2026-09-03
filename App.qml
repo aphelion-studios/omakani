@@ -873,6 +873,9 @@ Item {
                     height: Style.space(20)
                     radius: height / 2
                     color: "#fcfdfd"
+                    // hairline so the white pill keeps an edge on a light accent
+                    border.width: 1
+                    border.color: Qt.rgba(0, 0, 0, 0.18)
                     Text {
                       id: cnt
                       anchors.centerIn: parent

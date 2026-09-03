@@ -694,6 +694,7 @@ Panel {
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) {
         if (text === "r" || text === "R") wk.refreshAll()
+        else if (text === "s" || text === "S") root.settingsOpen = !root.settingsOpen
         else if (text === "g") root.navEnd(false)
         else if (text === "G") root.navEnd(true)
       }
@@ -1483,8 +1484,6 @@ Panel {
       color: sr.cursored
         ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
         : "transparent"
-      border.width: sr.cursored ? 1 : 0
-      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
       Behavior on color { ColorAnimation { duration: 60 } }
     }
 
@@ -1532,14 +1531,15 @@ Panel {
       Rectangle {
         visible: sr.isEnum
         Layout.alignment: Qt.AlignVCenter
-        implicitWidth: Math.min(Style.space(96), enumLbl.implicitWidth + Style.space(14))
+        // wide enough for the longest option ("Lower SRS stages first")
+        implicitWidth: Math.min(Style.space(176), enumLbl.implicitWidth + Style.space(16))
         implicitHeight: Style.space(22)
         radius: Style.space(4)
         color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.12)
         Text {
           id: enumLbl
           anchors.centerIn: parent
-          width: parent.width - Style.space(8)
+          width: parent.width - Style.space(10)
           horizontalAlignment: Text.AlignHCenter
           elide: Text.ElideRight
           text: sr.isEnum ? Model.enumLabel(sr.row, sr.currentValue) : ""

@@ -29,10 +29,12 @@ FocusScope {
   // keyboard focus is on the tab strip (k'd up off the top row) rather than
   // the kana grid
   property bool onTabBar: false
+  // within the tab strip, focus is on the Backspace key (l'd past the last tab)
+  property bool onBackspace: false
 
   // open with focus on the tab strip, like the website -- j / Enter drops into
   // the grid
-  function _reset() { tab = 0; selRow = 0; selCol = 0; onTabBar = true }
+  function _reset() { tab = 0; selRow = 0; selCol = 0; onTabBar = true; onBackspace = false }
   function grabKeys() { kb.forceActiveFocus() }
   onVisibleChanged: {
     if (visible) { _reset(); Qt.callLater(kb.forceActiveFocus) }
@@ -94,8 +96,22 @@ FocusScope {
     if (e.key === Qt.Key_Backspace) { kb.backspacePressed(); e.accepted = true; return }
 
     if (kb.onTabBar) {
+      if (kb.onBackspace) {
+        if (e.text === "h" || e.key === Qt.Key_Left) { kb.onBackspace = false }
+        else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter
+                 || e.key === Qt.Key_Space) { kb.backspacePressed() }
+        else if (e.text === "j" || e.key === Qt.Key_Down) {
+          kb.onTabBar = false; kb.onBackspace = false
+        }
+        e.accepted = true
+        return
+      }
       if (e.text === "h" || e.key === Qt.Key_Left) { kb._setTab(kb.tab - 1) }
-      else if (e.text === "l" || e.key === Qt.Key_Right) { kb._setTab(kb.tab + 1) }
+      else if (e.text === "l" || e.key === Qt.Key_Right) {
+        // past the last tab -> the Backspace key
+        if (kb.tab === kb.tabNames.length - 1) kb.onBackspace = true
+        else kb._setTab(kb.tab + 1)
+      }
       else if (e.text === "j" || e.key === Qt.Key_Down
                || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
         kb.onTabBar = false
@@ -110,7 +126,7 @@ FocusScope {
     else if (e.text === "j" || e.key === Qt.Key_Down) { kb.selRow += 1; kb._clampSel(); e.accepted = true }
     else if (e.text === "k" || e.key === Qt.Key_Up) {
       if (kb.selRow > 0) { kb.selRow -= 1; kb._clampSel() }
-      else kb.onTabBar = true          // up off the top row -> the tab strip
+      else { kb.onTabBar = true; kb.onBackspace = false }  // up -> the tab strip
       e.accepted = true
     }
     else if (e.text === "l" || e.key === Qt.Key_Right) {
@@ -127,7 +143,7 @@ FocusScope {
   Rectangle {
     id: panel
     width: parent.width
-    implicitHeight: tabRow.height + grid.implicitHeight + Style.space(28)
+    implicitHeight: tabRow.height + grid.implicitHeight + Style.space(36)
     height: implicitHeight
     radius: Style.space(8)
     color: Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.07)
@@ -140,6 +156,7 @@ FocusScope {
       anchors.top: parent.top
       anchors.left: parent.left
       anchors.right: parent.right
+      anchors.topMargin: Style.space(8)   // match the tabRow -> grid gap below
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(10)
       height: Style.space(38)
@@ -158,7 +175,7 @@ FocusScope {
             color: "transparent"
             border.width: 2
             border.color: kb.fg
-            visible: parent.sel && kb.onTabBar
+            visible: parent.sel && kb.onTabBar && !kb.onBackspace
           }
           Text {
             anchors.centerIn: parent
@@ -187,6 +204,7 @@ FocusScope {
 
       // Backspace, pinned to the right -- same height as the tab keys beside it
       Rectangle {
+        readonly property bool ringed: kb.onTabBar && kb.onBackspace
         width: Style.space(96)
         height: parent.height - Style.space(4)
         anchors.verticalCenter: parent.verticalCenter
@@ -194,8 +212,8 @@ FocusScope {
         color: bsHover.containsMouse
           ? Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.16)
           : Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.09)
-        border.width: 1
-        border.color: Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.18)
+        border.width: ringed ? 2 : 1
+        border.color: ringed ? kb.fg : Qt.rgba(kb.fg.r, kb.fg.g, kb.fg.b, 0.18)
         Text {
           anchors.centerIn: parent
           text: "⌫  Backspace"

@@ -178,7 +178,7 @@ FocusScope {
                 Item {
                   id: ctrl
                   anchors.verticalCenter: parent.verticalCenter
-                  width: modelData.kind === "enum" ? Style.space(150)
+                  width: modelData.kind === "enum" ? Style.space(206)
                     : modelData.kind === "int" ? Style.space(96)
                     : Style.space(44)
                   height: Style.space(28)
@@ -224,7 +224,13 @@ FocusScope {
                         onClicked: { page.cursor = index; page.change(modelData, -1) } }
                     }
                     Text {
-                      width: modelData.kind === "enum" ? Style.space(94) : Style.space(40)
+                      id: valLbl
+                      // hug the current value, but cap the enum so a long
+                      // option ("Lower SRS stages first") doesn't blow out
+                      width: modelData.kind === "enum"
+                        ? Math.max(Style.space(40),
+                                   Math.min(Style.space(150), implicitWidth + Style.space(6)))
+                        : Style.space(40)
                       horizontalAlignment: Text.AlignHCenter
                       anchors.verticalCenter: parent.verticalCenter
                       elide: Text.ElideRight
