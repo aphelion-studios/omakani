@@ -200,7 +200,7 @@ FocusScope {
                       color: "#fcfdfd"
                       // hairline so the white knob keeps an edge on a light accent
                       border.width: 1
-                      border.color: Qt.rgba(0, 0, 0, 0.22)
+                      border.color: Qt.rgba(0, 0, 0, 0.14)
                       anchors.verticalCenter: parent.verticalCenter
                       x: parent.on ? parent.width - width - Style.space(3) : Style.space(3)
                       Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }

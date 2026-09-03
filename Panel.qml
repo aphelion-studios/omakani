@@ -1353,7 +1353,7 @@ Panel {
     property real ringRadius: Style.space(6)
     property real band: 2
     readonly property color hair: Qt.rgba(root.background.r, root.background.g,
-      root.background.b, 0.55)
+      root.background.b, 0.4)
     Rectangle {
       anchors.fill: parent; radius: cring.ringRadius; color: "transparent"
       border.width: 1; border.color: cring.hair
@@ -1431,7 +1431,7 @@ Panel {
         color: "#fcfdfd"
         // hairline so the white pill keeps an edge on a light accent card
         border.width: 1
-        border.color: Qt.rgba(0, 0, 0, 0.18)
+        border.color: Qt.rgba(0, 0, 0, 0.12)
         Text {
           id: ccPill
           anchors.centerIn: parent
@@ -1488,8 +1488,9 @@ Panel {
     }
 
     RowLayout {
+      // no right inset -- the control sits at the row edge like every other
+      // dashboard row, so the focus highlight has equal padding both sides
       anchors.fill: parent
-      anchors.rightMargin: Style.space(6)
       spacing: Style.space(6)
 
       Text {
@@ -1520,7 +1521,7 @@ Panel {
           width: Style.space(16); height: width; radius: width / 2
           color: "#fcfdfd"
           border.width: 1
-          border.color: Qt.rgba(0, 0, 0, 0.22)
+          border.color: Qt.rgba(0, 0, 0, 0.14)
           anchors.verticalCenter: parent.verticalCenter
           x: parent.on ? parent.width - width - Style.space(3) : Style.space(3)
           Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
