@@ -31,7 +31,7 @@ FocusScope {
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
 
-  readonly property color okColor: "#93c01f"
+  readonly property color okColor: "#34a553"
   readonly property color noColor: "#fc0234"
   readonly property bool lightUi: Model.lightBg(Color.background)
 
@@ -500,9 +500,14 @@ FocusScope {
       anchors.left: parent.left
       anchors.right: parent.right
       height: Style.space(40)
+      // reading: a darkened band over the type-colour header (leave it).
+      // meaning: a light strip -- on light themes a shade of the theme's own
+      // background plus a hairline, so it doesn't melt into a pale page
       color: quiz.readingPrompt
         ? Qt.rgba(0, 0, 0, 0.55)
-        : "#ebedef"
+        : (quiz.lightUi ? Qt.darker(quiz.pageBg, 1.06) : "#ebedef")
+      border.width: (!quiz.readingPrompt && quiz.lightUi) ? 1 : 0
+      border.color: Qt.rgba(quiz.fg.r, quiz.fg.g, quiz.fg.b, 0.14)
       // "<Type> <Meaning|Reading>" -- the type in a regular weight, the part
       // you're being tested on in bold, matching the website
       Row {

@@ -15,7 +15,7 @@ Item {
   property int stage: 0
   property bool locked: false
   property color fg: Color.foreground
-  property color passedColor: "#93c01f"
+  property color passedColor: "#34a553"
 
   implicitHeight: Style.space(5)
 

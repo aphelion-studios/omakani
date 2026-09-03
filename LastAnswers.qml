@@ -26,7 +26,7 @@ FocusScope {
   property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
-  readonly property color okColor: "#93c01f"
+  readonly property color okColor: "#34a553"
   readonly property color noColor: "#fc0234"
 
   // horizontal padding inside a card, and the gap between the coloured header

@@ -30,7 +30,7 @@ Item {
   property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
-  readonly property color passedColor: "#93c01f"
+  readonly property color passedColor: "#34a553"
   // page ink: the theme's own dark foreground on a light theme, near-white on
   // a dark one (the approved dark-theme look)
   readonly property bool lightUi: Model.lightBg(Color.background)

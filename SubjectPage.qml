@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell.Io
 import qs.Commons
 import "Markup.js" as Markup
+import "Model.js" as Model
 
 // One subject's full page: the type-coloured header plus the Meaning /
 // Reading / Context / Composition cards from the website, with the mnemonic
@@ -27,6 +28,7 @@ FocusScope {
   property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
+  readonly property bool lightUi: Model.lightBg(Color.background)
 
   // when true (used as the quiz's item-info overlay), f / Esc ask to close
   property bool overlayMode: false
@@ -562,7 +564,14 @@ FocusScope {
         id: typeBar
         width: parent.width
         implicitHeight: Style.space(40)
-        color: page._readingPrompt ? Qt.rgba(0, 0, 0, 0.55) : "#ebedef"
+        // reading: a darkened band over the header (leave it). meaning / the
+        // "· Level N" browse bar: a light strip -- a shade of the theme's own
+        // background + a hairline on light themes so it reads on a pale page
+        color: page._readingPrompt
+          ? Qt.rgba(0, 0, 0, 0.55)
+          : (page.lightUi ? Qt.darker(page.pageBg, 1.06) : "#ebedef")
+        border.width: (!page._readingPrompt && page.lightUi) ? 1 : 0
+        border.color: Qt.rgba(page.fg.r, page.fg.g, page.fg.b, 0.14)
         readonly property color ink: page._readingPrompt ? "#fcfdfd" : "#1a1a1a"
         Row {
           anchors.centerIn: parent
@@ -694,6 +703,10 @@ FocusScope {
               height: Style.space(224)
               radius: Style.space(6)
               color: "#fcfdfd"
+              // the illustration's own off-white ground doesn't quite match
+              // #fcfdfd -- a hairline gives the tile a clean edge
+              border.width: 1
+              border.color: Qt.rgba(0, 0, 0, 0.1)
               Image {
                 anchors.centerIn: parent
                 width: parent.width - Style.space(16)

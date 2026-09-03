@@ -20,7 +20,7 @@ FocusScope {
   property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
-  readonly property color okColor: "#93c01f"
+  readonly property color okColor: "#34a553"
 
   signal exit()
 

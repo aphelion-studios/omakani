@@ -36,7 +36,7 @@ Panel {
   readonly property color vocabColor: "#9457e8"
 
   // WaniKani's review-forecast green, for the Upcoming Reviews bars and deltas.
-  readonly property color forecastColor: "#93c01f"
+  readonly property color forecastColor: "#34a553"
 
   function typeColor(type) {
     if (type === "radical" || type === "radicals") return radicalColor
