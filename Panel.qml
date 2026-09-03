@@ -116,14 +116,19 @@ Panel {
   // Only the sections that exist right now, in visual order. { n: name,
   // o: orientation "v"|"h", c: item count }.
   readonly property var navSections: {
-    if (settingsOpen) return [{ n: "settings", o: "v", c: settingRows.length },
-                              { n: "settingsdone", o: "h", c: 1 }]
+    // the back button sits at the TOP of the sheet, so it leads the order --
+    // k off the first row reaches it, j off the last row just stops
+    if (settingsOpen) return [{ n: "settingsdone", o: "h", c: 1 },
+                              { n: "settings", o: "v", c: settingRows.length }]
     if (!wk.configured) return [{ n: "token", o: "v", c: 1 }, { n: "footer", o: "h", c: 4 }]
-    if (upcomingDrill >= 0) return [{ n: "drillback", o: "h", c: 1 }]
     var out = []
     if (startActions.length > 0)
       out.push({ n: "start", o: "h", c: startActions.length })
-    if (wk.dashboardLoaded && wk.upcoming.length > 0)
+    // drilled into a day: the day list becomes a back button, but the rest of
+    // the dashboard is still on screen and still navigable
+    if (upcomingDrill >= 0)
+      out.push({ n: "drillback", o: "h", c: 1 })
+    else if (wk.dashboardLoaded && wk.upcoming.length > 0)
       out.push({ n: "upcoming", o: "v", c: wk.upcoming.length })
     if (wk.dashboardLoaded)
       out.push({ n: "extra", o: "v", c: 3 })
@@ -158,6 +163,7 @@ Panel {
     navActive = true
     navSection = section
     navIndex = index
+    _navMemo[section] = index
   }
   function setCursorItem(item) {
     cursorItem = item
@@ -197,6 +203,13 @@ Panel {
   // cursor back to the default.
   property bool _navPinned: false
 
+  // section name -> the index the cursor last held there, so stepping out of a
+  // chip row and back (j to Critical, k back to Recently Unlocked) returns to
+  // the same chip instead of the row's end. Reset by navDefault.
+  property var _navMemo: ({})
+  // the day last drilled into, so backing out lands on it in the week list
+  property int _lastDrillDay: 0
+
   function navReset() { navDefault() }
   // Open the dashboard with something already selected, so Enter acts at once:
   //   reviews waiting        -> the Reviews button
@@ -205,6 +218,7 @@ Panel {
   // If the data isn't in yet, park quietly and let _maybeRedefault re-run.
   function navDefault() {
     _navPinned = false
+    _navMemo = ({})
     var secs = navSections
     if (secs.length === 0) { navActive = false; navSection = ""; navIndex = 0; return }
 
@@ -256,17 +270,22 @@ Panel {
     if (si < 0) { navSection = secs[0].n; navIndex = 0; scrollTimer.restart(); return }
     var cur = secs[si]
     var beforeSec = navSection, beforeIdx = navIndex
+    _navMemo[navSection] = navIndex   // remember where we're leaving from
 
-    // step to the next section (in `dir`) that has a reachable item, and
-    // land on its first / last such item
+    // step to the next section (in `dir`) that has a reachable item, and land
+    // where the cursor last sat there (else its first / last reachable item)
     var crossTo = function (dir) {
       var ni = si
       while (true) {
         ni += dir
         if (ni < 0 || ni >= secs.length) return
-        var tgt = dir > 0 ? navFirstEnabled(secs[ni].n, secs[ni].c)
-                          : navLastEnabled(secs[ni].n, secs[ni].c)
-        if (tgt >= 0) { navSection = secs[ni].n; navIndex = tgt; return }
+        var sn = secs[ni].n, sc = secs[ni].c
+        var memo = root._navMemo[sn]
+        if (memo !== undefined && memo >= 0 && memo < sc && navEnabled(sn, memo)) {
+          navSection = sn; navIndex = memo; return
+        }
+        var tgt = dir > 0 ? navFirstEnabled(sn, sc) : navLastEnabled(sn, sc)
+        if (tgt >= 0) { navSection = sn; navIndex = tgt; return }
       }
     }
 
@@ -305,6 +324,7 @@ Panel {
       }
       return
     }
+    _navMemo[navSection] = navIndex
     scrollTimer.restart()
   }
 
@@ -331,7 +351,10 @@ Panel {
     else if (s === "settingsdone") settingsOpen = false
     else if (s === "settings") settingsActivate(i)
     else if (s === "upcoming") {
-      if (i < wk.upcoming.length && Number(wk.upcoming[i].count) > 0) upcomingDrill = i
+      if (i < wk.upcoming.length && Number(wk.upcoming[i].count) > 0) {
+        _lastDrillDay = i
+        upcomingDrill = i
+      }
     }
     else if (s === "start") openStart(i)
     else if (s === "extra") openExtraStudy(i)
@@ -428,11 +451,23 @@ Panel {
   }
 
   // Drilling in / out of a day rebuilds the section list; land the cursor
-  // somewhere valid. Deferred, because `navSections` is not yet re-evaluated
+  // somewhere sensible. Deferred, because `navSections` is not yet re-evaluated
   // while this change signal is being delivered.
   onUpcomingDrillChanged: Qt.callLater(function() {
-    root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
-    root.navIndex = 0
+    if (root.upcomingDrill >= 0) {
+      // drilled in -- sit on the back button; the rest of the pane is still
+      // reachable with j from there
+      root.navSection = "drillback"
+      root.navIndex = 0
+    } else if (root.navSecAt("upcoming") >= 0) {
+      // back to the week -- land on the day we came from
+      root.navSection = "upcoming"
+      root.navIndex = root._lastDrillDay
+    } else {
+      root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
+      root.navIndex = 0
+    }
+    root.navActive = true
     scrollTimer.restart()
   })
 
@@ -445,8 +480,16 @@ Panel {
   onSettingsOpenChanged: {
     if (panelFlick) panelFlick.contentY = 0
     Qt.callLater(function() {
-      root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
-      root.navIndex = 0
+      if (root.settingsOpen) {
+        // open on the first setting, not the back button (which leads the
+        // section order so k can reach it)
+        root.navSection = "settings"
+        root.navIndex = 0
+        root.navActive = true
+      } else {
+        root.navSection = root.navSections.length > 0 ? root.navSections[0].n : ""
+        root.navIndex = 0
+      }
       scrollTimer.restart()
     })
   }
