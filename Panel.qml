@@ -296,7 +296,10 @@ Panel {
     // fully in, a second Down at the bottom scrolls to the end
     if (navSection === beforeSec && navIndex === beforeIdx && dy !== 0) {
       var edgeFlick = root.settingsOpen ? settingsFlick : panelFlick
-      if (edgeFlick) {
+      // only nudge the view if the content actually overflows -- when
+      // everything fits (the settings sheet at its normal size) a stray
+      // 1-2px scroll on a wall keystroke is just noise
+      if (edgeFlick && edgeFlick.contentHeight > edgeFlick.height + 2) {
         edgeFlick.contentY = dy < 0 ? 0
           : Math.max(0, edgeFlick.contentHeight - edgeFlick.height)
       }
@@ -714,9 +717,12 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(360))
+    // the settings sheet is short enough to show whole -- give it a roomy
+    // cap so it never has to scroll a keystroke's worth; the main dashboard
+    // genuinely overflows and keeps the tighter cap
     contentHeight: panel.fittedContentHeight(
       root.settingsOpen ? settingsColumn.implicitHeight : column.implicitHeight,
-      Style.space(720))
+      Style.space(root.settingsOpen ? 920 : 720))
 
     PanelKeyCatcher {
       id: keyCatcher
