@@ -6,8 +6,11 @@ import qs.Commons
 // object/characters/meaning (level browser, slim data) or a full `resource`
 // from the detail cache (component links, which resolve lazily).
 //
-// `locked` items (not yet unlocked on the account) render hollow with a
-// dashed border, the way the website's level page shows them.
+// Three states, mirroring the website's level page:
+//   normal      solid brand colour, white glyph
+//   inLessons   unlocked but not started -- a light wash of the brand colour
+//               with the brand colour as the glyph
+//   locked      hollow, long-dashed brand-colour border, brand-colour glyph
 Rectangle {
   id: chip
 
@@ -19,6 +22,8 @@ Rectangle {
   property bool cursored: false
   property bool hovered: false
   property bool locked: false
+  // unlocked but not yet learned -- sits in the lesson queue
+  property bool inLessons: false
   readonly property bool lit: cursored || hovered
 
   property string fontFamily: Style.font.family
@@ -52,19 +57,31 @@ Rectangle {
     if (kind === "vocabulary" || kind === "kana_vocabulary") return vocabColor
     return Qt.darker(fg, 1.5)
   }
+  // a pale version of the brand colour for the lessons chip -- reads as
+  // "light <colour>" on any theme (Qt.lighter desaturates + brightens)
+  readonly property color lessonTint: Qt.lighter(tint, 1.8)
+  // glyph / meaning ink: white on the solid chip; the brand colour on the
+  // hollow (locked) chip; a deeper brand colour on the pale lessons chip
+  readonly property color ink: locked ? tint
+    : inLessons ? Qt.darker(tint, 1.4)
+    : fg
 
   implicitWidth: row.implicitWidth + Style.space(20)
   implicitHeight: Style.space(34)
   radius: Style.space(5)
 
-  // solid brand colour for an unlocked item -- same whether it's the current
-  // selection or not; the focus ring is what marks the selection. Locked
-  // items stay hollow (dashed border in the Canvas below).
+  // normal -> solid brand colour; inLessons -> a pale wash of it; locked ->
+  // hollow (dashed border painted in the Canvas below). The focus ring, not
+  // the fill, marks the current selection.
   color: locked
     ? (lit ? Qt.rgba(tint.r, tint.g, tint.b, 0.10) : "transparent")
-    : tint
-  border.width: cursored ? 2 : 0
-  border.color: Qt.rgba(fg.r, fg.g, fg.b, 0.95)
+    : inLessons
+      ? (lit ? Qt.darker(lessonTint, 1.06) : lessonTint)
+      : tint
+  border.width: cursored ? 2 : (inLessons ? 1 : 0)
+  border.color: cursored
+    ? Qt.rgba(fg.r, fg.g, fg.b, 0.95)
+    : Qt.rgba(tint.r, tint.g, tint.b, 0.35)
 
   Loader {
     anchors.fill: parent
@@ -76,8 +93,8 @@ Rectangle {
         ctx.reset()
         var a = chip.lit ? 0.95 : 0.5
         ctx.strokeStyle = Qt.rgba(chip.tint.r, chip.tint.g, chip.tint.b, a)
-        ctx.lineWidth = chip.cursored ? 2 : 1.3
-        ctx.setLineDash([4, 3])
+        ctx.lineWidth = chip.cursored ? 2 : 1.4
+        ctx.setLineDash([8, 4])
         var r = chip.radius
         var i = ctx.lineWidth / 2
         var w = width - i
@@ -106,13 +123,12 @@ Rectangle {
     id: row
     anchors.centerIn: parent
     spacing: Style.space(6)
-    opacity: chip.locked && !chip.lit ? 0.55 : 1.0
 
     Text {
       anchors.verticalCenter: parent.verticalCenter
       text: chip.glyph !== "" ? chip.glyph
         : (chip.label !== "" ? chip.label : "#" + chip.subjectId)
-      color: chip.fg
+      color: chip.ink
       font.family: chip.jpFamily
       font.pixelSize: Style.font.subtitle
       font.bold: true
@@ -122,7 +138,7 @@ Rectangle {
       anchors.verticalCenter: parent.verticalCenter
       visible: chip.glyph !== "" && chip.label !== ""
       text: chip.label
-      color: chip.fg
+      color: chip.ink
       font.family: chip.fontFamily
       font.pixelSize: Style.font.bodySmall
     }

@@ -1060,9 +1060,10 @@ Panel {
             Text {
               width: parent.width
               topPadding: Style.space(2)
+              textFormat: Text.StyledText
               text: parent.gate > 0
-                ? "Guru " + parent.gate + " more kanji to reach level " + (wk.level + 1)
-                : "Kanji gate cleared — level " + (wk.level + 1) + " is unlocked."
+                ? "Guru <b>" + parent.gate + " more kanji</b> to level up."
+                : "<b>Kanji gate cleared</b> — level " + (wk.level + 1) + " is unlocked."
               color: parent.gate > 0 ? root.foreground : root.accent
               font.family: root.fontFamily
               font.pixelSize: Style.font.bodySmall

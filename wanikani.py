@@ -961,6 +961,7 @@ def cmd_browse(args):
         a_data = data_of(assignment_by_subject.get(subject.get("id")))
         stage = a_data.get("srs_stage") or 0
         unlocked = bool(a_data.get("unlocked_at"))
+        started = bool(a_data.get("started_at"))
         passed = bool(a_data.get("passed_at")) or stage >= 5
         burned = bool(a_data.get("burned_at"))
         key = type_key(subject.get("object"))
@@ -979,6 +980,7 @@ def cmd_browse(args):
             "meaning": primary or "",
             "slug": data.get("slug") or "",
             "unlocked": unlocked,
+            "started": started,
             "passed": passed,
             "burned": burned,
             "srsStage": stage,

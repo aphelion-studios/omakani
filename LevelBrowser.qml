@@ -434,16 +434,12 @@ Item {
       anchors.topMargin: visible ? Style.space(10) : 0
 
       readonly property int userLevel: browser.service ? Number(browser.service.level) || 0 : 0
-      // prefer the dashboard's figure; fall back to the browse counts (90% of
-      // this level's kanji must be Guru'd)
-      readonly property int gate: {
-        var lp = browser.service && browser.service.levelProgress
-          ? browser.service.levelProgress : null
-        var g = lp ? Number(lp.kanjiToLevelUp) : NaN
-        if (isFinite(g)) return Math.max(0, g)
-        var k = browser.progOf("kanji")
-        return k.total > 0 ? Math.max(0, Math.ceil(k.total * 0.9) - k.passed) : 0
-      }
+      // 90% of this level's kanji must be Guru'd to level up. Everything here
+      // reads off the same browse counts so the text, the bar and the section
+      // header can't disagree.
+      readonly property var kp: browser.progOf("kanji")
+      readonly property int threshold: kp.total > 0 ? Math.ceil(kp.total * 0.9) : 1
+      readonly property int gate: Math.max(0, threshold - kp.passed)
       visible: !browser.searching && browser.ready
         && browser.level === userLevel && browser.blockingKanji.length > 0
       implicitHeight: visible ? bandCol.implicitHeight : 0
@@ -453,14 +449,43 @@ Item {
         width: parent.width
         spacing: Style.space(8)
 
+        // "Guru <b>3 more kanji</b> to level up." -- WK bolds the count phrase
         Text {
+          width: parent.width
+          textFormat: Text.StyledText
           text: levelUpBand.gate > 0
-            ? "Guru " + levelUpBand.gate + " more kanji to reach level " + (browser.level + 1)
-            : "Kanji gate cleared — level " + (browser.level + 1) + " is unlocked"
+            ? "Guru <b>" + levelUpBand.gate + " more kanji</b> to level up."
+            : "<b>Kanji gate cleared</b> — level " + (browser.level + 1) + " is unlocked."
           color: levelUpBand.gate > 0 ? browser.ink : browser.passedColor
           font.family: browser.fontFamily
           font.pixelSize: Style.font.bodySmall
-          font.bold: true
+        }
+
+        // segmented gate bar: one slot per kanji needed for the threshold,
+        // green for the ones already Guru'd. Rounded outer ends, square
+        // middles, generous gaps -- the website's look.
+        Row {
+          id: gateBar
+          width: parent.width
+          spacing: Style.space(3)
+          readonly property int slots: Math.max(1, levelUpBand.threshold)
+          readonly property int filled: Math.min(slots, levelUpBand.kp.passed)
+          readonly property real segW: (bandCol.width - (slots - 1) * Style.space(3)) / slots
+          Repeater {
+            model: gateBar.slots
+            delegate: Rectangle {
+              width: gateBar.segW
+              height: Style.space(10)
+              readonly property real endR: Style.space(4)
+              topLeftRadius: index === 0 ? endR : 0
+              bottomLeftRadius: index === 0 ? endR : 0
+              topRightRadius: index === gateBar.slots - 1 ? endR : 0
+              bottomRightRadius: index === gateBar.slots - 1 ? endR : 0
+              color: index < gateBar.filled
+                ? browser.passedColor
+                : Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.14)
+            }
+          }
         }
 
         Flow {
@@ -626,7 +651,7 @@ Item {
               }
               Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "(" + section.p.unlocked + "/" + section.p.total + " unlocked)"
+                text: "(" + section.p.passed + "/" + section.p.total + " Guru'd)"
                 color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.7)
                 font.family: browser.fontFamily
                 font.pixelSize: Style.font.caption
@@ -664,6 +689,11 @@ Item {
                   width: (grid.width - (browser.columns - 1) * Style.space(8)) / browser.columns
                   spacing: Style.space(3)
                   readonly property int flatIndex: section.baseIndex + index
+                  readonly property bool cLocked: modelData.unlocked === false
+                  // unlocked but not learned yet -> in the lesson queue
+                  readonly property bool cInLessons: modelData.unlocked === true
+                    && modelData.started !== true
+                  readonly property int cStage: Number(modelData.srsStage) || 0
 
                   SubjectChip {
                     id: chipItem
@@ -672,7 +702,8 @@ Item {
                     object: modelData.object
                     characters: modelData.characters || ""
                     meaning: modelData.meaning || ""
-                    locked: modelData.unlocked === false
+                    locked: cell.cLocked
+                    inLessons: cell.cInLessons
                     cursored: browser.cursor === cell.flatIndex && browser.visible && !browser.onLevelBar
                     fontFamily: browser.fontFamily
                     jpFamily: browser.jpFamily
@@ -691,13 +722,25 @@ Item {
                     })
                   }
 
+                  // SRS strip only once the item has actually been started;
+                  // a lessons / locked item gets a word caption instead
                   SrsStrip {
+                    visible: !cell.cLocked && !cell.cInLessons
                     width: parent.width - Style.space(8)
                     anchors.horizontalCenter: parent.horizontalCenter
-                    stage: Number(modelData.srsStage) || 0
-                    locked: modelData.unlocked === false
+                    stage: cell.cStage
+                    locked: cell.cLocked
                     fg: browser.ink
                     passedColor: browser.passedColor
+                  }
+
+                  Text {
+                    visible: cell.cLocked || cell.cInLessons
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: cell.cLocked ? "Locked" : "Lessons"
+                    color: Qt.rgba(browser.ink.r, browser.ink.g, browser.ink.b, 0.5)
+                    font.family: browser.fontFamily
+                    font.pixelSize: Style.font.caption
                   }
                 }
               }

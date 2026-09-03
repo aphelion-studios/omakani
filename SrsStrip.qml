@@ -1,16 +1,14 @@
 import QtQuick
 import qs.Commons
 
-// A thin SRS-stage indicator shown under a subject chip on the Level Progress
-// page -- the same green "how far along" language wanikani.com uses on its
-// level page and that the section bars use here. The fill is deliberately NOT
-// the chip's own colour so it reads as a separate progress mark:
+// SRS "Guru progress" strip under a chip on the Level Progress page, mirroring
+// wanikani.com: once the item is Guru'd it's a solid green bar; on the way
+// there it's five segments (rounded outer ends, square middles), one filling
+// per Apprentice stage.
 //
-//   stage 0        locked / not started   -> faint empty track
-//   stage 1..4     Apprentice             -> dim ink, growing
-//   stage 5..6     Guru                   -> green (counts toward level-up)
-//   stage 7..8     Master / Enlightened   -> green, nearly full
-//   stage 9        Burned                 -> full, muted gold
+//   locked / not started  -> hidden (the cell shows a word caption instead)
+//   stage 1..4            -> that many of five green
+//   stage 5+ (Guru+)      -> one solid green bar
 Item {
   id: strip
 
@@ -19,35 +17,42 @@ Item {
   property color fg: Color.foreground
   property color passedColor: "#93c01f"
 
-  implicitHeight: Style.space(4)
+  implicitHeight: Style.space(5)
 
-  readonly property bool started: !locked && stage > 0
-  readonly property bool passed: stage >= 5
-  readonly property bool burned: stage >= 9
-  readonly property real frac: {
-    if (!started) return 0
-    if (burned) return 1
-    return Math.max(0.16, Math.min(1, stage / 8))
+  readonly property bool gurued: stage >= 5
+  readonly property real barH: Style.space(4)
+  readonly property real endR: Style.space(2)
+  readonly property color track: Qt.rgba(fg.r, fg.g, fg.b, 0.14)
+
+  // Guru'd -> one solid bar
+  Rectangle {
+    anchors.left: parent.left
+    anchors.right: parent.right
+    anchors.verticalCenter: parent.verticalCenter
+    height: strip.barH
+    radius: height / 2
+    visible: strip.gurued
+    color: strip.passedColor
   }
 
-  Rectangle {
+  // on the way to Guru -> five segments
+  Row {
+    width: strip.width
     anchors.verticalCenter: parent.verticalCenter
-    width: parent.width
-    height: Style.space(3)
-    radius: height / 2
-    color: Qt.rgba(strip.fg.r, strip.fg.g, strip.fg.b, 0.14)
-
-    Rectangle {
-      height: parent.height
-      radius: parent.radius
-      width: Math.round(parent.width * strip.frac)
-      color: strip.burned
-        ? "#c8a24a"
-        : strip.passed
-          ? strip.passedColor
-          : Qt.rgba(strip.fg.r, strip.fg.g, strip.fg.b, 0.4)
-      Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-      Behavior on color { ColorAnimation { duration: 160 } }
+    spacing: Style.space(3)
+    visible: !strip.gurued
+    readonly property real segW: (strip.width - 4 * Style.space(3)) / 5
+    Repeater {
+      model: 5
+      delegate: Rectangle {
+        width: parent.segW
+        height: strip.barH
+        topLeftRadius: index === 0 ? strip.endR : 0
+        bottomLeftRadius: index === 0 ? strip.endR : 0
+        topRightRadius: index === 4 ? strip.endR : 0
+        bottomRightRadius: index === 4 ? strip.endR : 0
+        color: index < strip.stage ? strip.passedColor : strip.track
+      }
     }
   }
 }
