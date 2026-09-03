@@ -57,8 +57,15 @@ Item {
   property string pendingSection: ""
   // when true the < Level N > bar has the ring; h/l step levels, j returns
   property bool onLevelBar: false
+  // when true the ring is on the un-Guru'd kanji row under the gate bar --
+  // reached with j from the level bar; h/l walk them, Enter opens, j drops
+  // into the grid, k / Esc go back up to the level bar
+  property bool onBlockingBar: false
+  property int blockingCursor: 0
   readonly property int columns: Math.max(1,
     Math.floor((flick.width - Style.space(2)) / Style.space(196)))
+  // how many un-Guru'd kanji chips the gate band actually shows
+  readonly property int blockingShown: Math.min(14, blockingKanji.length)
 
   function sectionRows(kind) {
     return rows.filter(function (r) {
@@ -95,6 +102,7 @@ Item {
   // the view instead, so don't reset when one is queued.
   function enterFresh() {
     onLevelBar = false
+    onBlockingBar = false
     // a pending-section request drives the view -- and it may have been
     // consumed synchronously already (cached level), so also bail while a
     // seek is still settling
@@ -114,6 +122,7 @@ Item {
     if (idx >= rows.length) return
     pendingSection = ""
     onLevelBar = false
+    onBlockingBar = false
     cursor = idx
     if (idx === 0) { _seeking = false; scrollTop(); return }
     // pin the section heading near the top for a few frames -- the grid
@@ -207,6 +216,64 @@ Item {
     }
     cursor = next
   }
+
+  // item counts per section, in the radical -> kanji -> vocab order `rows`
+  // and `cursor` follow
+  readonly property var _secLens: [
+    sectionRows("radical").length,
+    sectionRows("kanji").length,
+    sectionRows("vocabulary").length
+  ]
+
+  // vertical (j/k) grid nav that keeps the column when it steps between
+  // sections -- each section is its own Grid, so a flat cursor += columns
+  // lands in whatever column the next section's row happens to start on
+  function moveRow(dir) {
+    if (rows.length === 0) return
+    if (browser.searching) { moveCursor(dir * columns); return }
+
+    var lens = _secLens
+    var base = 0, sec = -1, within = 0
+    for (var s = 0; s < 3; s++) {
+      if (lens[s] === 0) continue
+      if (cursor < base + lens[s]) { sec = s; within = cursor - base; break }
+      base += lens[s]
+    }
+    if (sec < 0) return
+
+    var col = within % columns
+    var rowN = Math.floor(within / columns)
+    var lastRow = Math.floor((lens[sec] - 1) / columns)
+
+    if (dir > 0) {
+      if (rowN < lastRow) {
+        cursor = base + Math.min(lens[sec] - 1, (rowN + 1) * columns + col)
+        return
+      }
+      var nb = base + lens[sec]
+      for (var ns = sec + 1; ns < 3; ns++) {
+        if (lens[ns] === 0) continue
+        cursor = nb + Math.min(lens[ns] - 1, col)
+        return
+      }
+      flick.contentY = Math.max(0, flick.contentHeight - flick.height)
+    } else {
+      if (rowN > 0) {
+        cursor = base + (rowN - 1) * columns + col
+        return
+      }
+      var pb = base
+      for (var ps = sec - 1; ps >= 0; ps--) {
+        if (lens[ps] === 0) continue
+        pb -= lens[ps]
+        var pLast = Math.floor((lens[ps] - 1) / columns)
+        cursor = pb + Math.min(lens[ps] - 1, pLast * columns + col)
+        return
+      }
+      if (flick.contentY > 1) flick.contentY = 0
+      else if (!browser.searching) onLevelBar = true
+    }
+  }
   function openCursor() {
     if (cursor >= 0 && cursor < rows.length) browser.openSubject(rows[cursor].id)
   }
@@ -240,14 +307,24 @@ Item {
       if (ticks >= 14 || !browser.visible || browser.cursor !== 0) { stop(); ticks = 0 }
     }
   }
-  onLevelChanged: { if (!_seeking) cursor = 0; if (pendingSection === "" && !_seeking) scrollTop() }
+  onLevelChanged: {
+    onBlockingBar = false; blockingCursor = 0
+    if (!_seeking) cursor = 0
+    if (pendingSection === "" && !_seeking) scrollTop()
+  }
   onRowsChanged: {
     if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
     _applyPendingSection()
     if (cursor === 0 && pendingSection === "") scrollTop()   // show first heading
   }
+  onBlockingKanjiChanged: {
+    if (blockingShown === 0) onBlockingBar = false
+    if (blockingCursor >= blockingShown)
+      blockingCursor = Math.max(0, blockingShown - 1)
+  }
   onVisibleChanged: if (visible) {
     onLevelBar = false
+    onBlockingBar = false
     Qt.callLater(_applyPendingSection)
     if (cursor === 0 && pendingSection === "") scrollTop()
   }
@@ -276,17 +353,48 @@ Item {
       if (browser.onLevelBar) {
         if (e.text === "h" || e.key === Qt.Key_Left) { browser.stepLevel(-1); e.accepted = true }
         else if (e.text === "l" || e.key === Qt.Key_Right) { browser.stepLevel(1); e.accepted = true }
-        else if (e.text === "j" || e.key === Qt.Key_Down || e.key === Qt.Key_Return
-                 || e.key === Qt.Key_Enter || e.key === Qt.Key_Escape) {
+        else if (e.text === "j" || e.key === Qt.Key_Down) {
+          // drop onto the un-Guru'd kanji row if the gate band is showing,
+          // otherwise straight into the grid
+          if (levelUpBand.visible && browser.blockingShown > 0) {
+            browser.onLevelBar = false
+            browser.onBlockingBar = true
+            browser.blockingCursor = 0
+          } else {
+            browser.onLevelBar = false
+          }
+          e.accepted = true
+        }
+        else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter || e.key === Qt.Key_Escape) {
           browser.onLevelBar = false; e.accepted = true
+        }
+        return
+      }
+
+      if (browser.onBlockingBar) {
+        var maxb = browser.blockingShown - 1
+        if (e.text === "h" || e.key === Qt.Key_Left) {
+          browser.blockingCursor = Math.max(0, browser.blockingCursor - 1); e.accepted = true
+        } else if (e.text === "l" || e.key === Qt.Key_Right) {
+          browser.blockingCursor = Math.min(maxb, browser.blockingCursor + 1); e.accepted = true
+        } else if (e.text === "k" || e.key === Qt.Key_Up) {
+          browser.onBlockingBar = false; browser.onLevelBar = true; e.accepted = true
+        } else if (e.text === "j" || e.key === Qt.Key_Down) {
+          browser.onBlockingBar = false; e.accepted = true   // into the grid
+        } else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+          var bk = browser.blockingKanji[browser.blockingCursor]
+          if (bk) browser.openSubject(bk.id)
+          e.accepted = true
+        } else if (e.key === Qt.Key_Escape) {
+          browser.onBlockingBar = false; browser.onLevelBar = true; e.accepted = true
         }
         return
       }
 
       if (e.text === "h" || e.key === Qt.Key_Left) { browser.moveCursor(-1); e.accepted = true }
       else if (e.text === "l" || e.key === Qt.Key_Right) { browser.moveCursor(1); e.accepted = true }
-      else if (e.text === "j" || e.key === Qt.Key_Down) { browser.moveCursor(browser.columns); e.accepted = true }
-      else if (e.text === "k" || e.key === Qt.Key_Up) { browser.moveCursor(-browser.columns); e.accepted = true }
+      else if (e.text === "j" || e.key === Qt.Key_Down) { browser.moveRow(1); e.accepted = true }
+      else if (e.text === "k" || e.key === Qt.Key_Up) { browser.moveRow(-1); e.accepted = true }
       else if (e.text === "g") { browser.cursor = 0; flick.contentY = 0; e.accepted = true }
       else if (e.text === "G") { browser.cursor = Math.max(0, browser.rows.length - 1); e.accepted = true }
       else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) { browser.openCursor(); e.accepted = true }
@@ -505,6 +613,8 @@ Item {
               characters: modelData.characters || ""
               meaning: modelData.meaning || ""
               locked: modelData.unlocked === false
+              cursored: browser.onBlockingBar && browser.blockingCursor === index
+                && browser.visible
               fontFamily: browser.fontFamily
               jpFamily: browser.jpFamily
               fg: browser.ink
@@ -695,7 +805,8 @@ Item {
                     meaning: modelData.meaning || ""
                     locked: cell.cLocked
                     inLessons: cell.cInLessons
-                    cursored: browser.cursor === cell.flatIndex && browser.visible && !browser.onLevelBar
+                    cursored: browser.cursor === cell.flatIndex && browser.visible
+                      && !browser.onLevelBar && !browser.onBlockingBar
                     fontFamily: browser.fontFamily
                     jpFamily: browser.jpFamily
                     fg: browser.ink

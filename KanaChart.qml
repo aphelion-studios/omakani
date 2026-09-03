@@ -185,10 +185,10 @@ FocusScope {
         }
       }
 
-      // Backspace, pinned to the right
+      // Backspace, pinned to the right -- same height as the tab keys beside it
       Rectangle {
         width: Style.space(96)
-        height: Style.space(28)
+        height: parent.height - Style.space(4)
         anchors.verticalCenter: parent.verticalCenter
         radius: Style.space(4)
         color: bsHover.containsMouse

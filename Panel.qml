@@ -1345,12 +1345,29 @@ Panel {
 
   // ---- small components ------------------------------------------------
 
-  // One of the two dashboard count cards, mirroring the website: the queue
-  // name with its count (or "Done!" for a cleared lesson queue) to the
-  // right, and that queue's Start button below. When the queue has items
-  // (`active`) the button switches to a loud accent style with a soft
-  // pulse; otherwise it's the quiet outline style. `index` is the slot in
-  // root.startActions.
+  // A white selection ring with a hairline down each edge, so it stays legible
+  // whether the fill behind it is a light theme accent or the dark panel.
+  component CursorRing: Item {
+    id: cring
+    property real ringRadius: Style.space(6)
+    property real band: 2
+    readonly property color hair: Qt.rgba(root.background.r, root.background.g,
+      root.background.b, 0.55)
+    Rectangle {
+      anchors.fill: parent; radius: cring.ringRadius; color: "transparent"
+      border.width: 1; border.color: cring.hair
+    }
+    Rectangle {
+      anchors.fill: parent; anchors.margins: 1; radius: Math.max(0, cring.ringRadius - 1)
+      color: "transparent"; border.width: cring.band; border.color: "#fcfdfd"
+    }
+    Rectangle {
+      anchors.fill: parent; anchors.margins: 1 + cring.band
+      radius: Math.max(0, cring.ringRadius - 1 - cring.band)
+      color: "transparent"; border.width: 1; border.color: cring.hair
+    }
+  }
+
   // One queue button -- "Lessons ⟨17⟩" / "Reviews ⟨28⟩", the same accent
   // button + white count pill the main window uses.
   component CountCard: Rectangle {
@@ -1370,10 +1387,14 @@ Panel {
     clip: true
     opacity: cc.active ? 1 : 0.45
     color: cc.lit ? Qt.lighter(root.accent, 1.3) : root.accent
-    border.width: cc.lit ? 3 : 0
-    border.color: "#fcfdfd"
     Behavior on color { ColorAnimation { duration: 110 } }
     onCursoredChanged: if (cursored) root.setCursorItem(cc)
+
+    CursorRing {
+      anchors.fill: parent
+      visible: cc.lit
+      ringRadius: cc.radius
+    }
 
     // breathing highlight while the queue is available
     Rectangle {
@@ -1407,6 +1428,9 @@ Panel {
         height: Style.space(18)
         radius: height / 2
         color: "#fcfdfd"
+        // hairline so the white pill keeps an edge on a light accent card
+        border.width: 1
+        border.color: Qt.rgba(0, 0, 0, 0.18)
         Text {
           id: ccPill
           anchors.centerIn: parent
@@ -1459,6 +1483,8 @@ Panel {
       color: sr.cursored
         ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
         : "transparent"
+      border.width: sr.cursored ? 1 : 0
+      border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
       Behavior on color { ColorAnimation { duration: 60 } }
     }
 
@@ -1478,12 +1504,28 @@ Panel {
         elide: Text.ElideRight
       }
 
-      ToggleSwitch {
+      // bool: a pill toggle, identical to the app's Settings screen -- a
+      // white knob on an accent track, with a hairline round the knob so it
+      // keeps an edge when the theme accent is light
+      Rectangle {
         visible: sr.isBool
-        checked: sr.currentValue === true
-        interactive: false
-        hasCursor: sr.cursored
         Layout.alignment: Qt.AlignVCenter
+        width: Style.space(40)
+        height: Style.space(22)
+        radius: height / 2
+        readonly property bool on: sr.currentValue === true
+        color: on ? root.accent
+          : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.15)
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Rectangle {
+          width: Style.space(16); height: width; radius: width / 2
+          color: "#fcfdfd"
+          border.width: 1
+          border.color: Qt.rgba(0, 0, 0, 0.22)
+          anchors.verticalCenter: parent.verticalCenter
+          x: parent.on ? parent.width - width - Style.space(3) : Style.space(3)
+          Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        }
       }
 
       // enum: one compact chip, click / Enter cycles
@@ -1513,33 +1555,41 @@ Panel {
         }
       }
 
-      // int: tight −/value/+ stepper
+      // int: ‹ value › stepper, identical to the app's Settings screen
       Row {
         visible: sr.isEnum === false && sr.isBool === false
         spacing: Style.space(4)
         Layout.alignment: Qt.AlignVCenter
 
-        PanelActionButton {
-          iconText: "󰍵"
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          onClicked: root.settingsAdjust(sr.idx, -1)
+        Rectangle {
+          width: Style.space(24); height: Style.space(24); radius: Style.space(4)
+          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
+          Text {
+            anchors.centerIn: parent; text: "‹"; color: root.foreground
+            font.family: root.fontFamily; font.pixelSize: Style.font.body
+          }
+          MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+            onClicked: root.settingsAdjust(sr.idx, -1) }
         }
         Text {
           anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(24)
+          width: Style.space(28)
           horizontalAlignment: Text.AlignHCenter
-          text: sr.currentValue === 0 ? "off" : String(sr.currentValue)
+          text: sr.currentValue === 0 ? "Off" : String(sr.currentValue)
           color: sr.currentValue === 0 ? root.dim : root.foreground
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           font.bold: true
         }
-        PanelActionButton {
-          iconText: "󰐕"
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          onClicked: root.settingsAdjust(sr.idx, 1)
+        Rectangle {
+          width: Style.space(24); height: Style.space(24); radius: Style.space(4)
+          color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
+          Text {
+            anchors.centerIn: parent; text: "›"; color: root.foreground
+            font.family: root.fontFamily; font.pixelSize: Style.font.body
+          }
+          MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+            onClicked: root.settingsAdjust(sr.idx, 1) }
         }
       }
     }
@@ -1767,7 +1817,7 @@ Panel {
     color: root.typeColor(item ? item.type : "")
     opacity: chipMouse.containsMouse ? 0.82 : 1
     border.width: cursored ? Math.max(1, Style.space(2)) : 0
-    border.color: root.foreground
+    border.color: "#fcfdfd"
     onCursoredChanged: if (cursored) root.setCursorItem(chip)
 
     Text {
