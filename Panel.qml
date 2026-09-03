@@ -152,6 +152,7 @@ Panel {
   }
   function setCursor(section, index) {
     if (!navEnabled(section, index)) return
+    _navPinned = true
     navActive = true
     navSection = section
     navIndex = index
@@ -189,20 +190,41 @@ Panel {
     return -1
   }
 
+  // true once the user has moved / hovered / activated -- keeps late-arriving
+  // data (a first sync finishing after the panel opens) from yanking the
+  // cursor back to the default.
+  property bool _navPinned: false
+
   function navReset() { navDefault() }
-  // open the dashboard with Reviews under the cursor whenever any are due
-  // (the WaniKani habit is reviews before lessons); otherwise the first
-  // thing that's actually actionable.
+  // Open the dashboard with something already selected, so Enter acts at once:
+  //   reviews waiting        -> the Reviews button
+  //   no reviews, lessons    -> the Lessons button
+  //   neither                -> the top Upcoming Reviews row
+  // If the data isn't in yet, park quietly and let _maybeRedefault re-run.
   function navDefault() {
-    navActive = false
+    _navPinned = false
     var secs = navSections
-    if (secs.length === 0) { navSection = ""; navIndex = 0; return }
+    if (secs.length === 0) { navActive = false; navSection = ""; navIndex = 0; return }
+
     if (navSecAt("start") >= 0) {
       for (var k = 0; k < startActions.length; k++)
-        if (startActions[k].kind === "reviews" && startActions[k].active !== false) {
-          navSection = "start"; navIndex = k; return
+        if (startActions[k].kind === "reviews" && startActions[k].active === true) {
+          navActive = true; navSection = "start"; navIndex = k; return
+        }
+      for (var j = 0; j < startActions.length; j++)
+        if (startActions[j].kind === "lessons" && startActions[j].active === true) {
+          navActive = true; navSection = "start"; navIndex = j; return
         }
     }
+
+    var ui = navSecAt("upcoming")
+    if (ui >= 0) {
+      var u = navFirstEnabled("upcoming", secs[ui].c)
+      if (u >= 0) { navActive = true; navSection = "upcoming"; navIndex = u; return }
+    }
+
+    // nothing actionable yet -- park on the first reachable thing, no highlight
+    navActive = false
     for (var s = 0; s < secs.length; s++) {
       var t = navFirstEnabled(secs[s].n, secs[s].c)
       if (t >= 0) { navSection = secs[s].n; navIndex = t; return }
@@ -211,9 +233,17 @@ Panel {
     navIndex = 0
   }
 
+  // re-apply the open-time default when late data reshuffles things, but only
+  // while the user hasn't taken over the cursor yet
+  function _maybeRedefault() {
+    if (opened && !_navPinned && !settingsOpen && upcomingDrill < 0) navDefault()
+  }
+  onNavSectionsChanged: Qt.callLater(_maybeRedefault)
+
   function navMove(dx, dy) {
     var secs = navSections
     if (secs.length === 0) return
+    _navPinned = true
     if (!navActive) {
       navActive = true
       if (navSecAt(navSection) < 0) { navSection = secs[0].n; navIndex = 0 }
@@ -276,6 +306,7 @@ Panel {
   function navEnd(toBottom) {
     var secs = navSections
     if (secs.length === 0) return
+    _navPinned = true
     navActive = true
     var order = toBottom ? secs.slice().reverse() : secs
     for (var i = 0; i < order.length; i++) {
@@ -286,6 +317,7 @@ Panel {
   }
 
   function navActivate() {
+    _navPinned = true
     if (!navActive) { navActive = true; return }
     var s = navSection, i = navIndex
     if (!navEnabled(s, i)) return
@@ -502,6 +534,10 @@ Panel {
     function onTokenRejected(message) {
       Qt.callLater(function() { tokenField.forceActiveFocus() })
     }
+    // a first sync landing after the panel opened can turn reviews / lessons
+    // from 0 to some -- re-pick the default if the user hasn't moved yet
+    function onReviewsNowChanged() { Qt.callLater(root._maybeRedefault) }
+    function onLessonsNowChanged() { Qt.callLater(root._maybeRedefault) }
   }
 
   // Null-safe view of the service so the bindings below stay terse.
