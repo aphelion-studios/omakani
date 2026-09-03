@@ -126,7 +126,7 @@ Panel {
     if (wk.dashboardLoaded)
       out.push({ n: "extra", o: "v", c: 3 })
     if (wk.dashboardLoaded)
-      out.push({ n: "levelprogress", o: "v", c: 4 })   // header + rad/kan/voc
+      out.push({ n: "levelprogress", o: "v", c: 4 })   // See All Items + rad/kan/voc
     if (chipCount(wk.recentlyUnlocked) > 0)
       out.push({ n: "unlocked", o: "h", c: chipCount(wk.recentlyUnlocked) })
     if (chipCount(wk.criticalCondition) > 0)
@@ -336,8 +336,8 @@ Panel {
       JSON.stringify({ session: modes[index] })])
     root.close()   // get the dropdown out of the app's way
   }
-  // Open the full Level Progress page for the current level. index 0 is the
-  // "LEVEL N PROGRESS" heading -> just the level; 1/2/3 are Radicals / Kanji /
+  // Open the full Level Progress page for the current level. index 0 is
+  // "See All Items" -> the top of the level; 1/2/3 are Radicals / Kanji /
   // Vocabulary -> land on that section's first chip.
   function openLevelProgress(index) {
     var payload = { browse: Number(wk.level) || 1 }
@@ -999,31 +999,55 @@ Panel {
             readonly property var lp: wk.levelProgress
             readonly property int gate: Number(lp.kanjiToLevelUp) || 0
 
-            Item {
-              id: lpHeaderItem
+            PanelSectionHeader {
               width: parent.width
-              implicitHeight: lpHeader.implicitHeight
+              text: "LEVEL " + wk.level + " PROGRESS"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+            }
+
+            // opens the full Level Progress page (top of the level); the
+            // Radicals / Kanji / Vocabulary rows below land on their section
+            Item {
+              id: seeAllRow
+              width: parent.width
+              implicitHeight: Style.space(20)
               readonly property bool cursored: root.hasCursor("levelprogress", 0)
-              onCursoredChanged: if (cursored) root.setCursorItem(lpHeaderItem)
+              onCursoredChanged: if (cursored) root.setCursorItem(seeAllRow)
+
               Rectangle {
                 anchors.fill: parent
                 anchors.topMargin: -Style.space(2)
                 anchors.bottomMargin: -Style.space(2)
                 radius: Style.cornerRadius
-                color: lpHeaderItem.cursored
+                color: seeAllRow.cursored
                   ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
                   : "transparent"
                 Behavior on color { ColorAnimation { duration: 60 } }
               }
-              PanelSectionHeader {
-                id: lpHeader
-                // indented like the rows it heads -- it's a focus target too
-                x: Style.space(10)
-                width: parent.width - Style.space(20)
-                text: "LEVEL " + wk.level + " PROGRESS"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
+
+              RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(10)
+                anchors.rightMargin: Style.space(10)
+                spacing: Style.space(8)
+                Text {
+                  text: "See All Items"
+                  color: root.foreground
+                  opacity: 0.9
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  Layout.fillWidth: true
+                }
+                Text {
+                  text: "󰅂"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  Layout.alignment: Qt.AlignVCenter
+                }
               }
+
               MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
