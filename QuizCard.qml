@@ -3,6 +3,7 @@ import QtQuick.Controls
 import qs.Commons
 import "Kana.js" as Kana
 import "Answer.js" as Answer
+import "Model.js" as Model
 
 // One prompt of a lesson quiz or a review: the type-coloured header, the
 // "<Type> <Meaning|Reading>" bar, and the answer field that turns green /
@@ -32,6 +33,7 @@ FocusScope {
 
   readonly property color okColor: "#93c01f"
   readonly property color noColor: "#fc0234"
+  readonly property bool lightUi: Model.lightBg(Color.background)
 
   // when set (reviews), item info hides the half you haven't answered yet
   property bool restrictInfo: false
@@ -540,7 +542,11 @@ FocusScope {
         radius: Style.space(6)
         color: quiz.phase === "correct" ? quiz.okColor
           : quiz.phase === "wrong" ? quiz.noColor
-          : "#ebedef"   // a touch dimmer than the white text -- less blinding
+          // dark: a touch dimmer than the white text; light: pure white with
+          // a thin border, like wanikani.com
+          : (quiz.lightUi ? "#ffffff" : "#ebedef")
+        border.width: quiz.lightUi && (quiz.phase === "input") ? 1 : 0
+        border.color: Qt.rgba(0, 0, 0, 0.18)
         Behavior on color { ColorAnimation { duration: 140 } }
 
         TextField {

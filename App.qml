@@ -1123,7 +1123,7 @@ Item {
           text: (root.service && root.service.detailError)
             ? root.service.detailError
             : "Loading " + root.subjectKindLabel(root.currentPage.id) + "…"
-          color: Qt.rgba(1, 1, 1, 0.6)
+          color: root.lightUi ? Qt.rgba(0, 0, 0, 0.5) : Qt.rgba(1, 1, 1, 0.6)
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
         }
