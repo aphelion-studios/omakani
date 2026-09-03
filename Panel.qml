@@ -633,15 +633,16 @@ Panel {
 
   // ---- the recolourable mark -------------------------------------------------
 
-  // The Crabigator badge is round and fills its viewBox, so it runs a touch
-  // smaller than a nominal bar glyph (which leaves ink room inside its em) to
-  // weigh the same as the Nerd Font icons around it.
+  // The Crabigator head fills its (square) viewBox, so it runs a touch smaller
+  // than a nominal bar glyph -- which leaves ink room inside its em -- to weigh
+  // the same as the Nerd Font icons around it.
   readonly property int barMarkHeight: Math.round(Style.bar.iconFont * 1.02)
 
   component Mark: Item {
     id: markRoot
-    // `size` is the mark's height; the Crabigator head is much taller than
-    // it is wide (243 x 399 in the source).
+    // `size` is the mark's height; icon.svg is a square drawing (the eyes and
+    // mouth are evenodd cut-outs, so they read as holes once the shape is
+    // recoloured to the theme tint below)
     property real size: root.barMarkHeight
     readonly property real aspect: 1.0
     property color tint: root.foreground
@@ -667,9 +668,9 @@ Panel {
     }
   }
 
-  // The "WANI KANI" lockup for the top of the dashboard -- the plugin
-  // author's artwork (wordmark.svg), pink text + blue Crabigator on a
-  // transparent ground so it sits on any theme. `h` is the render height.
+  // The "WANI KANI" lockup for the top of the dashboard -- WaniKani's own
+  // wordmark (wordmark.svg), pink text + blue Crabigator on a transparent
+  // ground so it sits on any theme. `h` is the render height.
   // QtSvg's auto-sizing on this file is unreliable, so pin the raster to
   // the artwork's native width and let it downscale -- always crisp.
   component Wordmark: Image {

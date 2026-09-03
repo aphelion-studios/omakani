@@ -141,6 +141,6 @@ MIT — see [LICENSE](LICENSE).
 The code is MIT. WaniKani's content is not: subject data, mnemonics,
 pronunciation audio and radical illustrations belong to Tofugu LLC and are
 accessed through your own subscription, cached locally, and never redistributed
-by this plugin. `icon.svg` is WaniKani's own published `mask-icon` (from
-wanikani.com), used to identify the service. WaniKani and the Crabigator are
-trademarks of Tofugu LLC.
+by this plugin. `icon.svg` is an original drawing made for this plugin.
+`wordmark.svg` is WaniKani's own "WaniKani" lockup, used to identify the
+service. WaniKani and the Crabigator are trademarks of Tofugu LLC.
