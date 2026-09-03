@@ -602,8 +602,10 @@ def upcoming_reviews(assignments, reviews_now):
     now = local_now()
     today = now.date()
     horizon = today + timedelta(days=UPCOMING_DAYS)
+    day_after = now + timedelta(hours=24)
 
     by_day = defaultdict(list)
+    next_24h = 0
     for assignment in assignments:
         data = data_of(assignment)
         stage = data.get("srs_stage") or 0
@@ -613,6 +615,8 @@ def upcoming_reviews(assignments, reviews_now):
         if not moment or moment <= now or moment.date() >= horizon:
             continue
         by_day[moment.date()].append(moment)
+        if moment <= day_after:
+            next_24h += 1
 
     cumulative = reviews_now
     days = []
@@ -638,7 +642,7 @@ def upcoming_reviews(assignments, reviews_now):
             "hours": hours,
         })
         day += timedelta(days=1)
-    return days
+    return days, next_24h
 
 
 def recent_items(assignments, subjects_by_id, field):
@@ -815,7 +819,7 @@ def build_dashboard(config, api):
         if moment and moment <= now:
             reviews_now += 1
 
-    upcoming = upcoming_reviews(assignments, reviews_now)
+    upcoming, upcoming_next_24h = upcoming_reviews(assignments, reviews_now)
 
     payload = {
         "ok": True,
@@ -831,6 +835,7 @@ def build_dashboard(config, api):
         "projectedLevelUp": projected_level_up(level_progressions, level),
         "upcoming": upcoming,
         "upcomingTotal": sum(day["count"] for day in upcoming),
+        "upcomingNext24h": upcoming_next_24h,
         "recentlyUnlocked": recent_items(assignments, subjects, "unlocked_at"),
         "recentlyBurned": recent_items(assignments, subjects, "burned_at"),
         "criticalCondition": critical_condition(review_stats, assignment_by_subject, subjects),

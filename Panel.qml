@@ -570,6 +570,7 @@ Panel {
     readonly property string projectedLevelUp: root.svc ? root.svc.projectedLevelUp : ""
     readonly property var upcoming: root.svc ? root.svc.upcoming : []
     readonly property int upcomingTotal: root.svc ? root.svc.upcomingTotal : 0
+    readonly property int upcomingNext24h: root.svc ? root.svc.upcomingNext24h : 0
     readonly property var recentlyUnlocked: root.svc ? root.svc.recentlyUnlocked : []
     readonly property var recentlyBurned: root.svc ? root.svc.recentlyBurned : []
     readonly property var criticalCondition: root.svc ? root.svc.criticalCondition : []
@@ -935,7 +936,7 @@ Panel {
               PanelSectionHeader {
                 text: upcomingBlock.drillDay
                   ? String(upcomingBlock.drillDay.labelLong || upcomingBlock.drillDay.label).toUpperCase()
-                  : "UPCOMING REVIEWS"
+                  : "NEXT 24 HOURS"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
                 Layout.fillWidth: true
@@ -945,8 +946,9 @@ Panel {
                 visible: wk.dashboardLoaded
                 text: {
                   var d = upcomingBlock.drillDay
-                  var added = d ? d.count : wk.upcomingTotal
-                  return added > 0 ? "+" + added : "—"
+                  if (d) return d.count > 0 ? "+" + d.count : "—"
+                  var n = wk.upcomingNext24h
+                  return "+" + n + (n === 1 ? " item" : " items")
                 }
                 color: root.forecastColor
                 font.family: root.fontFamily
@@ -2047,13 +2049,13 @@ Panel {
           }
 
           Text {
-            text: rowItem.count > 0 ? "+" + rowItem.count : ""
+            text: rowItem.count > 0 ? "(+" + rowItem.count + ")" : ""
             color: root.forecastColor
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: true
             horizontalAlignment: Text.AlignRight
-            Layout.preferredWidth: Style.space(32)
+            Layout.preferredWidth: Style.space(42)
           }
 
           Text {

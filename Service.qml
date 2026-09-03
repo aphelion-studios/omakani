@@ -62,6 +62,7 @@ Item {
   readonly property string projectedLevelUp: String(dash.projectedLevelUp || "")
   readonly property var upcoming: dash.upcoming || []
   readonly property int upcomingTotal: Number(dash.upcomingTotal) || 0
+  readonly property int upcomingNext24h: Number(dash.upcomingNext24h) || 0
   readonly property var recentlyUnlocked: dash.recentlyUnlocked || []
   readonly property var recentlyBurned: dash.recentlyBurned || []
   readonly property var criticalCondition: dash.criticalCondition || []
