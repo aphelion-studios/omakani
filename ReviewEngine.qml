@@ -89,7 +89,7 @@ FocusScope {
     totalSubjects = ids.length
     phase = "loading"
     if (service) {
-      service.loadDetail(ids.slice(0, 100))
+      service.loadDetail(ids)   // the whole due queue, like the website
       service.preloadAudio(ids)   // warm the audio cache for the whole batch
     }
     tryBuild()
@@ -101,7 +101,7 @@ FocusScope {
     // otherwise "succeed" and flip an idle engine to ready
     if (built || !service || phase !== "loading") return
     var ids = (subjectIds || []).map(function (x) { return parseInt(String(x), 10) })
-      .filter(function (x) { return isFinite(x) }).slice(0, 100)
+      .filter(function (x) { return isFinite(x) })
     if (ids.length === 0) return
     if (!ids.every(function (x) { return !!service.subjectDetail(x) })) return
 

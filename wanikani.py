@@ -139,10 +139,21 @@ def save_cache(name, payload):
     directory = cache_dir()
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / (name + ".json")
-    temporary = path.with_name(path.name + ".tmp")
-    with open(temporary, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, separators=(",", ":"))
-    os.replace(temporary, path)
+    # a per-process temp name: `detail` and `preload-audio` are fired together
+    # at the start of a review session and both rewrite the detail cache -- a
+    # shared "<name>.tmp" let one rename out from under the other, failing the
+    # second with "No such file or directory". os.replace stays atomic, so the
+    # final file is simply last-writer-wins.
+    temporary = path.with_name("%s.%d.tmp" % (path.name, os.getpid()))
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, separators=(",", ":"))
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
 
 
 def wipe_cache():
@@ -752,6 +763,8 @@ def summarize(config, api):
         at = parse_stamp(bucket.get("available_at"))
         if at is None or at <= now:
             lessons_now += len(bucket.get("subject_ids") or [])
+    # honour the local "Maximum daily lessons" setting, like the website does
+    lessons_now = lesson_quota(config, load_prefs(), lessons_now)
 
     reviews_now = 0
     for bucket in summary.get("reviews") or []:
@@ -1541,16 +1554,24 @@ def cmd_detail(args):
     # makes reopening a big batch (Recent Lessons) fast the second time.
     missing = [i for i in ids if i not in items]
     if missing:
-        fresh, _ = api.collection("/subjects?ids=" + ",".join(missing))
-        for resource in fresh:
-            rid = resource.get("id")
-            if rid is not None:
-                items[str(rid)] = resource
+        # chunk so a big session (a post-vacation review pile) can't build a
+        # single over-long request URL
+        for lo in range(0, len(missing), 100):
+            fresh, _ = api.collection(
+                "/subjects?ids=" + ",".join(missing[lo:lo + 100]))
+            for resource in fresh:
+                rid = resource.get("id")
+                if rid is not None:
+                    items[str(rid)] = resource
         save_cache("detail", {"v": CACHE_VERSION, "items": items})
 
     notes = {}
     try:
-        materials, _ = api.collection("/study_materials?subject_ids=" + ",".join(ids))
+        materials = []
+        for lo in range(0, len(ids), 100):
+            page, _ = api.collection(
+                "/study_materials?subject_ids=" + ",".join(ids[lo:lo + 100]))
+            materials.extend(page)
         for material in materials:
             data = data_of(material)
             notes[str(data.get("subject_id"))] = {
@@ -1565,7 +1586,11 @@ def cmd_detail(args):
     # needs to show the "you moved to Guru" transition
     assignments = {}
     try:
-        rows, _ = api.collection("/assignments?subject_ids=" + ",".join(ids))
+        rows = []
+        for lo in range(0, len(ids), 100):
+            page, _ = api.collection(
+                "/assignments?subject_ids=" + ",".join(ids[lo:lo + 100]))
+            rows.extend(page)
         for row in rows:
             data = data_of(row)
             assignments[str(data.get("subject_id"))] = {
@@ -1755,6 +1780,25 @@ def _today_iso():
     return local_now().date().isoformat()
 
 
+def _lessons_started_today(config):
+    """How many new lessons have been started today, from the local tally
+    that `start-lesson` keeps (resets when the local date rolls over)."""
+    day = (config.get("prefs") or {}).get("_lessonDay") or {}
+    return day.get("n", 0) if day.get("date") == _today_iso() else 0
+
+
+def lesson_quota(config, prefs, queue_total):
+    """The lesson count to surface everywhere -- the queue trimmed by the
+    'Maximum daily lessons' setting minus what's already been started today.
+    A setting of 0 means no cap. This is what the website's own daily limit
+    does; WaniKani doesn't expose that limit over the API, so we keep our
+    own and apply it consistently (dashboard count, notification, session)."""
+    daily_max = int(prefs.get("lessonDailyMax") or 0)
+    if daily_max <= 0:
+        return queue_total
+    return max(0, min(queue_total, daily_max - _lessons_started_today(config)))
+
+
 def cmd_lessons(args):
     """The subject ids waiting in the lesson queue, ordered like the website
     and trimmed to what's left under the daily maximum, then capped to --batch.
@@ -1779,12 +1823,10 @@ def cmd_lessons(args):
     subjects, _ = sync_collection(api, "subjects", "/subjects", slim_subject)
     ids = _lesson_order(subjects, ids, prefs.get("lessonInterleave", True))
 
-    # daily maximum: how many new lessons already started today (0 = no cap)
-    day = config.get("prefs", {}).get("_lessonDay") or {}
-    done_today = day.get("n", 0) if day.get("date") == _today_iso() else 0
+    # daily maximum (same limit the dashboard count and notification use)
+    done_today = _lessons_started_today(config)
     daily_max = int(prefs.get("lessonDailyMax") or 0)
-    remaining = max(0, daily_max - done_today) if daily_max > 0 else queue_total
-    total = min(queue_total, remaining)
+    total = lesson_quota(config, prefs, queue_total)
     ids = ids[:total]
 
     batch = getattr(args, "batch", 0) or 0
