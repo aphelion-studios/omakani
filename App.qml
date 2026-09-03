@@ -143,7 +143,7 @@ Item {
   }
 
   // Website type colours (vivid variants, tuned against the dark app ground).
-  readonly property color radicalColor: "#01a9fd"
+  readonly property color radicalColor: "#0098e6"
   readonly property color kanjiColor: "#fc02a9"
   readonly property color vocabColor: "#a802fd"
 

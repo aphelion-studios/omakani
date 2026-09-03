@@ -23,7 +23,7 @@ FocusScope {
   property string fontFamily: Style.font.family
   property string jpFamily: Qt.fontFamilies().indexOf("Noto Sans JP") >= 0
     ? "Noto Sans JP" : "Noto Sans CJK JP"
-  property color radicalColor: "#01a9fd"
+  property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
   readonly property color okColor: "#93c01f"

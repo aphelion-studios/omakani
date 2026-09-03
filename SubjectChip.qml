@@ -29,7 +29,7 @@ Rectangle {
   property string fontFamily: Style.font.family
   property string jpFamily: "Noto Sans CJK JP"
   property color fg: Color.foreground
-  property color radicalColor: "#01a9fd"
+  property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
 
@@ -60,11 +60,12 @@ Rectangle {
   // a pale version of the brand colour for the lessons chip -- reads as
   // "light <colour>" on any theme (Qt.lighter desaturates + brightens)
   readonly property color lessonTint: Qt.lighter(tint, 1.8)
-  // glyph / meaning ink: white on the solid chip; the brand colour on the
-  // hollow (locked) chip; a deeper brand colour on the pale lessons chip
+  // glyph / meaning ink: white on the solid chip (its fill is always a
+  // saturated brand colour, on any theme); the brand colour on the hollow
+  // (locked) chip; a deeper brand colour on the pale lessons chip
   readonly property color ink: locked ? tint
     : inLessons ? Qt.darker(tint, 1.4)
-    : fg
+    : "#fcfdfd"
 
   implicitWidth: row.implicitWidth + Style.space(20)
   implicitHeight: Style.space(34)

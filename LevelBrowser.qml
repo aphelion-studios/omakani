@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import qs.Commons
+import "Model.js" as Model
 
 // The level browser: every subject on one level, grouped Radicals / Kanji /
 // Vocabulary like the website, each group headed with an "(n/m unlocked)"
@@ -26,11 +27,14 @@ Item {
   property color pageBg: Color.background
   property string fontFamily: Style.font.family
   property string jpFamily: "Noto Sans CJK JP"
-  property color radicalColor: "#01a9fd"
+  property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
   readonly property color passedColor: "#93c01f"
-  readonly property color ink: "#fcfdfd"
+  // page ink: the theme's own dark foreground on a light theme, near-white on
+  // a dark one (the approved dark-theme look)
+  readonly property bool lightUi: Model.lightBg(Color.background)
+  readonly property color ink: lightUi ? Color.foreground : "#fcfdfd"
 
   signal openSubject(int subjectId)
   signal changeLevel(int newLevel)

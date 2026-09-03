@@ -17,7 +17,7 @@ FocusScope {
   property color fg: Color.foreground
   property string fontFamily: Style.font.family
   property string jpFamily: "Noto Sans CJK JP"
-  property color radicalColor: "#01a9fd"
+  property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
 

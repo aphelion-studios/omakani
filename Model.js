@@ -133,6 +133,16 @@ function cycleEnum(row, value, dir) {
   return opts[idx].value;
 }
 
+// Is the theme background a light one? A plain perceived-luminance test on
+// Color.background -- the 5 light Omarchy themes land at ~0.94-1.0, the 17 dark
+// ones at ~0.03-0.14, so any threshold in between is safe. This is only a
+// background classifier feeding one `lightUi` bool per screen; it is NOT a
+// per-element ink picker.
+function lightBg(c) {
+  if (!c) return false
+  return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) > 0.5
+}
+
 // One-line status under the hero. Errors win over notes.
 function statusLine(view) {
   if (!view) return ""

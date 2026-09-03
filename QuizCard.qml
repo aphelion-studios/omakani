@@ -26,7 +26,7 @@ FocusScope {
   property string fontFamily: Style.font.family
   property string jpFamily: Qt.fontFamilies().indexOf("Noto Sans JP") >= 0
     ? "Noto Sans JP" : "Noto Sans CJK JP"
-  property color radicalColor: "#01a9fd"
+  property color radicalColor: "#0098e6"
   property color kanjiColor: "#fc02a9"
   property color vocabColor: "#a802fd"
 
@@ -656,22 +656,45 @@ FocusScope {
       }
     }
 
-    // ---- yellow tip / nudge line, WK-style ----
+    // ---- hint bubble, WK-style: a grey speech bubble with a pointer ----
     // `nudge` is a transient retry reason; `tip` stays up while the card is
     // settled (multiple meanings / readings, "a bit off"). No key-command
     // crib here any more -- the ? hotkeys card covers that.
-    Text {
+    Item {
+      id: tipBubble
       anchors.top: fieldWrap.bottom
-      anchors.topMargin: Style.space(12)
+      anchors.topMargin: Style.space(16)
       anchors.horizontalCenter: parent.horizontalCenter
-      width: Math.min(parent.width - Style.space(80), Style.space(560))
-      horizontalAlignment: Text.AlignHCenter
-      wrapMode: Text.WordWrap
-      visible: text !== ""
-      text: quiz.nudge !== "" ? quiz.nudge : quiz.tip
-      color: "#e6c14a"
-      font.family: quiz.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      width: Math.min(quiz.width - Style.space(80), tipText.implicitWidth + Style.space(28))
+      height: tipText.implicitHeight + Style.space(16)
+      visible: tipText.text !== ""
+
+      readonly property color bubbleColor: "#6e6e6e"
+
+      Rectangle {   // pointer, peeking above the bubble toward the field
+        width: Style.space(10); height: width
+        rotation: 45
+        color: tipBubble.bubbleColor
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: -width / 2
+      }
+      Rectangle {
+        anchors.fill: parent
+        radius: Style.space(6)
+        color: tipBubble.bubbleColor
+      }
+      Text {
+        id: tipText
+        anchors.centerIn: parent
+        width: parent.width - Style.space(24)
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        text: quiz.nudge !== "" ? quiz.nudge : quiz.tip
+        color: "#fcfdfd"
+        font.family: quiz.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
     }
 
     // ---- the docked kana keyboard + toolbar, pinned to the bottom ----
