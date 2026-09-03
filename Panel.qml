@@ -942,18 +942,35 @@ Panel {
                 Layout.fillWidth: true
               }
 
-              Text {
+              Row {
                 visible: wk.dashboardLoaded
-                text: {
-                  var d = upcomingBlock.drillDay
-                  if (d) return d.count > 0 ? "+" + d.count : "—"
-                  var n = wk.upcomingNext24h
-                  return "+" + n + (n === 1 ? " item" : " items")
+                spacing: Style.space(4)
+                readonly property var d: upcomingBlock.drillDay
+
+                // the green delta -- "(+18)" drilled into a day, "+56" for
+                // the week's next-24h figure
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: parent.d
+                    ? (parent.d.count > 0 ? "(+" + parent.d.count + ")" : "—")
+                    : "+" + wk.upcomingNext24h
+                  color: root.forecastColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
                 }
-                color: root.forecastColor
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
+                // day view: that day's running total, like the website's
+                // "(+18) 127". week view: the "Items" unit.
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: parent.d
+                    ? String(parent.d.cumulative)
+                    : (wk.upcomingNext24h === 1 ? "Item" : "Items")
+                  color: parent.d ? root.foreground : root.forecastColor
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
               }
             }
 
