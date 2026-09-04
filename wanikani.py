@@ -1408,11 +1408,20 @@ def cmd_import_levelup_image(args):
     raw = re.sub(r"<text class=\"lu-title\"[^>]*>.*?</text>", "", raw, flags=re.S)
     raw = re.sub(r'<use[^>]*xlink:href="#a"\s*/>', "", raw)
     raw = re.sub(r'<circle class="aq"[^>]*/>', "", raw)
-    # the ribbon knot's own fold-shading detail (two semi-transparent dark
-    # paths, clipped to the ribbon's silhouette so only a sliver shows below
-    # the badge) -- QtSvg doesn't clip it tightly enough, so it bleeds out
-    # as a soft dark smudge past the badge's edge into the blue step
+    # the ribbon knot's own fold-shading (two semi-transparent dark paths,
+    # meant to be clipped to the ribbon's own silhouette so only a thin rim
+    # shows below the badge) bleeds out sideways into the blue step -- QtSvg
+    # doesn't apply that clip-path tightly enough. Rather than lose the
+    # shadow entirely, swap it for a plain circle that needs no clipping at
+    # all: same size as the badge's own disc, nudged down a few units and
+    # placed behind it, so only the sliver that pokes out past the badge's
+    # own bottom edge is ever visible -- the same "shadow hugging the coin's
+    # rim" look, without depending on a clip-path QtSvg gets wrong.
     raw = re.sub(r'<g class="ax">.*?</g>', "", raw, flags=re.S)
+    raw = raw.replace(
+        '<g id="aa" data-name="BADGE">',
+        '<circle cx="805.04" cy="177" r="170.16" fill="#252525" opacity="0.35"/>'
+        '<g id="aa" data-name="BADGE">')
     flat = flatten_style_svg(raw)
     out_path = out_dir / LEVELUP_FILENAME
     out_path.write_text(flat, encoding="utf-8")
