@@ -1117,7 +1117,31 @@ Item {
           onNavigate: function (subjectId) { root.goSubject(subjectId) }
           onStepSubject: function (dir) { root.stepSubjectInLevel(dir) }
           onCloseRequested: root.leave()
-          onVisibleChanged: if (visible) Qt.callLater(function () { if (subjectPage.visible) subjectPage.focusPage() })
+          onHelpRequested: subjectHotkeys.toggle()
+          helpShown: subjectHotkeys.open
+          onVisibleChanged: {
+            if (visible) Qt.callLater(function () { if (subjectPage.visible) subjectPage.focusPage() })
+            else subjectHotkeys.close()
+          }
+        }
+
+        HotkeysOverlay {
+          id: subjectHotkeys
+          anchors.fill: parent
+          visible: root.view === "subject"
+          fg: root.fg
+          pageBg: root.bg
+          fontFamily: root.fontFamily
+          title: "Keys"
+          rows: [
+            { k: "j k", d: "Between cards" },
+            { k: "gg G", d: "First / last card" },
+            { k: "h l", d: "Between chips in a section" },
+            { k: "↵", d: "Open a chip / fold a section" },
+            { k: "[ ]", d: "Previous / next item" },
+            { k: "Esc", d: "Back" },
+            { k: "?", d: "Toggle this menu" }
+          ]
         }
 
         // loading / empty state for the subject page

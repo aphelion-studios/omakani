@@ -895,6 +895,8 @@ FocusScope {
       rows: {
         var m = [
           { k: "F", d: "Item Info" },
+          { k: "j k", d: "Between cards in Item Info" },
+          { k: "gg G", d: "First / last card in Item Info" },
           { k: "E", d: "Fold / Unfold All (in Item Info)" },
           { k: "J", d: "Audio Pronunciation" },
           { k: "/", d: "Hiragana IME Chart" }

@@ -91,6 +91,12 @@ FocusScope {
   signal stepSubject(int direction)
   // , swaps to the Last Answers panel (review overlay only), like the website
   signal lastAnswersRequested()
+  // ? toggles the host's hotkeys card (standalone browse page only -- in a
+  // review overlay ? bubbles up to the quiz's own card)
+  signal helpRequested()
+  // the host mirrors its hotkeys-card visibility here so Esc closes the card
+  // before it leaves the page
+  property bool helpShown: false
 
   // ---- section navigation (item-info overlay) --------
   //   j/k        move the section ring
@@ -176,6 +182,15 @@ FocusScope {
       flick.contentY = Math.max(0, top - pad)
     else if (bot > flick.contentY + flick.height - pad)
       flick.contentY = bot - flick.height + pad
+  }
+  // gg / G in the item-info overlay: jump the section ring to the first /
+  // last card (a plain page just scrolls -- see the key handler)
+  function focusEdge(toBottom) {
+    var v = visibleNav()
+    if (!v.length) return
+    var next = toBottom ? v.length - 1 : 0
+    if (next !== focusIndex) { chipIndex = 0; focusIndex = next }
+    Qt.callLater(scrollToFocused)
   }
   function moveFocus(delta) {
     var v = visibleNav()
@@ -460,6 +475,8 @@ FocusScope {
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
         else if (e.text === "l") { page.moveChip(1); e.accepted = true; return }
         else if (e.text === "h") { page.moveChip(-1); e.accepted = true; return }
+        else if (e.text === "g") { page.focusEdge(false); e.accepted = true; return }
+        else if (e.text === "G") { page.focusEdge(true); e.accepted = true; return }
         else if (e.text === "e" && page.overlayMode) {
           page.toggleExpandAll(); e.accepted = true; return
         }
@@ -468,6 +485,12 @@ FocusScope {
         }
         else if (e.text === "," && page.overlayMode) {
           page.lastAnswersRequested(); e.accepted = true; return
+        }
+        else if (e.text === "?" && !page.overlayMode && !page.lessonMode) {
+          page.helpRequested(); e.accepted = true; return
+        }
+        else if (e.key === Qt.Key_Escape && page.helpShown) {
+          page.helpRequested(); e.accepted = true; return   // close the card first
         }
         else if ((e.text === "f" && page.overlayMode) || e.key === Qt.Key_Escape) {
           page.closeRequested(); e.accepted = true; return
