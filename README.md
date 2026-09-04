@@ -7,13 +7,19 @@ reviews (or lessons) are waiting. Click it for a dashboard drop-down that
 mirrors the website: the Lessons / Reviews counts with Start buttons, an
 Upcoming Reviews forecast you can drill into hour by hour, Level Progress, Item
 Spread, Critical Condition, recent unlocks and burns, and the Extra Study
-counts. Fully keyboard-driven.
+counts.
+
+Click Lessons or Reviews (or hit Enter on the dashboard) and the whole flow
+runs in-shell: the learn-walk for new lessons, meaning/reading quizzing for
+both, item info with the same mnemonics/context sentences/radical
+illustrations the website shows, a kana chart for typing readings without a
+Japanese IME, pronunciation audio, and a running log of what you've answered
+this session. Browsing — a level's full item list, or any single subject — works
+the same way standalone, outside a review. Extra Study (recent lessons, recent
+mistakes, burned items) quizzes without touching SRS. Every screen is
+keyboard-first; press `?` in the app for the current hotkeys.
 
 Desktop notifications for reviews piling up, new lessons, level-ups and burns.
-
-> **Status: read-only.** The dashboard and notifications are done. Doing lessons
-> and reviews *inside* the shell is still to come. See the
-> [build plan](https://claude.ai/code/artifact/683e07bc-d1e2-4bc6-8bc9-2afac661ad7d).
 
 Not affiliated with, sponsored by, or endorsed by WaniKani or Tofugu LLC.
 
@@ -26,17 +32,20 @@ omarchy plugin add https://github.com/aphelion-studios/omakani.git
 ```
 
 Accept the prompt to enable the plugin. It needs `python3` (standard library
-only), `libnotify` (`notify-send`) for notifications, and `xdg-open` for the
-links.
+only), `libnotify` (`notify-send`) for notifications, `xdg-open` for links, and
+`mpv` for pronunciation audio.
 
 ## Connecting your account
 
 Click the mark, paste a **WaniKani API token**, press Connect.
 
-Generate one at **wanikani.com → Settings → API Tokens**. A read-only token is
-all the dashboard needs. It is stored in `~/.config/omarchy/wanikani.json` with
-`0600` permissions and is passed to the helper over stdin, never on a command
-line.
+Generate one at **wanikani.com → Settings → API Tokens**. A read-only token
+unlocks the dashboard and browsing; doing lessons and reviews needs a token
+with the **`assignments:start`** and **`reviews:create`** permissions checked
+too — otherwise you'll get a clear in-app error the first time you try to
+submit one, telling you to make a new token with those boxes checked. It is
+stored in `~/.config/omarchy/wanikani.json` with `0600` permissions and is
+passed to the helper over stdin, never on a command line.
 
 ## Remove
 
@@ -53,14 +62,15 @@ rm -f ~/.config/omarchy/wanikani.json
 ## Keyboard
 
 The dashboard is fully keyboard-driven. Mouse hover and the keyboard share one
-cursor.
+cursor — resting the mouse over it while you use only the keyboard doesn't
+fight you for control.
 
 | Key | Effect |
 | --- | --- |
 | `j` / `k` (or `↓` / `↑`) | Move the cursor down / up — through the days, the Extra Study rows, the item chips, the footer |
 | `h` / `l` (or `←` / `→`) | Move sideways on a chip row or the footer; on a day, `l` opens its hour breakdown and `h` goes back |
 | `Enter` / `Space` | Open — drill into a day, launch an Extra Study session, open an item's page, hit a footer button |
-| `g` / `G` | Jump to the first / last item |
+| `g` / `G` (double-tap `g`, vim-style) | Jump to the first / last item |
 | `r` | Refresh |
 | `Esc` | Back out of a day's breakdown or the settings sheet, or close the panel |
 | `Tab` / `Shift+Tab` | Next / previous bar panel |
@@ -73,10 +83,21 @@ straight to it, add to `~/.config/hypr/bindings.lua`:
 o.bind("SUPER + CTRL + K", "OmaKani", "omarchy-shell -q io.github.aphelion-studios.omakani toggle")
 ```
 
+The main window — lessons, reviews, browsing, item info, the kana chart — is
+its own keyboard-first surface with a larger hotkey set (vim-style `j`/`k`/`gg`/`G`
+navigation, `f` for item info, audio playback, folding, and more). Press `?`
+anywhere in it for the current list rather than relying on this README to stay
+in sync.
+
 IPC methods on `io.github.aphelion-studios.omakani`: `toggle`, `open`,
 `close`, `refresh`, `settings`.
 
 ## Settings
+
+The dashboard's gear icon and the main window's own settings sheet share one
+schema, so they never drift.
+
+### Dashboard
 
 | Setting | Default | Effect |
 | --- | --- | --- |
@@ -87,6 +108,20 @@ IPC methods on `io.github.aphelion-studios.omakani`: `toggle`, `open`,
 | Notify when new lessons unlock | on | |
 | Notify on level-up | on | |
 | Notify when items burn | on | |
+
+### Lessons, reviews, audio
+
+Opened from the main window's own gear icon.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Preferred lesson batch size | 5 | New lessons to learn before each lesson quiz. |
+| Maximum daily lessons | 15 | Cap on new lessons per day (0 = no cap). |
+| Interleave lesson item types | on | Mix radicals / kanji / vocabulary rather than grouping by type. |
+| SRS change indicator during reviews | on | Show the "you moved to Guru" chip as each item finishes. |
+| Review ordering | Shuffled | Shuffled, Apprentice first, lower SRS stages first, or lower levels first. |
+| Pronunciation voice | Random | Which voice actor's audio plays for vocabulary. |
+| Autoplay audio in lessons / reviews / extra study | off | Play a vocabulary word's audio automatically rather than only on request. |
 
 Notifications follow Do Not Disturb, stay quiet on vacation, and are silent
 until the plugin has taken its first reading (so a shell restart never dumps a
