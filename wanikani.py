@@ -1334,13 +1334,18 @@ _LEVELUP_PROP_IDS = ["f1", "f2", "f3", "f4"]
 # The four "sparkle" streaks only exist visually via a CSS stroke-dashoffset
 # animation with no static rest frame -- rendered without that animation
 # running (as QtSvg always does) the <line> itself is simply blank. Their
-# clip-path shapes are cute little splash/star silhouettes though, so those
-# get filled with the sparkle colour directly and used as the flourish
-# instead of trying to reproduce the internal wipe.
+# clip-path shapes are cute little splash/star silhouettes though, so
+# LevelUpCelebration.qml hand-carries each one's path data (level-independent,
+# like the rest of the artwork) and fills it with the sparkle colour directly
+# as a QML Shape, rather than reproducing the internal wipe or round-tripping
+# through a file. The ids are still needed here to strip the source's own
+# <line>s and their now-unreferenced <clipPath> definitions from the base
+# template -- QtSvg renders an orphaned clipPath's content directly instead
+# of treating it as definition-only, which was showing up as a solid black
+# wedge exactly where a sparkle should have been.
 _LEVELUP_SPARKLE_LINE_IDS = ["sparkle-1-fill", "sparkle-2-fill",
                              "sparkle-3-fill", "sparkle-4-fill"]
 _LEVELUP_SPARKLE_CLIP_IDS = ["sparkle-1", "sparkle-2", "sparkle-3", "sparkle-4"]
-_LEVELUP_SPARKLE_COLOR = "#e243a2"
 
 
 def _isolate_svg_piece(raw, header, style_block, defs_block, pattern):
@@ -1349,13 +1354,6 @@ def _isolate_svg_piece(raw, header, style_block, defs_block, pattern):
         return None
     doc = header + style_block + defs_block + m.group(0) + "</svg>"
     return flatten_style_svg(doc)
-
-
-def _isolate_sparkle_shape(raw, header, clip_id):
-    m = re.search(r"<clipPath id='%s'>\s*<path[^>]*\sd=\"([^\"]+)\"" % re.escape(clip_id), raw)
-    if not m:
-        return None
-    return header + '<path d="%s" fill="%s"/></svg>' % (m.group(1), _LEVELUP_SPARKLE_COLOR)
 
 
 def cmd_import_levelup_image(args):
@@ -1387,11 +1385,6 @@ def cmd_import_levelup_image(args):
         if piece is not None:
             (out_dir / ("levelup_%s.svg" % pid)).write_text(piece, encoding="utf-8")
             extracted[pid] = True
-    for cid in _LEVELUP_SPARKLE_CLIP_IDS:
-        piece = _isolate_sparkle_shape(raw, header, cid)
-        if piece is not None:
-            (out_dir / ("levelup_%s.svg" % cid)).write_text(piece, encoding="utf-8")
-            extracted[cid] = True
 
     # strip everything just isolated, plus the baked-in level glyph, the
     # "congratulations" caption, and the decorative stars/dots, before
@@ -1404,10 +1397,24 @@ def cmd_import_levelup_image(args):
         raw = re.sub(r'<g id="%s">.*?</g>' % re.escape(pid), "", raw, flags=re.S)
     for sid in _LEVELUP_SPARKLE_LINE_IDS:
         raw = re.sub(r"<line[^>]*\bid='%s'[^>]*/>" % re.escape(sid), "", raw)
+    # the clipPath *definitions* those lines pointed at are now orphaned
+    # (nothing left in the template references them) -- QtSvg appears to
+    # render an orphaned clipPath's content directly instead of treating it
+    # as definition-only, which is exactly the shape (and only the shape)
+    # that kept turning up as a solid black wedge near the badge
+    for cid in _LEVELUP_SPARKLE_CLIP_IDS:
+        raw = re.sub(r"<clipPath id='%s'>.*?</clipPath>" % re.escape(cid), "", raw, flags=re.S)
     raw = re.sub(r"<text class=\"as\"[^>]*>.*?</text>", "", raw, flags=re.S)
     raw = re.sub(r"<text class=\"lu-title\"[^>]*>.*?</text>", "", raw, flags=re.S)
     raw = re.sub(r'<use[^>]*xlink:href="#a"\s*/>', "", raw)
     raw = re.sub(r'<circle class="aq"[^>]*/>', "", raw)
+    # the badge's small stroke-only "motion" accent (a bare curved <path> and
+    # a short <line>, both class="af", fill="none") -- QtSvg renders it as a
+    # solid black wedge instead of the thin outline it actually is, so it
+    # drops out with the rest of the pieces this session found didn't
+    # survive QtSvg's more limited SVG support
+    raw = re.sub(r'<path class="af" d="m950\.43,261\.25[^"]*"/>', "", raw)
+    raw = re.sub(r'<line class="af" x1="941\.88" y1="272\.52"[^/]*/>', "", raw)
     flat = flatten_style_svg(raw)
     out_path = out_dir / LEVELUP_FILENAME
     out_path.write_text(flat, encoding="utf-8")

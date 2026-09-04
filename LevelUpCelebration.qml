@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import qs.Commons
 import "Model.js" as Model
 
@@ -43,9 +44,11 @@ Item {
     return root.cacheDir !== "" ? "file://" + root.cacheDir + "/levelup_" + name + ".svg" : ""
   }
   // how far the mascots' flag/horn props bounce -- the source moves them
-  // +/-3 of its own 600-tall viewBox, which is only a fraction of a pixel
-  // at this size; nudged up a bit so the wobble actually reads
-  readonly property real propBounce: Math.max(1.5, root.height * 0.02)
+  // +/-3 of its own 600-tall viewBox, close to a full pixel at this size;
+  // 0.02 read as way too energetic, closer to the source's own proportion
+  readonly property real propBounce: Math.max(0.6, root.height * 0.006)
+  // viewBox units -> actual pixels, for the sparkles' hand-carried path data
+  readonly property real vbScale: root.width / 1610.09
 
   Image {
     id: art
@@ -60,24 +63,33 @@ Item {
   // four "sparkle" flourishes -- the source only animates these through a
   // CSS stroke-dashoffset wipe with no static rest frame (blank without
   // that animation running), so their clip-path shapes -- filled solid
-  // instead of used as a mask -- stand in as a twinkling accent shape
+  // instead of used as a mask -- stand in as a twinkling accent shape.
+  // Drawn as native QML Shapes (the path data straight from the source
+  // SVG's own clip-path <path d="...">, level-independent like the rest of
+  // the artwork) rather than loaded as separate tiny SVG files -- an
+  // overlaid same-viewBox Image per sparkle intermittently rendered solid
+  // black instead of its own fill while fading, which a Shape sidesteps
+  // entirely since there's no image decode/cache involved at all.
   Repeater {
     model: [
-      { cid: "sparkle-1", delay: 0 },
-      { cid: "sparkle-2", delay: 500 },
-      { cid: "sparkle-3", delay: 1000 },
-      { cid: "sparkle-4", delay: 1500 }
+      { d: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", delay: 0 },
+      { d: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", delay: 500 },
+      { d: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", delay: 1000 },
+      { d: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", delay: 1500 }
     ]
-    delegate: Image {
+    delegate: Shape {
       id: spark
       width: root.width
       height: root.height
-      source: root.pieceSource(modelData.cid)
-      fillMode: Image.PreserveAspectFit
-      sourceSize.width: 1200
-      smooth: true
-      asynchronous: true
       opacity: 0
+      preferredRendererType: Shape.CurveRenderer
+      transform: Scale { xScale: root.vbScale; yScale: root.vbScale }
+
+      ShapePath {
+        fillColor: "#e243a2"
+        strokeWidth: -1
+        PathSvg { path: modelData.d }
+      }
 
       SequentialAnimation {
         running: root.visible
@@ -110,7 +122,7 @@ Item {
       fillMode: Image.PreserveAspectFit
       sourceSize.width: 1200
       smooth: true
-      asynchronous: true
+      asynchronous: false
 
       SequentialAnimation {
         running: root.visible
@@ -129,7 +141,7 @@ Item {
   // that a flat centred line reads the same at this size)
   Text {
     anchors.horizontalCenter: parent.horizontalCenter
-    y: root.height * 0.685
+    y: root.height * 0.545
     text: Model.kanjiNumeral(root.level)
     color: "#fcfdfd"
     font.family: root.jpFamily
@@ -144,7 +156,7 @@ Item {
   // of the source artwork's own viewBox
   Text {
     anchors.horizontalCenter: parent.horizontalCenter
-    y: root.height * 0.85
+    y: root.height * 0.9
     text: "レベルアップおめでとう！"
     color: root.textColor
     font.family: root.jpFamily
