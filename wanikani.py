@@ -1408,13 +1408,11 @@ def cmd_import_levelup_image(args):
     raw = re.sub(r"<text class=\"lu-title\"[^>]*>.*?</text>", "", raw, flags=re.S)
     raw = re.sub(r'<use[^>]*xlink:href="#a"\s*/>', "", raw)
     raw = re.sub(r'<circle class="aq"[^>]*/>', "", raw)
-    # the badge's small stroke-only "motion" accent (a bare curved <path> and
-    # a short <line>, both class="af", fill="none") -- QtSvg renders it as a
-    # solid black wedge instead of the thin outline it actually is, so it
-    # drops out with the rest of the pieces this session found didn't
-    # survive QtSvg's more limited SVG support
-    raw = re.sub(r'<path class="af" d="m950\.43,261\.25[^"]*"/>', "", raw)
-    raw = re.sub(r'<line class="af" x1="941\.88" y1="272\.52"[^/]*/>', "", raw)
+    # the ribbon knot's own fold-shading detail (two semi-transparent dark
+    # paths, clipped to the ribbon's silhouette so only a sliver shows below
+    # the badge) -- QtSvg doesn't clip it tightly enough, so it bleeds out
+    # as a soft dark smudge past the badge's edge into the blue step
+    raw = re.sub(r'<g class="ax">.*?</g>', "", raw, flags=re.S)
     flat = flatten_style_svg(raw)
     out_path = out_dir / LEVELUP_FILENAME
     out_path.write_text(flat, encoding="utf-8")
