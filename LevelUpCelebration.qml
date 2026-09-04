@@ -70,33 +70,33 @@ Item {
   // overlaid same-viewBox Image per sparkle intermittently rendered solid
   // black instead of its own fill while fading, which a Shape sidesteps
   // entirely since there's no image decode/cache involved at all.
-  // the website's own version fills in from its inner (medal-facing) point
-  // outward to full size, THEN empties back starting from that same inner
-  // side too -- so the shrink has to anchor on the *outer* point (ox2/oy2,
-  // the inner point reflected through the shape's own middle), not the
-  // inner one, or the near-medal side would be the last bit left instead
-  // of the first to go.
+  // constant size, moving -- not a grow/shrink. Appears near the medal,
+  // travels out past its resting spot, and keeps drifting the same
+  // direction while it fades, rather than reversing back the way it came.
+  // start/end are offsets from the shape's own (resting) position, in
+  // viewBox units, along the medal-to-shape direction.
   Repeater {
     model: [
-      { d: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", ox: 940, oy: 116, ox2: 1210, oy2: 4, delay: 0 },
-      { d: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", ox: 663, oy: 111, ox2: 377, oy2: -11, delay: 500 },
-      { d: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", ox: 673, oy: 173, ox2: 407, oy2: 177, delay: 1000 },
-      { d: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", ox: 940, oy: 173, ox2: 1210, oy2: 177, delay: 1500 }
+      { d: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", sx: -162, sy: 67, ex: 95, ey: -39, delay: 0 },
+      { d: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", sx: 171, sy: 73, ex: -100, ey: -42, delay: 500 },
+      { d: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", sx: 159, sy: -2, ex: -93, ey: 1, delay: 1000 },
+      { d: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", sx: -162, sy: -2, ex: 95, ey: 1, delay: 1500 }
     ]
     delegate: Shape {
       id: spark
       width: root.width
       height: root.height
       opacity: 0
-      // 0 = collapsed to the active anchor (empty), 1 = full size -- the
-      // anchor itself switches between the inner and outer point below
-      property real revealT: 0
-      property real anchorX: modelData.ox
-      property real anchorY: modelData.oy
+      // 0 = at its natural resting position (the path's own coordinates);
+      // negative = pulled back toward the medal, positive = drifted past
+      // resting, further out -- always the same medal<->shape axis
+      property real driftT: -1
       preferredRendererType: Shape.CurveRenderer
       transform: [
-        Scale { origin.x: spark.anchorX; origin.y: spark.anchorY
-          xScale: spark.revealT; yScale: spark.revealT },
+        Translate {
+          x: spark.driftT < 0 ? modelData.sx * -spark.driftT : modelData.ex * spark.driftT
+          y: spark.driftT < 0 ? modelData.sy * -spark.driftT : modelData.ey * spark.driftT
+        },
         Scale { xScale: root.vbScale; yScale: root.vbScale }
       ]
 
@@ -110,21 +110,18 @@ Item {
         running: root.visible
         loops: Animation.Infinite
         PauseAnimation { duration: modelData.delay }
-        PropertyAction { target: spark; property: "anchorX"; value: modelData.ox }
-        PropertyAction { target: spark; property: "anchorY"; value: modelData.oy }
+        PropertyAction { target: spark; property: "driftT"; value: -1 }
         ParallelAnimation {
           NumberAnimation { target: spark; property: "opacity"; from: 0; to: 1
             duration: 350; easing.type: Easing.OutCubic }
-          NumberAnimation { target: spark; property: "revealT"; from: 0; to: 1
+          NumberAnimation { target: spark; property: "driftT"; from: -1; to: 0
             duration: 350; easing.type: Easing.OutCubic }
         }
         PauseAnimation { duration: 550 }
-        PropertyAction { target: spark; property: "anchorX"; value: modelData.ox2 }
-        PropertyAction { target: spark; property: "anchorY"; value: modelData.oy2 }
         ParallelAnimation {
           NumberAnimation { target: spark; property: "opacity"; from: 1; to: 0
             duration: 350; easing.type: Easing.InCubic }
-          NumberAnimation { target: spark; property: "revealT"; from: 1; to: 0
+          NumberAnimation { target: spark; property: "driftT"; from: 0; to: 1
             duration: 350; easing.type: Easing.InCubic }
         }
         PauseAnimation { duration: 900 }
