@@ -1184,14 +1184,21 @@ def flatten_style_svg(text):
     illustration renders flat black."""
     rules = {}
     for block in re.findall(r"<style[^>]*>(.*?)</style>", text, flags=re.S):
-        for sel, body in re.findall(r"\.([A-Za-z0-9_-]+)\s*\{([^}]*)\}", block):
+        # a selector list ("`.ad, .ae, .af { fill: none; }`") applies the same
+        # declaration block to every class in it -- match the whole
+        # dot-led, comma-separated run so none of them get silently dropped
+        for sel_list, body in re.findall(
+                r"((?:\.[A-Za-z0-9_-]+\s*,\s*)*\.[A-Za-z0-9_-]+)\s*\{([^}]*)\}", block):
             props = {}
             for name, value in re.findall(r"([a-z-]+)\s*:\s*([^;]+)", body):
                 value = value.strip().rstrip(";").strip()
                 if value.startswith("."):
                     value = "0" + value            # ".5" -> "0.5" for QtSvg
                 props[name.strip()] = value
-            rules[sel] = props
+            for sel in sel_list.split(","):
+                sel = sel.strip().lstrip(".")
+                if sel:
+                    rules.setdefault(sel, {}).update(props)
 
     def attrs_for(classlist):
         merged = {}
