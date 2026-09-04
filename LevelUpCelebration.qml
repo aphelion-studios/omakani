@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Shapes
+import QtQuick.Effects
 import qs.Commons
 import "Model.js" as Model
 
@@ -70,61 +71,80 @@ Item {
   // overlaid same-viewBox Image per sparkle intermittently rendered solid
   // black instead of its own fill while fading, which a Shape sidesteps
   // entirely since there's no image decode/cache involved at all.
-  // constant size, moving -- not a grow/shrink. Appears near the medal,
-  // travels out past its resting spot, and keeps drifting the same
-  // direction while it fades, rather than reversing back the way it came.
-  // start/end are offsets from the shape's own (resting) position, in
-  // viewBox units, along the medal-to-shape direction.
+  // the real mechanism: the clip-path shape is a *fixed* mask -- pink stays
+  // visible everywhere it overlaps that silhouette, hidden everywhere it
+  // doesn't. What actually moves is a constant-size bar sliding along the
+  // source <line>'s own two endpoints, underneath that fixed mask -- each
+  // sparkle's mask and line have their own position/angle, so each has its
+  // own trajectory. The mask is loaded as a plain Image (a small inline
+  // SVG data URI) rather than a live Shape -- a Shape as MultiEffect's
+  // maskSource rendered nothing at all; Image is the well-trodden path for
+  // this and works.
+  function maskDataUri(d) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1610.09 600">'
+      + '<path fill="#ffffff" d="' + d + '"/></svg>'
+    return "data:image/svg+xml;base64," + Qt.btoa(svg)
+  }
+
   Repeater {
     model: [
-      { d: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", sx: -162, sy: 67, ex: 95, ey: -39, delay: 0 },
-      { d: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", sx: 171, sy: 73, ex: -100, ey: -42, delay: 500 },
-      { d: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", sx: 159, sy: -2, ex: -93, ey: 1, delay: 1000 },
-      { d: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", sx: -162, sy: -2, ex: 95, ey: 1, delay: 1500 }
+      { mask: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", x1: 941.88, y1: 118.52, x2: 1227.7, y2: 6.69, delay: 0 },
+      { mask: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", x1: 417.4, y1: 5.8, x2: 666.7, y2: 112.5, delay: 500 },
+      { mask: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", x1: 416.5, y1: 207.2, x2: 665, y2: 143.2, delay: 1000 },
+      { mask: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", x1: 948.6, y1: 154.1, x2: 1202.1, y2: 189.8, delay: 1500 }
     ]
-    delegate: Shape {
-      id: spark
+    delegate: Item {
+      id: sparkWrap
       width: root.width
       height: root.height
-      opacity: 0
-      // 0 = at its natural resting position (the path's own coordinates);
-      // negative = pulled back toward the medal, positive = drifted past
-      // resting, further out -- always the same medal<->shape axis
-      property real driftT: -1
-      preferredRendererType: Shape.CurveRenderer
-      transform: [
-        Translate {
-          x: spark.driftT < 0 ? modelData.sx * -spark.driftT : modelData.ex * spark.driftT
-          y: spark.driftT < 0 ? modelData.sy * -spark.driftT : modelData.ey * spark.driftT
-        },
-        Scale { xScale: root.vbScale; yScale: root.vbScale }
-      ]
 
-      ShapePath {
-        fillColor: "#e243a2"
-        strokeWidth: -1
-        PathSvg { path: modelData.d }
+      readonly property real lineAngle: Math.atan2(modelData.y2 - modelData.y1,
+        modelData.x2 - modelData.x1) * 180 / Math.PI
+      // travels from well short of x1/y1 to well past x2/y2, so it's fully
+      // clear of the mask (invisible) at both ends of the loop
+      property real travelT: -0.4
+
+      Image {
+        id: maskShape
+        anchors.fill: parent
+        visible: false
+        source: root.maskDataUri(modelData.mask)
+        sourceSize.width: 1200
+        fillMode: Image.PreserveAspectFit
+        smooth: true
+      }
+
+      Item {
+        id: pinkLayer
+        anchors.fill: parent
+        visible: false
+        Rectangle {
+          id: pinkBar
+          width: 150 * root.vbScale
+          height: 60 * root.vbScale
+          radius: height / 2
+          color: "#e243a2"
+          rotation: sparkWrap.lineAngle
+          x: (modelData.x1 + (modelData.x2 - modelData.x1) * sparkWrap.travelT) * root.vbScale - width / 2
+          y: (modelData.y1 + (modelData.y2 - modelData.y1) * sparkWrap.travelT) * root.vbScale - height / 2
+        }
+      }
+
+      MultiEffect {
+        anchors.fill: parent
+        source: pinkLayer
+        maskEnabled: true
+        maskSource: maskShape
       }
 
       SequentialAnimation {
         running: root.visible
         loops: Animation.Infinite
         PauseAnimation { duration: modelData.delay }
-        PropertyAction { target: spark; property: "driftT"; value: -1 }
-        ParallelAnimation {
-          NumberAnimation { target: spark; property: "opacity"; from: 0; to: 1
-            duration: 350; easing.type: Easing.OutCubic }
-          NumberAnimation { target: spark; property: "driftT"; from: -1; to: 0
-            duration: 350; easing.type: Easing.OutCubic }
-        }
-        PauseAnimation { duration: 550 }
-        ParallelAnimation {
-          NumberAnimation { target: spark; property: "opacity"; from: 1; to: 0
-            duration: 350; easing.type: Easing.InCubic }
-          NumberAnimation { target: spark; property: "driftT"; from: 0; to: 1
-            duration: 350; easing.type: Easing.InCubic }
-        }
-        PauseAnimation { duration: 900 }
+        PropertyAction { target: sparkWrap; property: "travelT"; value: -0.4 }
+        NumberAnimation { target: sparkWrap; property: "travelT"; from: -0.4; to: 1.4
+          duration: 900; easing.type: Easing.InOutQuad }
+        PauseAnimation { duration: 1250 }
       }
     }
   }
