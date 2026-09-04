@@ -914,7 +914,7 @@ Panel {
               anchors.horizontalCenter: parent.horizontalCenter
               visible: text !== ""
               text: {
-                if (!wk.configured) return "paste a WaniKani API token below"
+                if (!wk.configured) return ""
                 if (wk.vacation) return "vacation mode"
                 if (root.anythingDue) return ""
                 var rel = Model.relativeTime(wk.nextReviewsAt, clock.date)
@@ -984,10 +984,9 @@ Panel {
 
             Text {
               width: parent.width
-              text: "wanikani.com → Settings → API Tokens → Generate a new token. "
-                + "Check all_data:read for the dashboard, plus assignments:start "
-                + "and reviews:create to do lessons and reviews here too. Stored in "
-                + "~/.config/omarchy/wanikani.json with 0600 permissions."
+              text: "Go to WaniKani.com → Settings → API Tokens → Generate a new token\n\n"
+                + "Check assignments:start and reviews:create\n\n"
+                + "Click \"Generate token\" and paste token above"
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
