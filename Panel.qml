@@ -957,7 +957,9 @@ Panel {
                 id: tokenField
                 Layout.fillWidth: true
                 password: true
-                placeholderText: "Paste a WaniKani API token"
+                placeholderText: "Paste token here"
+                placeholderTextColor: Qt.rgba(root.foreground.r, root.foreground.g,
+                                              root.foreground.b, 0.38)
                 foreground: root.foreground
                 font.family: root.fontFamily
                 enabled: !wk.actionBusy
