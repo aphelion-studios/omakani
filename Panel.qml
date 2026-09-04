@@ -159,6 +159,7 @@ Panel {
     return navActive && navSection === section && navIndex === index
   }
   function setCursor(section, index) {
+    if (root.suppressMouseNav) return
     if (!navEnabled(section, index)) return
     _navPinned = true
     navActive = true
@@ -203,6 +204,17 @@ Panel {
   // data (a first sync finishing after the panel opens) from yanking the
   // cursor back to the default.
   property bool _navPinned: false
+
+  // true while a keyboard nav step (or its scroll) is driving the cursor --
+  // scrolling slides rows under a mouse that never actually moved, which
+  // otherwise re-fires their hover and yanks the cursor to whatever now sits
+  // under the pointer, fighting the keypress. Cleared by genuine mouse
+  // movement (the HoverHandler below), not a timer, so resting the mouse
+  // over the panel and using only the keyboard just works.
+  property bool suppressMouseNav: false
+  HoverHandler {
+    onPointChanged: root.suppressMouseNav = false
+  }
 
   // section name -> the index the cursor last held there, so stepping out of a
   // chip row and back (j to Critical, k back to Recently Unlocked) returns to
@@ -261,6 +273,7 @@ Panel {
     var secs = navSections
     if (secs.length === 0) return
     _navPinned = true
+    suppressMouseNav = true
     if (!navActive) {
       navActive = true
       if (navSecAt(navSection) < 0) { navSection = secs[0].n; navIndex = 0 }
@@ -335,6 +348,7 @@ Panel {
     var secs = navSections
     if (secs.length === 0) return
     _navPinned = true
+    suppressMouseNav = true
     navActive = true
     var order = toBottom ? secs.slice().reverse() : secs
     for (var i = 0; i < order.length; i++) {
