@@ -821,9 +821,13 @@ Panel {
       // from the idle grey -- fall back to the WaniKani radical blue there.
       tint: root.markActive
         ? (Model.chroma(root.accent) < 0.12 ? "#0098e6" : root.accent)
-        : (!wk.configured
-           ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.7)
-           : root.foreground)
+        : root.foreground
+      // dim for "no token yet" via the item's own opacity, not a
+      // partial-alpha tint -- MultiEffect's colorization blends a
+      // translucent colorizationColor against the *source image's own*
+      // colors, not the bar behind it, so it drifted off the theme's
+      // actual foreground instead of just looking faded.
+      opacity: (!root.markActive && !wk.configured) ? 0.7 : 1.0
     }
   }
 
