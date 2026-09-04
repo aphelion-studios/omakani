@@ -323,8 +323,7 @@ Panel {
       // everything fits (the settings sheet at its normal size) a stray
       // 1-2px scroll on a wall keystroke is just noise
       if (edgeFlick && edgeFlick.contentHeight > edgeFlick.height + 2) {
-        edgeFlick.contentY = dy < 0 ? 0
-          : Math.max(0, edgeFlick.contentHeight - edgeFlick.height)
+        animateScroll(edgeFlick, dy < 0 ? 0 : edgeFlick.contentHeight - edgeFlick.height)
       }
       return
     }
@@ -420,6 +419,23 @@ Panel {
     interval: 1
     onTriggered: root.scrollToCursor()
   }
+  // Keyboard-driven scroll target changes animate (this is what a j/k step
+  // or the top/bottom snap below looks like); drag/wheel interaction is
+  // untouched since it never goes through this function.
+  NumberAnimation {
+    id: scrollAnim
+    property: "contentY"
+    duration: 180
+    easing.type: Easing.OutCubic
+  }
+  function animateScroll(flick, y) {
+    if (!flick) return
+    var target = Math.max(0, Math.min(y, Math.max(0, flick.contentHeight - flick.height)))
+    scrollAnim.stop()
+    scrollAnim.target = flick
+    scrollAnim.to = target
+    scrollAnim.start()
+  }
   function scrollToCursor() {
     var it = cursorItem
     if (!it || !it.visible) return
@@ -433,11 +449,10 @@ Panel {
     var topM = navIndex === 0 ? Style.space(38) : Style.space(16)
     var botM = Style.space(16)
     var viewH = flick.height
-    var maxY = Math.max(0, flick.contentHeight - viewH)
     if (y - topM < flick.contentY)
-      flick.contentY = Math.max(0, y - topM)
+      animateScroll(flick, y - topM)
     else if (y + it.height + botM > flick.contentY + viewH)
-      flick.contentY = Math.min(maxY, y + it.height + botM - viewH)
+      animateScroll(flick, y + it.height + botM - viewH)
   }
 
   function commitToken() {
