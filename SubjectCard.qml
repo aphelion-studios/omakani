@@ -41,9 +41,9 @@ Rectangle {
   color: bg
   radius: Style.space(6)
   // light themes: a hairline so the card reads against the page (which may be
-  // the same colour)
+  // the same colour) -- a shade of the card itself, not a flat black line
   border.width: lightUi ? 1 : 0
-  border.color: Qt.rgba(0, 0, 0, 0.1)
+  border.color: Qt.darker(bg, 1.11)
   implicitHeight: folded
     ? headRow.implicitHeight + Style.space(28)
     : headRow.implicitHeight + Style.space(10) + inner.implicitHeight + Style.space(32)

@@ -1631,12 +1631,16 @@ Panel {
     readonly property bool lit: cursored || startHover.containsMouse
     readonly property color fill: cc.kind === "lessons" ? "#fc02a9" : "#0098e6"
     readonly property color ink: "#fcfdfd"
+    // caught up -- a theme-neutral wash instead of a flat 0.45 opacity that
+    // greyed the "0" into the background on every theme
+    readonly property color mutedInk: Qt.rgba(root.foreground.r, root.foreground.g,
+                                              root.foreground.b, 0.5)
 
     implicitHeight: Style.space(40)
     radius: Style.space(6)
     clip: true
-    opacity: cc.active ? 1 : 0.45
-    color: cc.lit ? Qt.lighter(cc.fill, 1.3) : cc.fill
+    color: cc.active ? (cc.lit ? Qt.lighter(cc.fill, 1.3) : cc.fill)
+      : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.1)
     Behavior on color { ColorAnimation { duration: 110 } }
     onCursoredChanged: if (cursored) root.setCursorItem(cc)
 
@@ -1668,7 +1672,7 @@ Panel {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         text: cc.label
-        color: cc.ink
+        color: cc.active ? cc.ink : cc.mutedInk
         font.family: root.fontFamily
         font.pixelSize: Style.font.bodySmall
         font.bold: true
@@ -1678,15 +1682,17 @@ Panel {
         width: Math.max(height, ccPill.implicitWidth + Style.space(10))
         height: Style.space(18)
         radius: height / 2
-        color: "#fcfdfd"
+        color: cc.active ? "#fcfdfd"
+          : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
         // hairline so the white pill keeps an edge on a light-coloured card
-        border.width: 1
+        border.width: cc.active ? 1 : 0
         border.color: Qt.rgba(0, 0, 0, 0.12)
         Text {
           id: ccPill
           anchors.centerIn: parent
           text: String(cc.count)
-          color: cc.fill   // the button's own colour, like WK
+          color: cc.active ? cc.fill   // the button's own colour, like WK
+            : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.7)
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           font.bold: true

@@ -184,7 +184,10 @@ FocusScope {
       flick.contentY = bot - flick.height + pad
   }
   // gg / G in the item-info overlay: jump the section ring to the first /
-  // last card (a plain page just scrolls -- see the key handler)
+  // last card (a plain page just scrolls -- see the key handler). gg is a
+  // two-press sequence like vim; a lone g does nothing.
+  property bool _gArmed: false
+  Timer { id: gSeqTimer; interval: 600; onTriggered: page._gArmed = false }
   function focusEdge(toBottom) {
     var v = visibleNav()
     if (!v.length) return
@@ -431,6 +434,7 @@ FocusScope {
 
     Keys.onPressed: function (e) {
       var step = Style.space(64)
+      if (e.text !== "g") page._gArmed = false   // gg must be consecutive
       // [ / ] walk the level in order (standalone browse page only)
       if (!page.overlayMode
           && (e.text === "[" || e.text === "]"
@@ -475,7 +479,11 @@ FocusScope {
         else if (e.text === "k") { page.moveFocus(-1); e.accepted = true; return }
         else if (e.text === "l") { page.moveChip(1); e.accepted = true; return }
         else if (e.text === "h") { page.moveChip(-1); e.accepted = true; return }
-        else if (e.text === "g") { page.focusEdge(false); e.accepted = true; return }
+        else if (e.text === "g") {
+          if (page._gArmed) { page._gArmed = false; gSeqTimer.stop(); page.focusEdge(false) }
+          else { page._gArmed = true; gSeqTimer.restart() }
+          e.accepted = true; return
+        }
         else if (e.text === "G") { page.focusEdge(true); e.accepted = true; return }
         else if (e.text === "e" && page.overlayMode) {
           page.toggleExpandAll(); e.accepted = true; return

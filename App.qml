@@ -157,7 +157,13 @@ Item {
   readonly property string view: String(currentPage.view || "home")
 
   // Route keyboard focus to whichever view is showing (each owns its keys).
-  onViewChanged: Qt.callLater(applyFocus)
+  onViewChanged: {
+    Qt.callLater(applyFocus)
+    // landing back on the menu after a session -- pull fresh counts so the
+    // Lessons / Reviews buttons (and which one is pre-selected) reflect what
+    // was just answered, not the figures from when the window opened
+    if (view === "home" && service) service.refresh()
+  }
   function applyFocus() {
     if (!opened) return
     if (view === "home") homeDefault()
@@ -838,12 +844,16 @@ Item {
                 readonly property color fillColor: modelData.act === "lesson"
                   ? "#fc02a9" : "#0098e6"
                 readonly property color btnInk: "#fcfdfd"
+                // nothing queued -- drop the vivid fill for a theme-neutral
+                // wash so it reads as "done", but keep the label and the "0"
+                // legible (a flat 0.4 opacity buried the count on every theme)
+                readonly property color mutedInk: Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.5)
                 width: (homeCol.colW - homeCol.gap) / 2
                 height: Style.space(44)
                 radius: Style.space(6)
                 clip: true
-                opacity: on ? 1.0 : 0.4
-                color: lit ? Qt.lighter(fillColor, 1.3) : fillColor
+                color: on ? (lit ? Qt.lighter(fillColor, 1.3) : fillColor)
+                          : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.1)
                 Behavior on color { ColorAnimation { duration: 110 } }
 
                 CursorRing {
@@ -873,7 +883,7 @@ Item {
                   Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.text
-                    color: homeBtn.btnInk
+                    color: homeBtn.on ? homeBtn.btnInk : homeBtn.mutedInk
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
@@ -884,15 +894,17 @@ Item {
                     width: Math.max(height, cnt.implicitWidth + Style.space(12))
                     height: Style.space(20)
                     radius: height / 2
-                    color: "#fcfdfd"
+                    color: homeBtn.on ? "#fcfdfd"
+                      : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.16)
                     // hairline so the white pill keeps an edge on a light card
-                    border.width: 1
+                    border.width: homeBtn.on ? 1 : 0
                     border.color: Qt.rgba(0, 0, 0, 0.12)
                     Text {
                       id: cnt
                       anchors.centerIn: parent
                       text: modelData.count
-                      color: homeBtn.fillColor   // the button's own colour, like WK
+                      color: homeBtn.on ? homeBtn.fillColor   // the button's own colour, like WK
+                        : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.7)
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
                       font.bold: true

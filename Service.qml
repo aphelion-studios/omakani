@@ -446,7 +446,17 @@ Item {
     }
     reviewSubmitQueue = reviewSubmitQueue.slice(1)
     reviewSubmitted(payload)
-    drainReviewSubmits()
+    if (reviewSubmitQueue.length > 0) drainReviewSubmits()
+    // queue emptied -- the server figures have moved; refresh the counts a
+    // beat later (the last POST needs a moment to settle server-side)
+    else if (!(payload.dryRun === true)) postSubmitRefresh.restart()
+  }
+
+  Timer {
+    id: postSubmitRefresh
+    interval: 1500
+    repeat: false
+    onTriggered: root.refresh()
   }
 
   // ---- lesson flow (same shape as the review engine) ----
@@ -500,7 +510,8 @@ Item {
     lessonStartError = ""
     lessonStartQueue = lessonStartQueue.slice(1)
     lessonStarted(payload)
-    drainLessonStarts()
+    if (lessonStartQueue.length > 0) drainLessonStarts()
+    else if (!(payload.dryRun === true)) postSubmitRefresh.restart()
   }
 
   function applyDetail(raw, requestedIds) {
@@ -526,11 +537,20 @@ Item {
   function fireNotifications(list) {
     if (!Array.isArray(list)) return
     for (var i = 0; i < list.length; i++) {
-      var text = String(list[i] && list[i].text || "").trim()
+      var ev = list[i]
+      var text = String(ev && ev.text || "").trim()
       if (text === "") continue
-      Quickshell.execDetached(["notify-send", "-a", "OmaKani",
-                               "-h", "string:x-canonical-private-synchronous:omakani-" + String(list[i].id || i),
-                               text])
+      var id = String(ev && ev.id || i)
+      var args = ["notify-send", "-a", "OmaKani",
+                  "-h", "string:x-canonical-private-synchronous:omakani-" + id]
+      if (id === "levelup") {
+        // a level-up is the milestone of the whole app -- give it a title and
+        // let it linger
+        args.push("-u", "critical", "🎉  Level up!", text)
+      } else {
+        args.push(text)
+      }
+      Quickshell.execDetached(args)
     }
   }
 

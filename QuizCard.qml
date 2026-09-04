@@ -879,8 +879,11 @@ FocusScope {
         radicalColor: quiz.radicalColor
         kanjiColor: quiz.kanjiColor
         vocabColor: quiz.vocabColor
+        // j still plays the word's audio here, same anti-peek rule as the quiz
+        audioAvailable: quiz.canAudio && quiz.phase !== "input"
         onCloseRequested: quiz.closeOverlays()
         onInfoRequested: quiz.openInfo(false)
+        onAudioRequested: quiz.playAudio()
       }
     }
 

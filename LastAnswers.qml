@@ -44,6 +44,9 @@ FocusScope {
   signal closeRequested()
   // f jumps straight to item info (the panels swap, like the website)
   signal infoRequested()
+  // j plays the current review word's audio, same as from the quiz itself
+  signal audioRequested()
+  property bool audioAvailable: false
 
   // one ✓/✗ line inside a card (meaning, then reading). Sizes to its content
   // so the card can measure its widest row.
@@ -98,6 +101,8 @@ FocusScope {
       panel.closeRequested(); e.accepted = true
     } else if (e.text === "f") {
       panel.infoRequested(); e.accepted = true
+    } else if (e.text === "j" && panel.audioAvailable) {
+      panel.audioRequested(); e.accepted = true
     } else if (e.key === Qt.Key_Down || e.text === "j") {
       flick.contentY = Math.min(Math.max(0, flick.contentHeight - flick.height), flick.contentY + step)
       e.accepted = true
