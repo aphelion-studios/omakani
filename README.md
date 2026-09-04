@@ -145,6 +145,26 @@ level up. Radicals WaniKani hasn't illustrated just show their character, as
 before. The plugin reads this cache and shows nothing until you've run the
 command; the images stay local and are never redistributed.
 
+## Level-up celebration (optional)
+
+A fresh level-up takes over the main window's header — WaniKani's own badge
+and mascot artwork, the level in kanji, and a bit of sparkle — until you
+dismiss it with `x` or the ✕ in its corner. Unlike the radical illustrations,
+`level_up_image.svg` isn't on a public page — it needs your logged-in
+wanikani.com session, not the API token, so it can't be scraped
+automatically. One-time manual step instead:
+
+1. With wanikani.com open and logged in, visit
+   `https://www.wanikani.com/level_up_image.svg?level=1` (any level number
+   works) and save the page.
+2. `./wanikani.py import-levelup-image /path/to/level_up_image.svg`
+
+The level number turns out to be layered on separately from the artwork
+itself, so this needs doing exactly once, ever — not after every level-up.
+Everything lands in `~/.cache/omakani/`, stays local, and is never
+redistributed. Without it, a level-up is just silent — no broken image, no
+fallback banner, nothing shown.
+
 ## What it does on your system
 
 - **Runs `wanikani.py`** (Python standard library, no dependencies) in the

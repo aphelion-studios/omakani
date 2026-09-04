@@ -32,6 +32,10 @@ Item {
   readonly property color fg: Color.foreground
   readonly property color accent: Color.accent
   readonly property bool lightUi: Model.lightBg(Color.background)
+  // the Lessons/Reviews buttons' own ink -- shared so anything else sitting
+  // on a vivid WK-brand-coloured surface (the level-up celebration's
+  // caption, currently) always matches them exactly
+  readonly property color buttonInk: "#fcfdfd"
   readonly property string fontFamily: Style.font.family
   // WaniKani's web app sets subject characters in "Noto Sans JP" (the Google
   // webfont). Use it when the user has installed it; otherwise fall back to
@@ -338,9 +342,25 @@ Item {
     return v === undefined || v === null ? fallback : v
   }
 
+  // the level a celebration is pending for (0 = none), persisted so it
+  // survives closing/reopening the window -- cleared only by dismissing it
+  readonly property int pendingLevelUp: Number(setting("_pendingLevelUp", 0)) || 0
+  // still gated on the template even existing -- `import-levelup-image` is
+  // a one-time manual step (see its docstring in wanikani.py), so a level-up
+  // before that's ever been run should just be silent, not a half-rendered
+  // celebration missing its own artwork
+  readonly property bool showLevelUp: pendingLevelUp > 0
+    && !!service && service.levelupImagePath !== ""
+  function dismissLevelUp() {
+    if (root.service) root.service.setSetting("_pendingLevelUp", 0)
+  }
+
   Connections {
     target: root.service
     enabled: root.service !== null
+    function onLevelUp(level) {
+      if (level > 0) root.service.setSetting("_pendingLevelUp", level)
+    }
     function onReviewsReady(ids) {
       if (root.view !== "review") return
       // a late second reviewsReady (a background refresh, a re-summon) must not
@@ -544,6 +564,8 @@ Item {
               root.homeActivate(); e.accepted = true
             } else if (e.text === "," || e.text === "s") {
               root.goSettings(); e.accepted = true
+            } else if (e.text === "x" && root.showLevelUp) {
+              root.dismissLevelUp(); e.accepted = true
             } else if (e.text === "?") {
               homeHotkeys.toggle(); e.accepted = true
             }
@@ -582,7 +604,19 @@ Item {
           readonly property real gap: Style.space(10)
           width: colW
 
+          // a fresh level-up takes this whole slot until dismissed --
+          // otherwise the usual wordmark + greeting + level line
+          LevelUpCelebration {
+            visible: root.showLevelUp
+            width: parent.width
+            level: root.pendingLevelUp
+            imagePath: root.service ? root.service.levelupImagePath : ""
+            textColor: root.buttonInk
+            onDismissed: root.dismissLevelUp()
+          }
+
           Image {
+            visible: !root.showLevelUp
             anchors.horizontalCenter: parent.horizontalCenter
             source: Qt.resolvedUrl("wordmark.svg")
             height: Style.space(58)
@@ -595,6 +629,7 @@ Item {
 
           // greeting -- ようこそ、<name>！  /  Level N
           Column {
+            visible: !root.showLevelUp
             width: parent.width
             spacing: Style.space(2)
             bottomPadding: Style.space(6)
@@ -641,7 +676,7 @@ Item {
                 // every theme
                 readonly property color fillColor: modelData.act === "lesson"
                   ? "#fc02a9" : "#0098e6"
-                readonly property color btnInk: "#fcfdfd"
+                readonly property color btnInk: root.buttonInk
                 // nothing queued -- drop the vivid fill for a theme-neutral
                 // wash so it reads as "done", but keep the label and the "0"
                 // legible (a flat 0.4 opacity buried the count on every theme)
@@ -864,6 +899,7 @@ Item {
             { k: "h l", d: "Lessons / Reviews" },
             { k: "↵", d: "Open" },
             { k: "s", d: "Settings" },
+            { k: "x", d: "Dismiss the level-up celebration" },
             { k: "Esc", d: "Close the window" },
             { k: "?", d: "Toggle this menu" }
           ]

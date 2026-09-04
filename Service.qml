@@ -52,6 +52,8 @@ Item {
   readonly property int level: Number(view.level) || 0
   readonly property string username: String(view.username || "")
   readonly property bool vacation: view.vacation === true
+  // "" until `import-levelup-image` has been run once -- see LevelUpCelebration.qml
+  readonly property string levelupImagePath: String(view.levelupImagePath || "")
 
   // ---- dashboard ----
   readonly property bool dashboardLoaded: dash.ok === true && dash.configured === true
@@ -534,7 +536,13 @@ Item {
   // Fire each event the helper flagged as a desktop notification. notify-send
   // routes through the shell's notification server, so Do Not Disturb is
   // honoured for free.
-  function fireNotifications(list) {
+  // fired once, the moment a level-up is detected -- the main window turns
+  // this into a persisted "pending celebration" (see App.qml) rather than
+  // reacting to it directly, since it needs to survive until the user
+  // actually sees the window and dismisses it, not just this one instant
+  signal levelUp(int level)
+
+  function fireNotifications(list, level) {
     if (!Array.isArray(list)) return
     for (var i = 0; i < list.length; i++) {
       var ev = list[i]
@@ -547,6 +555,7 @@ Item {
         // a level-up is the milestone of the whole app -- give it a title and
         // let it linger
         args.push("-u", "critical", "🎉  Level up!", text)
+        if (level > 0) root.levelUp(level)
       } else {
         args.push(text)
       }
@@ -568,7 +577,7 @@ Item {
     fetchedAt = String(payload.fetchedAt || "")
     everLoaded = true
     if (note !== "") noteTimer.restart()
-    fireNotifications(payload.notifications)
+    fireNotifications(payload.notifications, Number(payload.level) || 0)
     // First time we learn we're connected, pull the dashboard too.
     if (configured && !dashboardLoaded && !dashProcess.running) refreshDashboard()
     return payload
@@ -583,7 +592,7 @@ Item {
     dash = payload
     lastDashboardAt = Date.now()
     if (payload.error) lastError = String(payload.error)
-    fireNotifications(payload.notifications)
+    fireNotifications(payload.notifications, Number(payload.level) || 0)
   }
 
   function helperFailure(text, code) {

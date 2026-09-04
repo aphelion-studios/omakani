@@ -754,6 +754,7 @@ def base_summary():
         "lessonsNow": 0,
         "nextReviewsAt": "",
         "fetchedAt": "",
+        "levelupImagePath": levelup_image_path(),
     }
 
 
@@ -1302,6 +1303,121 @@ def radical_mnemonic(subject_id):
     except Exception:
         pass
     return str(svg_path), alt
+
+
+# -------------------------------------------------------------- level-up image
+
+# wanikani.com/level_up_image.svg?level=N is the celebration banner the
+# website shows on a level-up. Unlike the radical mnemonics it isn't on a
+# public page -- it needs your logged-in session cookie, not the API token,
+# so this can't be scraped automatically. But the level number turns out to
+# be a plain <text> on a <textPath>, not baked into per-level artwork, so
+# ANY level's file gives the complete reusable template forever: save the
+# page from your browser once (it'll pull level_up_image.svg alongside it)
+# and import it here. The number itself is rendered separately, over this
+# template, from Model.js's own kanji-numeral conversion.
+
+LEVELUP_FILENAME = "levelup_template.svg"
+
+
+# The four mascots' flag/horn props (bounce-animation) are the one thing
+# worth pulling out of the composite for real, matching motion (see
+# LevelUpCelebration.qml). Repositioning each with the same translate/
+# rotate/scale math the source uses is fragile busywork; instead each
+# becomes its own tiny SVG that shares the *exact same viewBox* as the main
+# template, with everything else in it removed -- overlaying it at the same
+# size/position as the main image lines it up pixel-for-pixel with zero
+# transform math, and it's still just a flattened <defs> + one element, so
+# it costs nothing to render.
+_LEVELUP_PROP_IDS = ["f1", "f2", "f3", "f4"]
+
+# The four "sparkle" streaks only exist visually via a CSS stroke-dashoffset
+# animation with no static rest frame -- rendered without that animation
+# running (as QtSvg always does) the <line> itself is simply blank. Their
+# clip-path shapes are cute little splash/star silhouettes though, so those
+# get filled with the sparkle colour directly and used as the flourish
+# instead of trying to reproduce the internal wipe.
+_LEVELUP_SPARKLE_LINE_IDS = ["sparkle-1-fill", "sparkle-2-fill",
+                             "sparkle-3-fill", "sparkle-4-fill"]
+_LEVELUP_SPARKLE_CLIP_IDS = ["sparkle-1", "sparkle-2", "sparkle-3", "sparkle-4"]
+_LEVELUP_SPARKLE_COLOR = "#e243a2"
+
+
+def _isolate_svg_piece(raw, header, style_block, defs_block, pattern):
+    m = pattern.search(raw)
+    if not m:
+        return None
+    doc = header + style_block + defs_block + m.group(0) + "</svg>"
+    return flatten_style_svg(doc)
+
+
+def _isolate_sparkle_shape(raw, header, clip_id):
+    m = re.search(r"<clipPath id='%s'>\s*<path[^>]*\sd=\"([^\"]+)\"" % re.escape(clip_id), raw)
+    if not m:
+        return None
+    return header + '<path d="%s" fill="%s"/></svg>' % (m.group(1), _LEVELUP_SPARKLE_COLOR)
+
+
+def cmd_import_levelup_image(args):
+    """One-time import of the level-up celebration banner from a locally
+    saved copy of level_up_image.svg (see the module docstring above for
+    why this can't be fetched automatically). Re-run any time to replace
+    the cached template; the level shown was never baked into the file."""
+    src_path = Path(args.file).expanduser()
+    if not src_path.exists():
+        return {"ok": False, "error": "file not found: %s" % src_path}
+    raw = src_path.read_text(encoding="utf-8", errors="replace")
+    if "<svg" not in raw:
+        return {"ok": False, "error": "doesn't look like an SVG file"}
+
+    header_m = re.match(r"(<\?xml.*?\?>\s*<svg[^>]*>)", raw, flags=re.S)
+    header = header_m.group(1) if header_m else \
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1610.09 600">'
+    style_m = re.search(r"<style[^>]*>.*?</style>", raw, flags=re.S)
+    style_block = style_m.group(0) if style_m else ""
+    defs_m = re.search(r"<defs>.*?</defs>", raw, flags=re.S)
+    defs_block = defs_m.group(0) if defs_m else ""
+
+    out_dir = cache_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    extracted = {}
+    for pid in _LEVELUP_PROP_IDS:
+        piece = _isolate_svg_piece(raw, header, style_block, defs_block,
+                                    re.compile(r'<g id="%s">.*?</g>' % re.escape(pid), re.S))
+        if piece is not None:
+            (out_dir / ("levelup_%s.svg" % pid)).write_text(piece, encoding="utf-8")
+            extracted[pid] = True
+    for cid in _LEVELUP_SPARKLE_CLIP_IDS:
+        piece = _isolate_sparkle_shape(raw, header, cid)
+        if piece is not None:
+            (out_dir / ("levelup_%s.svg" % cid)).write_text(piece, encoding="utf-8")
+            extracted[cid] = True
+
+    # strip everything just isolated, plus the baked-in level glyph, the
+    # "congratulations" caption, and the decorative stars/dots, before
+    # flattening drops the class attributes they're keyed on -- the caption
+    # has no explicit fill in the source (defaults to SVG black, invisible
+    # on a dark theme) and the app needs a theme-aware colour it can only
+    # give its own Text element, so all of this is rendered separately
+    # (static or animated) over this now-quieter base template instead
+    for pid in _LEVELUP_PROP_IDS:
+        raw = re.sub(r'<g id="%s">.*?</g>' % re.escape(pid), "", raw, flags=re.S)
+    for sid in _LEVELUP_SPARKLE_LINE_IDS:
+        raw = re.sub(r"<line[^>]*\bid='%s'[^>]*/>" % re.escape(sid), "", raw)
+    raw = re.sub(r"<text class=\"as\"[^>]*>.*?</text>", "", raw, flags=re.S)
+    raw = re.sub(r"<text class=\"lu-title\"[^>]*>.*?</text>", "", raw, flags=re.S)
+    raw = re.sub(r'<use[^>]*xlink:href="#a"\s*/>', "", raw)
+    raw = re.sub(r'<circle class="aq"[^>]*/>', "", raw)
+    flat = flatten_style_svg(raw)
+    out_path = out_dir / LEVELUP_FILENAME
+    out_path.write_text(flat, encoding="utf-8")
+    return {"ok": True, "path": str(out_path), "extracted": sorted(extracted.keys())}
+
+
+def levelup_image_path():
+    """Cached level-up template path, or "" if never imported."""
+    p = cache_dir() / LEVELUP_FILENAME
+    return str(p) if p.exists() else ""
 
 
 # -------------------------------------------------------------- audio playback
@@ -2007,6 +2123,12 @@ def build_parser():
     radical_images.add_argument("--delay", type=float, default=0.4,
                                 help="seconds between page fetches (default 0.4)")
     radical_images.set_defaults(handler=cmd_radical_images)
+
+    import_levelup = commands.add_parser(
+        "import-levelup-image",
+        help="one-time import of the level-up celebration banner, saved from your browser")
+    import_levelup.add_argument("file", help="path to a saved level_up_image.svg")
+    import_levelup.set_defaults(handler=cmd_import_levelup_image)
 
     return parser
 

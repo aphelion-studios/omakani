@@ -151,6 +151,19 @@ function chroma(c) {
   return Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b)
 }
 
+// Sino-Japanese numeral for a WaniKani level (1-60, same formation the
+// level-up banner's own ribbon uses -- e.g. 8 -> "八", 15 -> "十五",
+// 21 -> "二十一", 60 -> "六十").
+var KANJI_DIGITS = "〇一二三四五六七八九"
+function kanjiNumeral(n) {
+  n = Math.max(0, Math.floor(Number(n) || 0))
+  if (n < 10) return KANJI_DIGITS[n]
+  var tens = Math.floor(n / 10), ones = n % 10
+  var s = tens === 1 ? "十" : (KANJI_DIGITS[tens] + "十")
+  if (ones) s += KANJI_DIGITS[ones]
+  return s
+}
+
 // One-line status under the hero. Errors win over notes.
 function statusLine(view) {
   if (!view) return ""
