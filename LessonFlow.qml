@@ -28,6 +28,9 @@ FocusScope {
   // "loading" | "ready" | "info" | "quiz" | "starting" | "batch" | "summary" | "error"
   property string phase: "loading"
   property bool dryRun: true
+  // "ask" -> show the start screen; "dry-run" / "live" -> straight into it,
+  // same as the review engine
+  property string mode: "ask"
   property string errorText: ""
   property int infoIndex: 0        // subject within the current batch
   property int pageIndex: 0        // learn page within that subject
@@ -159,6 +162,11 @@ FocusScope {
       phase = doneIds.length > 0 ? "info" : "ready"
       if (phase === "info")
         Qt.callLater(function () { if (infoPage.visible) infoPage.focusPage() })
+      // skip the start screen when the mode is pinned in settings
+      else if (mode === "dry-run" || mode === "live") {
+        dryRun = (mode === "dry-run")
+        Qt.callLater(startInfo)
+      }
     }
   }
 

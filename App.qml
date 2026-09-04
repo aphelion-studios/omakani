@@ -420,208 +420,6 @@ Item {
     else close()
   }
 
-  // Lets keybinds (and debugging) drive the app straight to a view:
-  //   omarchy-shell -q io.github.aphelion-studios.omakani.app browse 7
-  //   omarchy-shell -q io.github.aphelion-studios.omakani.app subject 440
-  IpcHandler {
-    target: "io.github.aphelion-studios.omakani.app"
-
-    function home(): void { root.open(""); root.resetNav() }
-    function settings(): void { root.open(""); root.resetNav(); root.goSettings() }
-    function browse(level: string): void {
-      root.open("")
-      root.resetNav()
-      root.goBrowse(parseInt(level, 10) || (root.service ? root.service.level : 1))
-    }
-    // Level Progress for the current level, optionally landing on a section's
-    // first chip: focus = "radical" | "kanji" | "vocabulary" (or "").
-    function levelprogress(focus: string): void {
-      root.open("")
-      root.resetNav()
-      levelBrowser.pendingSection = (focus && focus !== "") ? focus : ""
-      root.goBrowse(root.service ? root.service.level : 1)
-    }
-    function subject(id: string): void {
-      root.open("")
-      root.resetNav()
-      root.goSubject(parseInt(id, 10))
-    }
-    // testing: open a subject the way a chip click does -- keep the current
-    // stack (home -> browse -> subject) instead of resetting
-    function pick(id: string): void { root.goSubject(parseInt(id, 10)) }
-    function quiz(id: string, type: string): void {
-      root.open("")
-      root.resetNav()
-      root.goQuiz(parseInt(id, 10), type)
-    }
-    function qanswer(text: string): string {
-      var c = root.view === "quiz" ? quizCard
-        : root.view === "session" ? quizSession.cardItem
-        : root.view === "review" ? reviewEngine.cardItem
-        : root.view === "lesson" ? lessonFlow.cardItem : null
-      if (!c) return "not in a quiz"
-      c.typeAndSubmit(text)
-      var tail = ""
-      if (root.view === "session")
-        tail = "  [" + quizSession.phase + " " + quizSession.clearedQuestions
-          + "/" + quizSession.totalQuestions + "]"
-      else if (root.view === "review")
-        tail = "  [" + reviewEngine.phase + " submitted " + reviewEngine.submittedCount
-          + "/" + reviewEngine.totalSubjects + (reviewEngine.dryRun ? " DRY" : " LIVE") + "]"
-      return c.phase + (c.nudge ? " (" + c.nudge + ")" : "") + tail
-    }
-    function rstart(): string {
-      if (root.view !== "review") return "not in review"
-      reviewEngine.startRun()
-      return reviewEngine.phase
-    }
-    // testing the wrap-out / re-enter path
-    function rwrap(): string {
-      if (root.view !== "review") return "not in review"
-      reviewEngine.phase = "summary"
-      return reviewEngine.phase
-    }
-    function rphase(): string { return reviewEngine.phase }
-    // simulate the home-screen Enter on the focused action
-    function henter(): string {
-      if (root.view !== "home") return "not home"
-      root.homeActivate()
-      return "view=" + root.view + " depth=" + root.navStack.length
-    }
-    function hidx(n: string): string { root.homeIndex = parseInt(n, 10) || 0; return String(root.homeIndex) }
-    function goreview2(): string { root.goReview(); return "view=" + root.view + " depth=" + root.navStack.length + " phase=" + reviewEngine.phase }
-    function eexit(): string { reviewEngine.exit(); return "depth=" + root.navStack.length + " opened=" + root.opened }
-    function rtool(what: string): string {
-      var c = root.view === "review" ? reviewEngine.cardItem : null
-      if (!c) return "not in review"
-      var ip = c.infoPageItem
-      if (what === "drill") {
-        var comp = (ip && ip.subject && ip.subject.data
-          && (ip.subject.data.component_subject_ids || [])[0]) || 0
-        if (ip && comp) ip.navigate(comp)
-        return "drilled to " + comp
-      }
-      else if (what === "back") { if (ip) ip.closeRequested() }
-      else if (what === "down") { if (ip) ip.moveFocus(1) }
-      else if (what === "up") { if (ip) ip.moveFocus(-1) }
-      else if (what === "chipnext") { if (ip) ip.moveChip(1) }
-      else if (what === "chipprev") { if (ip) ip.moveChip(-1) }
-      else if (what === "enter") { if (ip) ip.activateFocused() }
-      return "phase=" + c.phase + " chipIndex=" + (ip ? ip.chipIndex : "?")
-        + " focusedKey=" + (ip ? ip.focusedKey : "?")
-        + " subj=" + (ip && ip.subject ? ip.subject.id : "?")
-    }
-    function rinfo(): string {
-      var c = root.view === "review" ? reviewEngine.cardItem
-        : root.view === "lesson" ? lessonFlow.cardItem : null
-      if (!c) return "no card"
-      c.infoOpen = !c.infoOpen
-      var ip = c.infoPageItem
-      return "type=" + c.effectiveType + " restrict=" + c.restrictInfo
-        + " mDone=" + c.meaningDone + " rDone=" + c.readingDone
-        + " infoOpen=" + c.infoOpen + " phase=" + c.phase
-        + (ip ? " focusSection=" + ip.focusSection + " focusIndex=" + ip.focusIndex
-            + " focusedKey=" + ip.focusedKey
-            + " nav=" + ip.visibleNav().map(function (x) { return x.navKey }).join(",")
-          : "")
-    }
-    // testing: toggle the ✓ Last Answers / ひ Kana Chart overlays
-    function rover(what: string): string {
-      var c = root.view === "review" ? reviewEngine.cardItem
-        : root.view === "session" ? quizSession.cardItem
-        : root.view === "lesson" ? lessonFlow.cardItem : null
-      if (!c) return "no card"
-      if (what === "last") c.lastOpen ? c.closeOverlays() : c.openLast()
-      else if (what === "kana") c.kanaOpen ? c.closeOverlays() : c.openKana()
-      else c.closeOverlays()
-      return "lastOpen=" + c.lastOpen + " kanaOpen=" + c.kanaOpen
-        + " log=" + (c.answerLog ? c.answerLog.length : 0)
-    }
-    // testing: a Kana Chart keypress ("<>" for backspace)
-    function kkey(s: string): string {
-      var c = root.view === "review" ? reviewEngine.cardItem
-        : root.view === "session" ? quizSession.cardItem
-        : root.view === "lesson" ? lessonFlow.cardItem : null
-      if (!c) return "no card"
-      if (s === "<>") c.kanaBackspace()
-      else c.insertKana(s)
-      return c.fieldText
-    }
-    function lstep(what: string): string {
-      if (root.view !== "lesson") return "not in lesson"
-      if (what === "begin") lessonFlow.startInfo()
-      else if (what === "next") lessonFlow.infoNext()
-      else if (what === "prev") lessonFlow.infoPrev()
-      return lessonFlow.phase + " info=" + lessonFlow.infoIndex + "/" + lessonFlow.ids.length
-        + " started=" + lessonFlow.startedCount
-    }
-    function rcur(): string {
-      var c = root.view === "review" ? reviewEngine.cardItem
-        : root.view === "lesson" ? lessonFlow.cardItem
-        : root.view === "session" ? quizSession.cardItem
-        : root.view === "quiz" ? quizCard : null
-      var s = c ? c.subject : null
-      if (!s) return "none"
-      var d = s.data || ({})
-      return JSON.stringify({
-        id: s.id,
-        type: c.questionType,
-        chars: d.characters || "",
-        meanings: (d.meanings || []).map(function (m) { return m.meaning }),
-        readings: (d.readings || []).filter(function (r) { return r.accepted_answer !== false })
-          .map(function (r) { return r.reading })
-      })
-    }
-    // extra-study session over the dashboard's recent-lessons / burned batch
-    function session(which: string): void {
-      root.open("")
-      root.resetNav()
-      root.openSessionMode(String(which || "recent-lessons"))
-    }
-    function review(): void {
-      root.open("")
-      root.resetNav()
-      root.goReview()
-    }
-    function lesson(): void {
-      root.open("")
-      root.resetNav()
-      root.goLesson()
-    }
-    // testing: run the lesson flow over an explicit id list (0 real lessons)
-    function lessonTest(idsCsv: string): void {
-      root.open("")
-      root.resetNav()
-      var ids = String(idsCsv || "").split(",")
-        .map(function (x) { return parseInt(x.trim(), 10) })
-        .filter(function (x) { return isFinite(x) })
-      root.lessonIds = ids
-      root.lessonTotal = ids.length
-      root.pushPage({ view: "lesson" })
-      Qt.callLater(function () { lessonFlow.begin() })
-    }
-    function state(): string {
-      return JSON.stringify({
-        opened: root.opened,
-        view: root.view,
-        stackDepth: root.navStack.length,
-        page: root.currentPage,
-        detailError: root.service ? root.service.detailError : "",
-        browseError: root.service ? root.service.browseError : "",
-        browseCursor: levelBrowser.cursor,
-        browseRows: levelBrowser.rows.length,
-        browseKeyFocus: levelBrowser.hasKeyFocus,
-        subjectHasSubject: !!subjectPage.subject,
-        subjectKeyFocus: subjectPage.hasKeyFocus,
-        subjectFocusIndex: subjectPage.focusIndex,
-        enginePhase: reviewEngine.phase,
-        homeIndex: root.homeIndex,
-        homeActions: root.homeActions.map(function (a) { return a.act })
-      })
-    }
-  }
-
-
   FloatingWindow {
     id: window
     visible: root.opened
@@ -1227,7 +1025,7 @@ Item {
           service: root.service
           subjectIds: root.reviewIds
           // "ask" shows the dry-run start screen; "dry-run" / "live" skip it
-          mode: String(root.setting("reviewMode", "ask"))
+          mode: String(root.setting("reviewMode", "live"))
           pageBg: root.bg
           fg: root.fg
           fontFamily: root.fontFamily
@@ -1247,6 +1045,8 @@ Item {
           service: root.service
           subjectIds: root.lessonIds
           totalWaiting: root.lessonTotal
+          // "ask" shows the dry-run start screen; "dry-run" / "live" skip it
+          mode: String(root.setting("lessonMode", "live"))
           pageBg: root.bg
           fg: root.fg
           fontFamily: root.fontFamily
