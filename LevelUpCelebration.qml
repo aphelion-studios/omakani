@@ -70,18 +70,27 @@ Item {
   // overlaid same-viewBox Image per sparkle intermittently rendered solid
   // black instead of its own fill while fading, which a Shape sidesteps
   // entirely since there's no image decode/cache involved at all.
+  // each one's start offset -- pulled back 60% of the way toward the
+  // medal's own centre (805, 171) from its resting position, in viewBox
+  // units -- so it visibly travels outward from the medal as it fades in,
+  // matching the website instead of just fading in already in place
   Repeater {
     model: [
-      { d: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", delay: 0 },
-      { d: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", delay: 500 },
-      { d: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", delay: 1000 },
-      { d: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", delay: 1500 }
+      { d: "m1000.65,75.85l143.08-66.22c9.53-4.41,20.76.68,23.72,10.76l6.55,22.34c2.67,9.11-2.55,18.66-11.66,21.34l-149.63,43.88c-8.55,2.51-17.6-1.94-20.85-10.24h0c-3.31-8.46.54-18.04,8.79-21.86Z", dx: -162, dy: 67, delay: 0 },
+      { d: "m626.53,97.7l1.31-2.47c4.46-8.38,1.64-18.78-6.44-23.77l-109.94-59.34c-9.18-5.67-21.26-2.04-25.79,7.76l-11.88,25.68c-4.63,10.01.75,21.79,11.34,24.85l120.52,36.13c8.18,2.36,16.89-1.33,20.88-8.84Z", dx: 171, dy: 73, delay: 500 },
+      { d: "m486.07,166.36l113.17-16.23c5.69-.82,11.03,2.94,12.2,8.57h0c1.1,5.32-1.89,10.63-7,12.45l-108.94,38.82c-6.3,2.25-13.12-1.67-14.35-8.25l-4.22-22.59c-1.14-6.08,3.02-11.89,9.15-12.77Z", dx: 159, dy: -2, delay: 1000 },
+      { d: "m1001.43,164.07h0c0,6.09,4.32,11.32,10.29,12.48l112.03,21.71c6.86,1.33,13.51-3.13,14.88-9.98l3.85-19.2c1.56-7.76-4.28-15.04-12.19-15.21l-115.87-2.52c-7.13-.15-12.99,5.58-12.99,12.71Z", dx: -162, dy: -2, delay: 1500 }
     ]
     delegate: Shape {
       id: spark
       width: root.width
       height: root.height
       opacity: 0
+      // 1 = pulled back toward the medal (the fade-in start), 0 = resting
+      // in its real position (the source's own path coordinates)
+      property real driftT: 1
+      x: modelData.dx * root.vbScale * driftT
+      y: modelData.dy * root.vbScale * driftT
       preferredRendererType: Shape.CurveRenderer
       transform: Scale { xScale: root.vbScale; yScale: root.vbScale }
 
@@ -95,8 +104,13 @@ Item {
         running: root.visible
         loops: Animation.Infinite
         PauseAnimation { duration: modelData.delay }
-        NumberAnimation { target: spark; property: "opacity"; from: 0; to: 1
-          duration: 350; easing.type: Easing.OutCubic }
+        PropertyAction { target: spark; property: "driftT"; value: 1 }
+        ParallelAnimation {
+          NumberAnimation { target: spark; property: "opacity"; from: 0; to: 1
+            duration: 350; easing.type: Easing.OutCubic }
+          NumberAnimation { target: spark; property: "driftT"; from: 1; to: 0
+            duration: 350; easing.type: Easing.OutCubic }
+        }
         PauseAnimation { duration: 550 }
         NumberAnimation { target: spark; property: "opacity"; from: 1; to: 0
           duration: 350; easing.type: Easing.InCubic }
@@ -141,7 +155,7 @@ Item {
   // that a flat centred line reads the same at this size)
   Text {
     anchors.horizontalCenter: parent.horizontalCenter
-    y: root.height * 0.545
+    y: root.height * 0.58
     text: Model.kanjiNumeral(root.level)
     color: "#fcfdfd"
     font.family: root.jpFamily
